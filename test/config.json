@@ -1,0 +1,15 @@
+{
+  "setup": {
+    "deployer": "busycpu"
+  }, 
+  "stages": [{
+    "benchmarks": {
+      "name": "busycpu",
+      "count": 4,
+      "resources": {
+        "cpushares": 512
+      },
+      "image": "hyperpilot/busycpu"
+    }
+  }]
+}
