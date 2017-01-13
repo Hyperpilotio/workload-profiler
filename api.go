@@ -19,40 +19,6 @@ type Server struct {
 	mutex  sync.Mutex
 }
 
-type Resources struct {
-	CPUShares int64 `json:"cpushares"`
-	Memory    int64 `json:"memory"`
-}
-
-type Benchmarks struct {
-	Name      string    `json:"name"`
-	Count     int       `json:"count"`
-	Resources Resources `json:"resources"`
-	Image     string    `json:"image"`
-	Command   []string  `json:"command"`
-}
-
-type Setup struct {
-	Deployer   string `json:"deployer"`
-	Benchmarks `json:"benchmarks"`
-}
-
-type Locust struct {
-	Hatch int `json:"count"`
-	Max   int `json:"max"`
-}
-
-type Stages []struct {
-	Benchmarks `json:"benchmarks"`
-	Locust     `json:"locust"`
-	Duration   string `json:"duration"`
-}
-
-type Profiler struct {
-	Setup  `json:"setup"`
-	Stages `json:"stages"`
-}
-
 // NewServer return an instance of Server struct.
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
@@ -81,15 +47,15 @@ func (server *Server) StartServer() error {
 
 	profilerGroup := router.Group("/profilers")
 	{
-		profilerGroup.POST("", server.createProfiler)
+		profilerGroup.POST("", server.createProfileRun)
 	}
 
 	return router.Run(":" + server.Config.GetString("port"))
 }
 
-func (server *Server) createProfiler(c *gin.Context) {
-	var profiler Profiler
-	if err := c.BindJSON(&profiler); err != nil {
+func (server *Server) createProfileRun(c *gin.Context) {
+	var profile Profile
+	if err := c.BindJSON(&profile); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
 			"data":  "Error deserializing benchmark: " + string(err.Error()),
@@ -97,10 +63,10 @@ func (server *Server) createProfiler(c *gin.Context) {
 		return
 	}
 
-	if profiler.Stages[0].Benchmarks.Name == "busycpu" {
+	if profile.Stages[0].ContainerBenchmarks[0].Name == "busycpu" {
 		url := server.Config.GetString("benchmark-agent")
 
-		b, err := json.Marshal(profiler.Stages[0].Benchmarks)
+		b, err := json.Marshal(profile.Stages[0].ContainerBenchmarks)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": true,
