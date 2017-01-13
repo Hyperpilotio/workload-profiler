@@ -1,5 +1,5 @@
-hash: 34b7b73213c71597ce36ad411d57db413dc4590802cc983c93253ccc94652d14
-updated: 2017-01-12T17:12:02.684361225+08:00
+hash: 268de6a17cefe9c4b6ccce0ee1aaac8bf941f47db3a1a6925c52db0dce8f0656
+updated: 2017-01-13T15:07:49.421725622+08:00
 imports:
 - name: github.com/fsnotify/fsnotify
   version: fd9ec7deca8bf46ecd2a795baaacf2b3a9be1197
@@ -8,6 +8,8 @@ imports:
   subpackages:
   - binding
   - render
+- name: github.com/go-resty/resty
+  version: 2e0c2310ba20c7edb6162ea2f6c0d5bba2e5e56d
 - name: github.com/golang/glog
   version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 - name: github.com/golang/protobuf
@@ -25,6 +27,10 @@ imports:
   - json/parser
   - json/scanner
   - json/token
+- name: github.com/hyperpilotio/container-benchmarks
+  version: 84c11ab4f227da631145a7590ede011044a93c90
+  subpackages:
+  - benchmark-agent/apis
 - name: github.com/magiconair/properties
   version: 9c47895dc1ce54302908ab8a43385d1f5df2c11c
 - name: github.com/manucorporat/sse
