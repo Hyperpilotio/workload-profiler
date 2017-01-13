@@ -28,16 +28,6 @@ func NewServer(config *viper.Viper) *Server {
 
 // StartServer start a web server
 func (server *Server) StartServer() error {
-	if server.Config.GetString("filesPath") == "" {
-		return errors.New("filesPath is not specified in the configuration file.")
-	}
-
-	if err := os.Mkdir(server.Config.GetString("filesPath"), 0755); err != nil {
-		if !os.IsExist(err) {
-			return errors.New("Unable to create filesPath directory: " + err.Error())
-		}
-	}
-
 	//gin.SetMode("release")
 	router := gin.New()
 
