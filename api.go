@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"errors"
+	"os"
 	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 
+	"encoding/json"
 	"net/http"
 )
 
@@ -49,20 +53,28 @@ func (server *Server) createProfileRun(c *gin.Context) {
 		return
 	}
 
-	server.mutex.Lock()
-	defer server.mutex.Unlock()
+	if profile.Stages[0].ContainerBenchmarks[0].Name == "busycpu" {
+		url := server.Config.GetString("benchmark-agent")
 
-	// Call deployer for deployment
-	sr := SetupDeployer(server.Config, profile)
-	if sr.Error {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Error deserializing deployer: " + sr.Data,
-		})
-		return
+		b, err := json.Marshal(profile.Stages[0].ContainerBenchmarks)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": true,
+				"data":  "Unable to Marshal Benchmarks: " + err.Error(),
+			})
+			return
+		}
+
+		var jsonStr = []byte(string(b))
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
 	}
-
-	// TODO Call benchmark-controller service that controls how to manage benchmarking command tools
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
