@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
-	"os"
 	"sync"
 
 	"github.com/gin-gonic/gin"

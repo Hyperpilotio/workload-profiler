@@ -16,18 +16,22 @@ type Setup struct {
 	Deployer string `json:"deployer"`
 }
 
+type WorkloadBenchmark struct {
+	Locust Locust
+}
+
 type Locust struct {
 	Hatch int `json:"count"`
 	Max   int `json:"max"`
 }
 
-type Stages []struct {
+type Stage struct {
 	ContainerBenchmarks []ContainerBenchmark `json:"containerBenchmarks"`
-	Locust              `json:"locust"`
-	Duration            string `json:"duration"`
+	WorkloadBenchmark   WorkloadBenchmark    `json:"locust"`
+	Duration            string               `json:"duration"`
 }
 
 type Profile struct {
-	Setup  `json:"setup"`
-	Stages `json:"stages"`
+	Setup  Setup   `json:"setup"`
+	Stages []Stage `json:"stages"`
 }
