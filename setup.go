@@ -1,11 +1,13 @@
 package main
 
+/*
 import (
 	"encoding/json"
 	"github.com/go-resty/resty"
 	"github.com/spf13/viper"
 	"io/ioutil"
 )
+*/
 
 // call deployer for deployment Result
 type SetupResult struct {
@@ -13,6 +15,7 @@ type SetupResult struct {
 	Error bool   `json:"error"`
 }
 
+/*
 func SetupDeployer(config *viper.Viper, profile Profile) SetupResult {
 	deployData, fileErr := ioutil.ReadFile("config/" + profile.Setup.Deployer + "-deploy.json")
 	if fileErr != nil {
@@ -36,3 +39,4 @@ func SetupDeployer(config *viper.Viper, profile Profile) SetupResult {
 	}
 	return sr
 }
+*/

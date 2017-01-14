@@ -1,15 +1,30 @@
 {
-  "setup": {
-    "deployer": "nginx"
-  }, 
-  "stages": [{
-    "benchmarks": {
-      "name": "busycpu",
-      "count": 4,
-      "resources": {
-        "cpushares": 512
-      },
-      "image": "hyperpilot/busycpu"
-    }
-  }]
+    "deployment": "nginx",
+    "stages": [
+        {
+            "containerBenchmarks": [
+                {
+                    "name": "busycpu",
+                    "count": 4,
+                    "resources": {
+                        "cpushares": 512
+                    },
+                    "image": "hyperpilot\/busycpu"
+                }
+            ],
+            "workloadBenchmark": {
+                "httpRequests": [
+                    {
+                        "method": "POST",
+                        "component": "locust-master",
+                        "path": "\/swarm",
+                        "body": {
+                            "locust_count": 100,
+                            "hatch_rate": 10
+                        }
+                    }
+                ]
+            }
+        }
+    ]
 }

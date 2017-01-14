@@ -1,12 +1,11 @@
 package main
 
 import (
+	"net/http"
 	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
-
-	"net/http"
 )
 
 // Server store the stats / data of every deployment
@@ -52,17 +51,13 @@ func (server *Server) createProfileRun(c *gin.Context) {
 	server.mutex.Lock()
 	defer server.mutex.Unlock()
 
-	// Call deployer for deployment
-	sr := SetupDeployer(server.Config, profile)
-	if sr.Error {
+	if err := RunProfile(server.Config, &profile); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  "Error deserializing deployer: " + sr.Data,
+			"data":  "Unable to run profile: " + err.Error(),
 		})
 		return
 	}
-
-	// TODO Call benchmark-controller service that controls how to manage benchmarking command tools
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,

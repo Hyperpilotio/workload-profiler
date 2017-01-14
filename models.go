@@ -12,12 +12,15 @@ type ContainerBenchmark struct {
 	Command   []string       `json:"command"`
 }
 
-type Setup struct {
-	Deployer string `json:"deployer"`
+type BenchmarkHTTPRequest struct {
+	Method    string            `json:"method"`
+	Component string            `json:"component"`
+	Path      string            `json:"path"`
+	Body      map[string]string `json:"body"`
 }
 
 type WorkloadBenchmark struct {
-	Locust Locust
+	BenchmarkHTTPRequests []BenchmarkHTTPRequest `json:"httpRequests"`
 }
 
 type Locust struct {
@@ -27,11 +30,11 @@ type Locust struct {
 
 type Stage struct {
 	ContainerBenchmarks []ContainerBenchmark `json:"containerBenchmarks"`
-	WorkloadBenchmark   WorkloadBenchmark    `json:"locust"`
+	WorkloadBenchmark   WorkloadBenchmark    `json:"workloadBenchmark"`
 	Duration            string               `json:"duration"`
 }
 
 type Profile struct {
-	Setup  Setup   `json:"setup"`
-	Stages []Stage `json:"stages"`
+	Deployment string  `json:"deployment"`
+	Stages     []Stage `json:"stages"`
 }
