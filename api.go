@@ -51,15 +51,17 @@ func (server *Server) createProfileRun(c *gin.Context) {
 	server.mutex.Lock()
 	defer server.mutex.Unlock()
 
-	if err := RunProfile(server.Config, &profile); err != nil {
+	if results, err := RunProfile(server.Config, &profile); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
 			"data":  "Unable to run profile: " + err.Error(),
 		})
 		return
-	}
+	} else {
 
-	c.JSON(http.StatusAccepted, gin.H{
-		"error": false,
-	})
+		c.JSON(http.StatusAccepted, gin.H{
+			"error": false,
+			"data":  results,
+		})
+	}
 }
