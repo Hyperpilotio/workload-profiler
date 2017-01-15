@@ -12,15 +12,15 @@ type ContainerBenchmark struct {
 	Command   []string       `json:"command"`
 }
 
-type BenchmarkHTTPRequest struct {
-	Method    string            `json:"method"`
-	Component string            `json:"component"`
-	Path      string            `json:"path"`
-	Body      map[string]string `json:"body"`
+type WorkloadBenchmarkRequest struct {
+	HTTPMethod string            `json:"method"`
+	Component  string            `json:"component"`
+	UrlPath    string            `json:"path"`
+	Body       map[string]string `json:"body"`
 }
 
 type WorkloadBenchmark struct {
-	BenchmarkHTTPRequests []BenchmarkHTTPRequest `json:"httpRequests"`
+	BenchmarkHTTPRequests []WorkloadBenchmarkRequest `json:"httpRequests"`
 }
 
 type Locust struct {
