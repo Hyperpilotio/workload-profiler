@@ -25,6 +25,21 @@ func NewDeployerClient(config *viper.Viper) *DeployerClient {
 	}
 }
 
+func (client *DeployerClient) GetContainerUrl(deployment string, container string) (string, error) {
+	response, err := resty.R().
+		Get(path.Join(client.Url, "v1", "deployments", deployment, "containers", container, "url"))
+
+	if err != nil {
+		return "", err
+	}
+
+	if response.StatusCode() != 200 {
+		return "", errors.New("Invalid status code returned: " + string(response.StatusCode()))
+	}
+
+	return response.String(), nil
+}
+
 func (client *DeployerClient) IsDeploymentReady(deployment string) (bool, error) {
 	response, err := resty.R().
 		Get(path.Join(client.Url, "v1", "deployments", deployment))
@@ -52,7 +67,13 @@ func NewBenchmarkAgentClient(config *viper.Viper) *BenchmarkAgentClient {
 }
 
 func (client *BenchmarkAgentClient) CreateBenchmark(benchmark *apis.Benchmark) error {
+	benchmarkJson, marshalErr := json.Marshal(benchmark)
+	if marshalErr != nil {
+		return errors.New("Unable to marshal benchmark to JSON: " + marshalErr.Error())
+	}
+
 	response, err := resty.R().
+		SetBody(string(benchmarkJson)).
 		Post(path.Join(client.Url, "benchmarks"))
 
 	if err != nil {

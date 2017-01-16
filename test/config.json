@@ -7,13 +7,13 @@
                     "name": "busycpu",
                     "count": 4,
                     "resources": {
-                        "cpushares": 512
+                        "cpushares": 256
                     },
                     "image": "hyperpilot\/busycpu"
                 }
             ],
             "workloadBenchmark": {
-                "httpRequests": [
+                "requests": [
                     {
                         "method": "POST",
                         "component": "locust-master",
@@ -21,10 +21,17 @@
                         "body": {
                             "locust_count": 100,
                             "hatch_rate": 10
-                        }
+                        },
+                        "duration": "5m",
+                        "startBenchmark": true
+                    },
+                    {
+                        "method": "POST",
+                        "component": "locust-master",
+                        "path": "\/stop"
                     }
                 ]
-            }
+            },
         }
     ]
 }

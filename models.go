@@ -4,23 +4,17 @@ import (
 	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 )
 
-type ContainerBenchmark struct {
-	Name      string         `json:"name"`
-	Count     int            `json:"count"`
-	Resources apis.Resources `json:"resources"`
-	Image     string         `json:"image"`
-	Command   []string       `json:"command"`
-}
-
 type WorkloadBenchmarkRequest struct {
-	HTTPMethod string            `json:"method"`
-	Component  string            `json:"component"`
-	UrlPath    string            `json:"path"`
-	Body       map[string]string `json:"body"`
+	HTTPMethod     string            `json:"method"`
+	Component      string            `json:"component"`
+	UrlPath        string            `json:"path"`
+	Body           map[string]string `json:"body"`
+	Duration       string            `json:"duration"`
+	StartBenchmark bool              `json:"startBenchmark"`
 }
 
 type WorkloadBenchmark struct {
-	BenchmarkHTTPRequests []WorkloadBenchmarkRequest `json:"httpRequests"`
+	Requests []WorkloadBenchmarkRequest `json:"requests"`
 }
 
 type Locust struct {
@@ -29,9 +23,8 @@ type Locust struct {
 }
 
 type Stage struct {
-	ContainerBenchmarks []ContainerBenchmark `json:"containerBenchmarks"`
-	WorkloadBenchmark   WorkloadBenchmark    `json:"workloadBenchmark"`
-	Duration            string               `json:"duration"`
+	ContainerBenchmarks []apis.Benchmark  `json:"containerBenchmarks"`
+	WorkloadBenchmark   WorkloadBenchmark `json:"workloadBenchmark"`
 }
 
 type Profile struct {

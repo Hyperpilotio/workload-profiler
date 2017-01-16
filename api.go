@@ -32,13 +32,13 @@ func (server *Server) StartServer() error {
 
 	profilerGroup := router.Group("/profilers")
 	{
-		profilerGroup.POST("", server.createProfileRun)
+		profilerGroup.POST("", server.runProfile)
 	}
 
 	return router.Run(":" + server.Config.GetString("port"))
 }
 
-func (server *Server) createProfileRun(c *gin.Context) {
+func (server *Server) runProfile(c *gin.Context) {
 	var profile Profile
 	if err := c.BindJSON(&profile); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
