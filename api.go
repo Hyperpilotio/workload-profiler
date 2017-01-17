@@ -43,7 +43,7 @@ func (server *Server) runProfile(c *gin.Context) {
 	if err := c.BindJSON(&profile); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  "Error deserializing benchmark: " + string(err.Error()),
+			"data":  "Error deserializing profile: " + string(err.Error()),
 		})
 		return
 	}

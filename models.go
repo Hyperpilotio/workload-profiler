@@ -17,11 +17,6 @@ type WorkloadBenchmark struct {
 	Requests []WorkloadBenchmarkRequest `json:"requests"`
 }
 
-type Locust struct {
-	Hatch int `json:"count"`
-	Max   int `json:"max"`
-}
-
 type Stage struct {
 	ContainerBenchmarks []apis.Benchmark  `json:"containerBenchmarks"`
 	WorkloadBenchmark   WorkloadBenchmark `json:"workloadBenchmark"`

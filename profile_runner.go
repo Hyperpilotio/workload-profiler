@@ -1,12 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/go-resty/resty"
+	"github.com/golang/glog"
 	"github.com/nu7hatch/gouuid"
 	"github.com/spf13/viper"
 )
@@ -19,33 +22,46 @@ type StageResult struct {
 	Id string
 }
 
-func setupStage(stage *Stage, benchmarkAgentClient *BenchmarkAgentClient) error {
+func cleanupStage(stage *Stage, benchmarkAgentClient *BenchmarkAgentClient) error {
 	for _, containerBenchmark := range stage.ContainerBenchmarks {
-		// TODO: Add delete benchmark on last stage's setup
-		if err := benchmarkAgentClient.CreateBenchmark(&containerBenchmark); err != nil {
-			return errors.New("Unable to run create benchmark: " + err.Error())
+		if err := benchmarkAgentClient.DeleteBenchmark(containerBenchmark.Name); err != nil {
+			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
+				containerBenchmark.Name, err.Error())
 		}
 	}
 
 	return nil
 }
 
-func sendWorkloadRequest(url string, request WorkloadBenchmarkRequest, stageId string) error {
+func setupStage(stage *Stage, benchmarkAgentClient *BenchmarkAgentClient) error {
+	for _, containerBenchmark := range stage.ContainerBenchmarks {
+		if err := benchmarkAgentClient.CreateBenchmark(&containerBenchmark); err != nil {
+			return fmt.Errorf("Unable to create benchmark %s: %s",
+				containerBenchmark.Name, err.Error())
+		}
+	}
+
+	return nil
+}
+
+func sendWorkloadRequest(urlString string, request WorkloadBenchmarkRequest, stageId string) error {
 	var response *resty.Response
-	var err error
-	requestUrl := path.Join(url, request.UrlPath)
+	u, err := url.Parse(urlString)
+	if err != nil {
+		return errors.New("Unable to parse url: " + err.Error())
+	}
+
+	u.Path = path.Join(u.Path, request.UrlPath)
 	switch strings.ToUpper(request.HTTPMethod) {
 	case "GET":
-		response, err = resty.R().Get(requestUrl)
+		response, err = resty.R().Get(u.String())
 	case "POST":
 		if stageId != "" {
 			request.Body["stage_id"] = stageId
 		}
-		if jsonBody, err := json.Marshal(request.Body); err != nil {
-			return errors.New("Unable to marshal request body: " + err.Error())
-		} else {
-			response, err = resty.R().SetBody(string(jsonBody)).Post(requestUrl)
-		}
+		response, err = resty.R().
+			SetFormData(request.Body).
+			Post(u.String())
 	default:
 		return errors.New("Unknown HTTP method: " + request.HTTPMethod)
 	}
@@ -55,7 +71,10 @@ func sendWorkloadRequest(url string, request WorkloadBenchmarkRequest, stageId s
 	}
 
 	if response.StatusCode() >= 300 {
-		return errors.New("Unexpected response code: " + string(response.StatusCode()))
+		return fmt.Errorf(
+			"Unexpected response code: %d, body: %s",
+			response.StatusCode(),
+			response.String())
 	}
 
 	return nil
@@ -88,7 +107,18 @@ func runStageBenchmark(deployment string, stage *Stage, deployerClient *Deployer
 			requestStageId = stageId
 		}
 		if err := sendWorkloadRequest(url, benchmarkRequest, requestStageId); err != nil {
-			return nil, errors.New("Unable to send workload request: " + err.Error())
+			return nil, fmt.Errorf("Unable to send workload request %v: %s", benchmarkRequest, err.Error())
+		}
+		if benchmarkRequest.Duration != "" {
+			if duration, err := time.ParseDuration(benchmarkRequest.Duration); err != nil {
+				return nil, fmt.Errorf(
+					"Unable to parse duration %s: %s", benchmarkRequest.Duration, err.Error())
+			} else {
+				timer := time.NewTimer(duration)
+				glog.Infof("Waiting for %s before moving to next request", duration.String())
+				// TODO: We should run these in a go func so we can cancel a timer in flight
+				<-timer.C
+			}
 		}
 	}
 
@@ -96,19 +126,35 @@ func runStageBenchmark(deployment string, stage *Stage, deployerClient *Deployer
 }
 
 func RunProfile(config *viper.Viper, profile *Profile) (*ProfileResults, error) {
-	deployerClient := NewDeployerClient(config)
-	benchmarkAgentClient := NewBenchmarkAgentClient(config)
+	deployerClient, deployerErr := NewDeployerClient(config)
+	if deployerErr != nil {
+		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	}
+
+	url, urlErr := deployerClient.GetContainerUrl(profile.Deployment, "benchmark-agent")
+	if urlErr != nil {
+		return nil, errors.New("Unable to get benchmark-agent url from deployer: " + urlErr.Error())
+	}
+
+	benchmarkAgentClient, benchmarkAgentErr := NewBenchmarkAgentClient(url)
+	if benchmarkAgentErr != nil {
+		return nil, errors.New("Unable to create new benchmark agent client: " + benchmarkAgentErr.Error())
+	}
 
 	// TODO: Verify deployment has been deployed in Deployer
 	results := &ProfileResults{}
-
 	for _, stage := range profile.Stages {
 		if err := setupStage(&stage, benchmarkAgentClient); err != nil {
 			return nil, errors.New("Unable to setup stage: " + err.Error())
 		}
 
+		// TODO: Store stage results
 		if _, err := runStageBenchmark(profile.Deployment, &stage, deployerClient); err != nil {
 			return nil, errors.New("Unable to run stage benchmark: " + err.Error())
+		}
+
+		if err := cleanupStage(&stage, benchmarkAgentClient); err != nil {
+			return nil, errors.New("Unable to clean stage: " + err.Error())
 		}
 	}
 

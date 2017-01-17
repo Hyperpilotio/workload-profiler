@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"path"
 
 	"github.com/go-resty/resty"
@@ -16,19 +17,26 @@ type ApiResponse struct {
 }
 
 type DeployerClient struct {
-	Url string
+	Url *url.URL
 }
 
-func NewDeployerClient(config *viper.Viper) *DeployerClient {
-	return &DeployerClient{
-		Url: config.GetString("deployerUrl"),
+func urlBasePath(u *url.URL) string {
+	return u.Scheme + "://" + u.Host + "/"
+}
+
+func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
+	if u, err := url.Parse(config.GetString("deployerUrl")); err != nil {
+		return nil, errors.New("Unable to parse deployer url: " + err.Error())
+	} else {
+		return &DeployerClient{Url: u}, nil
 	}
 }
 
 func (client *DeployerClient) GetContainerUrl(deployment string, container string) (string, error) {
-	response, err := resty.R().
-		Get(path.Join(client.Url, "v1", "deployments", deployment, "containers", container, "url"))
+	requestUrl := urlBasePath(client.Url) +
+		path.Join(client.Url.Path, "v1", "deployments", deployment, "containers", container, "url")
 
+	response, err := resty.R().Get(requestUrl)
 	if err != nil {
 		return "", err
 	}
@@ -37,13 +45,13 @@ func (client *DeployerClient) GetContainerUrl(deployment string, container strin
 		return "", errors.New("Invalid status code returned: " + string(response.StatusCode()))
 	}
 
-	return response.String(), nil
+	return "http://" + response.String(), nil
 }
 
 func (client *DeployerClient) IsDeploymentReady(deployment string) (bool, error) {
-	response, err := resty.R().
-		Get(path.Join(client.Url, "v1", "deployments", deployment))
+	requestUrl := urlBasePath(client.Url) + path.Join(client.Url.Path, "v1", "deployments", deployment)
 
+	response, err := resty.R().Get(requestUrl)
 	if err != nil {
 		return false, err
 	}
@@ -57,12 +65,14 @@ func (client *DeployerClient) IsDeploymentReady(deployment string) (bool, error)
 }
 
 type BenchmarkAgentClient struct {
-	Url string
+	Url *url.URL
 }
 
-func NewBenchmarkAgentClient(config *viper.Viper) *BenchmarkAgentClient {
-	return &BenchmarkAgentClient{
-		Url: config.GetString("benchmarkAgentUrl"),
+func NewBenchmarkAgentClient(urlString string) (*BenchmarkAgentClient, error) {
+	if u, err := url.Parse(urlString); err != nil {
+		return nil, errors.New("Unable to parse deployer url: " + err.Error())
+	} else {
+		return &BenchmarkAgentClient{Url: u}, nil
 	}
 }
 
@@ -74,8 +84,28 @@ func (client *BenchmarkAgentClient) CreateBenchmark(benchmark *apis.Benchmark) e
 
 	response, err := resty.R().
 		SetBody(string(benchmarkJson)).
-		Post(path.Join(client.Url, "benchmarks"))
+		Post(urlBasePath(client.Url) + path.Join(client.Url.Path, "benchmarks"))
 
+	if err != nil {
+		return err
+	}
+
+	if response.StatusCode() != 202 {
+		apiResponse := ApiResponse{}
+		if err := json.Unmarshal(response.Body(), &apiResponse); err != nil {
+			return errors.New("Unable to parse failed api response: " + err.Error())
+		} else {
+			return errors.New(apiResponse.Data)
+		}
+	}
+
+	return nil
+}
+
+func (client *BenchmarkAgentClient) DeleteBenchmark(benchmarkName string) error {
+	requestUrl := urlBasePath(client.Url) + path.Join(client.Url.Path, "benchmarks", benchmarkName)
+
+	response, err := resty.R().Delete(requestUrl)
 	if err != nil {
 		return err
 	}
@@ -100,7 +130,7 @@ func (client *BenchmarkAgentClient) UpdateBenchmarkResources(benchmarkName strin
 
 	response, err := resty.R().
 		SetBody(string(resourcesJson)).
-		Put(path.Join(client.Url, "benchmarks", benchmarkName, "resources"))
+		Put(urlBasePath(client.Url) + path.Join(client.Url.Path, "benchmarks", benchmarkName, "resources"))
 
 	if err != nil {
 		return err

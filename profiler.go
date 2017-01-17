@@ -20,6 +20,8 @@ func Run(fileConfig string) error {
 		viper.SetConfigFile(fileConfig)
 	}
 
+	viper.SetDefault("port", "7779")
+
 	err := viper.ReadInConfig()
 	if err != nil {
 		return err

@@ -19,14 +19,14 @@
                         "component": "locust-master",
                         "path": "\/swarm",
                         "body": {
-                            "locust_count": 100,
-                            "hatch_rate": 10
+                            "locust_count": "100",
+                            "hatch_rate": "10"
                         },
                         "duration": "5m",
                         "startBenchmark": true
                     },
                     {
-                        "method": "POST",
+                        "method": "GET",
                         "component": "locust-master",
                         "path": "\/stop"
                     }
@@ -51,14 +51,14 @@
                         "component": "locust-master",
                         "path": "\/swarm",
                         "body": {
-                            "locust_count": 100,
-                            "hatch_rate": 10
+                            "locust_count": "100",
+                            "hatch_rate": "10"
                         },
                         "duration": "5m",
                         "startBenchmark": true
                     },
                     {
-                        "method": "POST",
+                        "method": "GET",
                         "component": "locust-master",
                         "path": "\/stop"
                     }
