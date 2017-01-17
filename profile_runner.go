@@ -21,6 +21,7 @@ type StageResult struct {
 
 func setupStage(stage *Stage, benchmarkAgentClient *BenchmarkAgentClient) error {
 	for _, containerBenchmark := range stage.ContainerBenchmarks {
+		// TODO: Add delete benchmark on last stage's setup
 		if err := benchmarkAgentClient.CreateBenchmark(&containerBenchmark); err != nil {
 			return errors.New("Unable to run create benchmark: " + err.Error())
 		}

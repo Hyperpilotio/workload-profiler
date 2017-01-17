@@ -1,0 +1,69 @@
+{
+    "deployment": "nginx",
+    "stages": [
+        {
+            "containerBenchmarks": [
+                {
+                    "name": "busycpu",
+                    "count": 4,
+                    "resources": {
+                        "cpushares": 256
+                    },
+                    "image": "hyperpilot\/busycpu"
+                }
+            ],
+            "workloadBenchmark": {
+                "requests": [
+                    {
+                        "method": "POST",
+                        "component": "locust-master",
+                        "path": "\/swarm",
+                        "body": {
+                            "locust_count": 100,
+                            "hatch_rate": 10
+                        },
+                        "duration": "5m",
+                        "startBenchmark": true
+                    },
+                    {
+                        "method": "POST",
+                        "component": "locust-master",
+                        "path": "\/stop"
+                    }
+                ]
+            }
+        },
+        {
+            "containerBenchmarks": [
+                {
+                    "name": "busycpu",
+                    "count": 4,
+                    "resources": {
+                        "cpushares": 512
+                    },
+                    "image": "hyperpilot\/busycpu"
+                }
+            ],
+            "workloadBenchmark": {
+                "requests": [
+                    {
+                        "method": "POST",
+                        "component": "locust-master",
+                        "path": "\/swarm",
+                        "body": {
+                            "locust_count": 100,
+                            "hatch_rate": 10
+                        },
+                        "duration": "5m",
+                        "startBenchmark": true
+                    },
+                    {
+                        "method": "POST",
+                        "component": "locust-master",
+                        "path": "\/stop"
+                    }
+                ]
+            }
+        }
+    ]
+}
