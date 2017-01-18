@@ -19,7 +19,9 @@ type ProfileResults struct {
 }
 
 type StageResult struct {
-	Id string
+	Id        string
+	StartTime string
+	EndTime   string
 }
 
 func cleanupStage(stage *Stage, benchmarkAgentClient *BenchmarkAgentClient) error {
@@ -86,10 +88,13 @@ func runStageBenchmark(deployment string, stage *Stage, deployerClient *Deployer
 		return nil, errors.New("Unable to generate stage id: " + err.Error())
 	}
 	stageId := u4.String()
+	st := time.Now()
+	startTime := st.Format(time.RFC3339)
 	componentUrls := make(map[string]string)
 	benchmark := stage.WorkloadBenchmark
 	results := &StageResult{
-		Id: stageId,
+		Id:        stageId,
+		StartTime: startTime,
 	}
 
 	for _, benchmarkRequest := range benchmark.Requests {
@@ -149,8 +154,12 @@ func RunProfile(config *viper.Viper, profile *Profile) (*ProfileResults, error) 
 		}
 
 		// TODO: Store stage results
-		if _, err := runStageBenchmark(profile.Deployment, &stage, deployerClient); err != nil {
+		if result, err := runStageBenchmark(profile.Deployment, &stage, deployerClient); err != nil {
 			return nil, errors.New("Unable to run stage benchmark: " + err.Error())
+		} else {
+			et := time.Now()
+			result.EndTime = et.Format(time.RFC3339)
+			results.addProfileResult(*result)
 		}
 
 		if err := cleanupStage(&stage, benchmarkAgentClient); err != nil {
@@ -159,4 +168,9 @@ func RunProfile(config *viper.Viper, profile *Profile) (*ProfileResults, error) 
 	}
 
 	return results, nil
+}
+
+func (pr *ProfileResults) addProfileResult(sr StageResult) []StageResult {
+	pr.StageResults = append(pr.StageResults, sr)
+	return pr.StageResults
 }
