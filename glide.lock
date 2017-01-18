@@ -1,5 +1,5 @@
-hash: 268de6a17cefe9c4b6ccce0ee1aaac8bf941f47db3a1a6925c52db0dce8f0656
-updated: 2017-01-13T15:07:49.421725622+08:00
+hash: 4b0e205b07560215a4cf54bf26cf61fcef7aed59f7c446e03928518bb087ef9e
+updated: 2017-01-18T17:22:25.115341348+08:00
 imports:
 - name: github.com/fsnotify/fsnotify
   version: fd9ec7deca8bf46ecd2a795baaacf2b3a9be1197
@@ -39,6 +39,8 @@ imports:
   version: 30a891c33c7cde7b02a981314b4228ec99380cca
 - name: github.com/mitchellh/mapstructure
   version: bfdb1a85537d60bc7e954e600c250219ea497417
+- name: github.com/nu7hatch/gouuid
+  version: 179d4d0c4d8d407a32af483c2354df1d2c91e6c3
 - name: github.com/pelletier/go-buffruneio
   version: df1e16fde7fc330a0ca68167c23bf7ed6ac31d6d
 - name: github.com/pelletier/go-toml
@@ -59,6 +61,7 @@ imports:
   version: f315505cf3349909cdf013ea56690da34e96a451
   subpackages:
   - context
+  - publicsuffix
 - name: golang.org/x/sys
   version: d75a52659825e75fff6158388dddc6a5b04f9ba5
   subpackages:
