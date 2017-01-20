@@ -150,11 +150,13 @@ func RunProfile(config *viper.Viper, profile *Profile) (*ProfileResults, error) 
 	results := &ProfileResults{}
 	for _, stage := range profile.Stages {
 		if err := setupStage(&stage, benchmarkAgentClient); err != nil {
+			cleanupStage(&stage, benchmarkAgentClient)
 			return nil, errors.New("Unable to setup stage: " + err.Error())
 		}
 
 		// TODO: Store stage results
 		if result, err := runStageBenchmark(profile.Deployment, &stage, deployerClient); err != nil {
+			cleanupStage(&stage, benchmarkAgentClient)
 			return nil, errors.New("Unable to run stage benchmark: " + err.Error())
 		} else {
 			et := time.Now()
