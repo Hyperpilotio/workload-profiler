@@ -15,6 +15,7 @@ import (
 )
 
 type ProfileResults struct {
+	Id           string
 	StageResults []StageResult
 }
 
@@ -131,6 +132,16 @@ func runStageBenchmark(deployment string, stage *Stage, deployerClient *Deployer
 }
 
 func RunProfile(config *viper.Viper, profile *Profile) (*ProfileResults, error) {
+	u4, err := uuid.NewV4()
+	if err != nil {
+		return nil, errors.New("Unable to generate profile id: " + err.Error())
+	}
+	profileId := u4.String()
+
+	results := &ProfileResults{
+		Id: profileId,
+	}
+
 	deployerClient, deployerErr := NewDeployerClient(config)
 	if deployerErr != nil {
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
@@ -146,8 +157,6 @@ func RunProfile(config *viper.Viper, profile *Profile) (*ProfileResults, error) 
 		return nil, errors.New("Unable to create new benchmark agent client: " + benchmarkAgentErr.Error())
 	}
 
-	// TODO: Verify deployment has been deployed in Deployer
-	results := &ProfileResults{}
 	for _, stage := range profile.Stages {
 		if err := setupStage(&stage, benchmarkAgentClient); err != nil {
 			cleanupStage(&stage, benchmarkAgentClient)
@@ -167,6 +176,10 @@ func RunProfile(config *viper.Viper, profile *Profile) (*ProfileResults, error) 
 		if err := cleanupStage(&stage, benchmarkAgentClient); err != nil {
 			return nil, errors.New("Unable to clean stage: " + err.Error())
 		}
+	}
+
+	if err := PersistData(config, profile.Deployment, results); err != nil {
+		return nil, errors.New("Unable to save profile results to db: " + err.Error())
 	}
 
 	return results, nil
