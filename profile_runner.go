@@ -55,6 +55,7 @@ func sendWorkloadRequest(urlString string, request WorkloadBenchmarkRequest, sta
 	}
 
 	u.Path = path.Join(u.Path, request.UrlPath)
+	glog.Infof("Sending workloading request with URL: %s", u.String())
 	switch strings.ToUpper(request.HTTPMethod) {
 	case "GET":
 		response, err = resty.R().Get(u.String())
@@ -63,7 +64,7 @@ func sendWorkloadRequest(urlString string, request WorkloadBenchmarkRequest, sta
 			request.Body["stage_id"] = stageId
 		}
 		response, err = resty.R().
-			SetFormData(request.Body).
+			SetBody(request.Body).
 			Post(u.String())
 	default:
 		return errors.New("Unknown HTTP method: " + request.HTTPMethod)

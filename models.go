@@ -5,12 +5,12 @@ import (
 )
 
 type WorkloadBenchmarkRequest struct {
-	HTTPMethod     string            `json:"method"`
-	Component      string            `json:"component"`
-	UrlPath        string            `json:"path"`
-	Body           map[string]string `json:"body"`
-	Duration       string            `json:"duration"`
-	StartBenchmark bool              `json:"startBenchmark"`
+	HTTPMethod     string                 `json:"method"`
+	Component      string                 `json:"component"`
+	UrlPath        string                 `json:"path"`
+	Body           map[string]interface{} `json:"body"`
+	Duration       string                 `json:"duration"`
+	StartBenchmark bool                   `json:"startBenchmark"`
 }
 
 type WorkloadBenchmark struct {
