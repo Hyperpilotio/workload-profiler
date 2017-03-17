@@ -9,6 +9,7 @@ type WorkloadBenchmarkRequest struct {
 	Component      string                 `json:"component"`
 	UrlPath        string                 `json:"path"`
 	Body           map[string]interface{} `json:"body"`
+	FormData       map[string]string      `json:"formData"`
 	Duration       string                 `json:"duration"`
 	StartBenchmark bool                   `json:"startBenchmark"`
 }

@@ -63,9 +63,15 @@ func sendWorkloadRequest(urlString string, request WorkloadBenchmarkRequest, sta
 		if stageId != "" {
 			request.Body["stage_id"] = stageId
 		}
-		response, err = resty.R().
-			SetBody(request.Body).
-			Post(u.String())
+		if len(request.FormData) > 0 {
+			response, err = resty.R().
+				SetFormData(request.FormData).
+				Post(u.String())
+		} else {
+			response, err = resty.R().
+				SetBody(request.Body).
+				Post(u.String())
+		}
 	default:
 		return errors.New("Unknown HTTP method: " + request.HTTPMethod)
 	}
