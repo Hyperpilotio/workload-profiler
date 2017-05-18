@@ -3,22 +3,20 @@ GO_EXECUTABLE ?= go
 # For windows developer, use $(go list ./... | grep -v /vendor/)
 PACKAGES=$(glide novendor)
 
-glide-check:
-	@if [ "X$(GLIDE)" = "X"]; then \
-		echo "glide doesn't exist."; \
-		curl https://glide.sh/get | sh ; \
-	else \
-		echo "glide installed"; \
-	fi
-
-init: glide-check
+init:
 	glide install
 
 test:
 	${GO_EXECUTABLE} test ${PACKAGES}
 
 build:
-	${GO_EXECUTABLE} build .
+	CGO_ENABLED=0 go build -a -installsuffix cgo
+
+build-docker:
+	sudo docker build . -t hyperpilot/workload-profiler
+
+push:
+	sudo docker push hyperpilot/worload-profiler:latest
 
 dev-test: build
 	./workload-profiler --config ./documents/dev.config -logtostderr=true -v=2
