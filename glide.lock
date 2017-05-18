@@ -73,6 +73,13 @@ imports:
   - unicode/norm
 - name: gopkg.in/go-playground/validator.v8
   version: c193cecd124b5cc722d7ee5538e945bdb3348435
+- name: gopkg.in/mgo.v2
+  version: b6e2fa371e64216a45e61072a96d4e3859f169da
+  repo: https://gopkg.in/mgo.v2
+  subpackages:
+  - bson
+  - internal/sasl
+  - internal/scram
 - name: gopkg.in/yaml.v2
   version: a5b47d31c556af34a302ce5d659e6fea44d90de0
 testImports: []
