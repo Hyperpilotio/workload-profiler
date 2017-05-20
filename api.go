@@ -32,13 +32,14 @@ func (server *Server) StartServer() error {
 
 	profilerGroup := router.Group("/profilers")
 	{
-		profilerGroup.POST("", server.runProfile)
+		profilerGroup.POST("deployments/:deploymentId", server.runProfile)
 	}
 
 	return router.Run(":" + server.Config.GetString("port"))
 }
 
 func (server *Server) runProfile(c *gin.Context) {
+	deploymentId := c.Param("deploymentId")
 	var profile Profile
 	if err := c.BindJSON(&profile); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -51,7 +52,7 @@ func (server *Server) runProfile(c *gin.Context) {
 	server.mutex.Lock()
 	defer server.mutex.Unlock()
 
-	run, runErr := NewRun(profile.Deployment, server.Config)
+	run, runErr := NewRun(deploymentId, server.Config)
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,

@@ -115,9 +115,11 @@ func sendHTTPRequest(baseUrl string, request HTTPRequest) (*resty.Response, erro
 }
 
 func (run *ProfileRun) getServiceUrl(name string) (string, error) {
+	// We cache the results of asking for the service url, if cache miss go fetch
+	// from the deployer.
 	if url, ok := run.ServiceUrls[name]; !ok {
-		if url, err := run.DeployerClient.GetContainerUrl(run.DeploymentId, name); err != nil {
-			return "", errors.New("Unable to get service url: " + err.Error())
+		if url, err := run.DeployerClient.GetServiceUrl(run.DeploymentId, name); err != nil {
+			return "", errors.New("Unable to get url from deployer: " + err.Error())
 		} else {
 			run.ServiceUrls[name] = url
 			return url, nil
@@ -145,10 +147,10 @@ func waitUntilLoadTestFinishes(url string, stageId string) error {
 	})
 }
 
-func (run *ProfileRun) runLoadTestController(stageId string, controller LoadTestController) error {
+func (run *ProfileRun) runLoadTestController(stageId string, controller *LoadTestController) error {
 	url, urlErr := run.getServiceUrl(controller.ServiceName)
 	if urlErr != nil {
-		return fmt.Errorf("Unable to retrieve service url %s: %s",
+		return fmt.Errorf("Unable to retrieve service url [%s]: %s",
 			controller.ServiceName, urlErr.Error())
 	}
 	body := make(map[string]interface{})
@@ -183,27 +185,18 @@ func (run *ProfileRun) runLoadTestController(stageId string, controller LoadTest
 	return nil
 }
 
-func (run *ProfileRun) runLocustController(stageId string, controller LocustController) error {
+func (run *ProfileRun) runLocustController(stageId string, controller *LocustController) error {
 	return nil
 }
 
 func (run *ProfileRun) runAppLoadTest(stageId string, controller LoadController) error {
-	switch controller.GetType() {
-	case "loadtest":
-		loadTestController, ok := controller.(LoadTestController)
-		if !ok {
-			return errors.New("Unable to cast loadtest to LoadTestController")
-		}
-		return run.runLoadTestController(stageId, loadTestController)
-	case "locust":
-		locustController, ok := controller.(LocustController)
-		if !ok {
-			return errors.New("Unable to cast locust to LocustController")
-		}
-		return run.runLocustController(stageId, locustController)
+	if controller.LoadTestController != nil {
+		return run.runLoadTestController(stageId, controller.LoadTestController)
+	} else if controller.LocustController != nil {
+		return run.runLocustController(stageId, controller.LocustController)
 	}
 
-	return errors.New("Unknown controller type: " + controller.GetType())
+	return errors.New("No controller found")
 }
 
 func (run *ProfileRun) runStageBenchmark(deployment string, stage *Stage) (*StageResult, error) {
@@ -241,7 +234,7 @@ func (run *ProfileRun) RunProfile(config *viper.Viper, profile *Profile) (*Profi
 		}
 
 		// TODO: Store stage results
-		if result, err := run.runStageBenchmark(profile.Deployment, &stage); err != nil {
+		if result, err := run.runStageBenchmark(run.DeploymentId, &stage); err != nil {
 			run.cleanupStage(&stage)
 			return nil, errors.New("Unable to run stage benchmark: " + err.Error())
 		} else {
@@ -255,7 +248,7 @@ func (run *ProfileRun) RunProfile(config *viper.Viper, profile *Profile) (*Profi
 		}
 	}
 
-	if err := PersistData(config, profile.Deployment, results); err != nil {
+	if err := PersistData(config, run.DeploymentId, results); err != nil {
 		return nil, errors.New("Unable to save profile results to db: " + err.Error())
 	}
 

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"path"
 
@@ -32,9 +33,9 @@ func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 	}
 }
 
-func (client *DeployerClient) GetContainerUrl(deployment string, container string) (string, error) {
+func (client *DeployerClient) GetServiceUrl(deployment string, service string) (string, error) {
 	requestUrl := urlBasePath(client.Url) +
-		path.Join(client.Url.Path, "v1", "deployments", deployment, "containers", container, "url")
+		path.Join(client.Url.Path, "v1", "deployments", deployment, "services", service, "url")
 
 	response, err := resty.R().Get(requestUrl)
 	if err != nil {
@@ -42,7 +43,7 @@ func (client *DeployerClient) GetContainerUrl(deployment string, container strin
 	}
 
 	if response.StatusCode() != 200 {
-		return "", errors.New("Invalid status code returned: " + string(response.StatusCode()))
+		return "", fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
 	}
 
 	return "http://" + response.String(), nil
