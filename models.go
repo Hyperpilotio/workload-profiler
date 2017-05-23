@@ -7,7 +7,7 @@ import (
 type LoadTestController struct {
 	ServiceName string   `json:"serviceName"`
 	Initialize  *Command `json:"initialize"`
-	LoadTest    *Command `json:"load"`
+	LoadTest    *Command `json:"loadTest"`
 	Cleanup     *Command `json:"cleanup"`
 }
 

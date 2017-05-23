@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -139,9 +141,24 @@ func waitUntilLoadTestFinishes(url string, stageId string) error {
 		response, err := sendHTTPRequest(url, request)
 		if err != nil {
 			return false, err
-		} else if response.StatusCode() == 404 {
+		} else if response.StatusCode() != 200 {
+			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+		}
+
+		var results struct {
+			Status string `json:"status"`
+		}
+
+		if err := json.Unmarshal(response.Body(), &results); err != nil {
+			return false, errors.New("Unable to parse response body: " + err.Error())
+		}
+
+		if results.Status != "running" {
+			glog.Infof("Load test finished with status: " + results.Status)
 			return true, nil
 		}
+
+		glog.Infof("Continue to wait for load test, last poll response: %v", response)
 
 		return false, nil
 	})
