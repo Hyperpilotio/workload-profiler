@@ -180,7 +180,7 @@ func (run *ProfileRun) runLoadTestController(stageId string, controller *LoadTes
 		body["cleanup"] = controller.Cleanup
 	}
 
-	body["loadTest"] = controller.LoadTest
+	body["loadTests"] = controller.LoadTests
 	body["stageId"] = stageId
 
 	request := HTTPRequest{
@@ -202,7 +202,69 @@ func (run *ProfileRun) runLoadTestController(stageId string, controller *LoadTes
 	return nil
 }
 
+func min(a int, b int) int {
+	if a > b {
+		return b
+	} else {
+		return a
+	}
+}
+
 func (run *ProfileRun) runLocustController(stageId string, controller *LocustController) error {
+	waitTime, err := time.ParseDuration(controller.StepDuration)
+	if err != nil {
+		return fmt.Errorf("Unable to parse wait time %s: %s", controller.StepDuration, err.Error())
+	}
+
+	url, urlErr := run.getServiceUrl("locust-master")
+	if urlErr != nil {
+		return fmt.Errorf("Unable to retrieve locust master url: %s", urlErr.Error())
+	}
+
+	lastUserCount := 0
+	nextUserCount := controller.StartCount
+
+	for lastUserCount < nextUserCount {
+		body := make(map[string]string)
+		body["locust_count"] = strconv.Itoa(nextUserCount)
+		body["hatch_rate"] = strconv.Itoa(nextUserCount)
+		body["stage_id"] = stageId
+
+		startRequest := HTTPRequest{
+			HTTPMethod: "POST",
+			UrlPath:    "/swarm",
+			FormData:   body,
+		}
+
+		glog.Infof("Starting locust run with id %s, count %d", stageId, nextUserCount)
+		if response, err := sendHTTPRequest(url, startRequest); err != nil {
+			return fmt.Errorf("Unable to send start request for locust test %v: %s", startRequest, err.Error())
+		} else if response.StatusCode() >= 300 {
+			return fmt.Errorf("Unexpected response code when starting locust: %d, body: %s",
+				response.StatusCode(), response.String())
+		}
+
+		glog.Infof("Waiting locust run for %s..", controller.StepDuration)
+		<-time.After(waitTime)
+
+		stopRequest := HTTPRequest{
+			HTTPMethod: "GET",
+			UrlPath:    "/stop",
+		}
+
+		glog.Infof("Stopping locust run..")
+
+		if response, err := sendHTTPRequest(url, stopRequest); err != nil {
+			return fmt.Errorf("Unable to send stop request for locust test: %s", err.Error())
+		} else if response.StatusCode() >= 300 {
+			return fmt.Errorf("Unexpected response code when stopping locust: %d, body: %s",
+				response.StatusCode(), response.String())
+		}
+
+		lastUserCount = nextUserCount
+		nextUserCount = min(nextUserCount+controller.StepCount, controller.EndCount)
+	}
+
 	return nil
 }
 

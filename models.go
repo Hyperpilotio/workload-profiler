@@ -4,17 +4,23 @@ import (
 	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 )
 
+type LoadTestWithIntensity struct {
+	Command   *Command `json:"command"`
+	Intensity int      `json:"intensity"`
+}
+
 type LoadTestController struct {
-	ServiceName string   `json:"serviceName"`
-	Initialize  *Command `json:"initialize"`
-	LoadTest    *Command `json:"loadTest"`
-	Cleanup     *Command `json:"cleanup"`
+	ServiceName string                   `json:"serviceName"`
+	Initialize  *Command                 `json:"initialize"`
+	LoadTests   []*LoadTestWithIntensity `json:"loadTests"`
+	Cleanup     *Command                 `json:"cleanup"`
 }
 
 type LocustController struct {
-	Count     int    `json:"count"`
-	HatchRate int    `json:"hatchRate"`
-	Duration  string `json:"duration"`
+	StartCount   int    `json:"startCount"`
+	EndCount     int    `json:"endCount"`
+	StepCount    int    `json:"stepCount"`
+	StepDuration string `json:"stepDuration"`
 }
 
 type LoadController struct {
