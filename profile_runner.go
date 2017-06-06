@@ -141,7 +141,9 @@ func (run *CalibrationRun) runBenchmarkController(stageId string, controller *Be
 		TestResult:   testResults,
 	}
 
-	run.MetricsDB.WriteMetrics("calibration", calibrationResults)
+	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
+		return errors.New("Unable to store calibration results: " + err.Error())
+	}
 
 	return nil
 }
