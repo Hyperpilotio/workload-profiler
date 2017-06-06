@@ -1,25 +1,24 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
-	"path"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/go-resty/resty"
-	"github.com/golang/glog"
-	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/nu7hatch/gouuid"
 	"github.com/spf13/viper"
 )
 
-type ProfileRun struct {
-	ServiceUrls          map[string]string
-	DeployerClient       *DeployerClient
+type CalibrationRun struct {
+	Id                        string
+	DeployerClient            *DeployerClient
+	BenchmarkControllerClient *BenchmarkControllerClient
+	DeploymentId              string
+	MetricsDB                 *MetricsDB
+	ApplicationConfig         *ApplicationConfig
+}
+
+type BenchmarkRun struct {
 	BenchmarkAgentClient *BenchmarkAgentClient
 	DeploymentId         string
 }
@@ -35,33 +34,57 @@ type StageResult struct {
 	EndTime   string
 }
 
-func NewRun(deploymentId string, config *viper.Viper) (*ProfileRun, error) {
+func generateId() (string, error) {
+	u4, err := uuid.NewV4()
+	if err != nil {
+		return "", errors.New("Unable to generate stage id: " + err.Error())
+	}
+	return u4.String(), nil
+}
+
+func NewBenchmarkRun() {
+	/*
+		deployerClient, deployerErr := NewDeployerClient(config)
+		if deployerErr != nil {
+			return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
+		}
+
+		url, urlErr := deployerClient.GetServiceUrl(deploymentId, "benchmark-agent")
+		if urlErr != nil {
+			return nil, errors.New("Unable to get benchmark-agent url: " + urlErr.Error())
+		}
+
+		benchmarkAgentClient, benchmarkAgentErr := NewBenchmarkAgentClient(url)
+		if benchmarkAgentErr != nil {
+			return nil, errors.New("Unable to create new benchmark agent client: " + benchmarkAgentErr.Error())
+		}
+	*/
+}
+
+func NewCalibrationRun(deploymentId string, applicationConfig *ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
+	id, err := generateId()
+	if err != nil {
+		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
+	}
+
 	deployerClient, deployerErr := NewDeployerClient(config)
 	if deployerErr != nil {
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
-	run := &ProfileRun{
-		ServiceUrls:    make(map[string]string),
-		DeployerClient: deployerClient,
-		DeploymentId:   deploymentId,
+	run := &CalibrationRun{
+		Id:                        id,
+		ApplicationConfig:         applicationConfig,
+		DeployerClient:            deployerClient,
+		BenchmarkControllerClient: &BenchmarkControllerClient{},
+		MetricsDB:                 NewMetricsDB(config),
+		DeploymentId:              deploymentId,
 	}
 
-	url, urlErr := run.getServiceUrl("benchmark-agent")
-	if urlErr != nil {
-		return nil, errors.New("Unable to get benchmark-agent url: " + urlErr.Error())
-	}
-
-	benchmarkAgentClient, benchmarkAgentErr := NewBenchmarkAgentClient(url)
-	if benchmarkAgentErr != nil {
-		return nil, errors.New("Unable to create new benchmark agent client: " + benchmarkAgentErr.Error())
-	}
-
-	run.BenchmarkAgentClient = benchmarkAgentClient
 	return run, nil
 }
 
-func (run *ProfileRun) cleanupStage(stage *Stage) error {
+func (run *BenchmarkRun) cleanupBenchmark(stage *Stage) error {
 	for _, benchmark := range stage.Benchmarks {
 		if err := run.BenchmarkAgentClient.DeleteBenchmark(benchmark.Name); err != nil {
 			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
@@ -72,7 +95,7 @@ func (run *ProfileRun) cleanupStage(stage *Stage) error {
 	return nil
 }
 
-func (run *ProfileRun) setupStage(stage *Stage) error {
+func (run *BenchmarkRun) setupBenchmark(stage *Stage) error {
 	for _, benchmark := range stage.Benchmarks {
 		if err := run.BenchmarkAgentClient.CreateBenchmark(&benchmark); err != nil {
 			return fmt.Errorf("Unable to create benchmark %s: %s",
@@ -83,121 +106,42 @@ func (run *ProfileRun) setupStage(stage *Stage) error {
 	return nil
 }
 
-func sendHTTPRequest(baseUrl string, request HTTPRequest) (*resty.Response, error) {
-	var response *resty.Response
-	u, err := url.Parse(baseUrl)
-	if err != nil {
-		return nil, errors.New("Unable to parse url: " + err.Error())
-	}
-
-	u.Path = path.Join(u.Path, request.UrlPath)
-	glog.V(1).Infof("Sending HTTP request with URL: %s", u.String())
-	switch strings.ToUpper(request.HTTPMethod) {
-	case "GET":
-		response, err = resty.R().Get(u.String())
-	case "POST":
-		if len(request.FormData) > 0 {
-			response, err = resty.R().
-				SetFormData(request.FormData).
-				Post(u.String())
-		} else {
-			response, err = resty.R().
-				SetBody(request.Body).
-				Post(u.String())
-		}
-	default:
-		return nil, errors.New("Unknown HTTP method: " + request.HTTPMethod)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
-func (run *ProfileRun) getServiceUrl(name string) (string, error) {
-	// We cache the results of asking for the service url, if cache miss go fetch
-	// from the deployer.
-	if url, ok := run.ServiceUrls[name]; !ok {
-		if url, err := run.DeployerClient.GetServiceUrl(run.DeploymentId, name); err != nil {
-			return "", errors.New("Unable to get url from deployer: " + err.Error())
-		} else {
-			run.ServiceUrls[name] = url
-			return url, nil
-		}
-	} else {
-		return url, nil
-	}
-}
-
-func waitUntilLoadTestFinishes(url string, stageId string) error {
-	// TODO: Allow timeout to be configurable
-	return funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
-		request := HTTPRequest{
-			HTTPMethod: "GET",
-			UrlPath:    "/api/benchmarks/" + stageId,
-		}
-		response, err := sendHTTPRequest(url, request)
-		if err != nil {
-			return false, err
-		} else if response.StatusCode() != 200 {
-			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
-		}
-
-		var results struct {
-			Status string `json:"status"`
-		}
-
-		if err := json.Unmarshal(response.Body(), &results); err != nil {
-			return false, errors.New("Unable to parse response body: " + err.Error())
-		}
-
-		if results.Status != "running" {
-			glog.Infof("Load test finished with status: " + results.Status)
-			return true, nil
-		}
-
-		glog.Infof("Continue to wait for load test, last poll response: %v", response)
-
-		return false, nil
-	})
-}
-
-func (run *ProfileRun) runLoadTestController(stageId string, controller *LoadTestController) error {
-	url, urlErr := run.getServiceUrl(controller.ServiceName)
+func (run *CalibrationRun) runBenchmarkController(stageId string, controller *BenchmarkController) error {
+	loadTesterName := run.ApplicationConfig.LoadTester.Name
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
 	if urlErr != nil {
-		return fmt.Errorf("Unable to retrieve service url [%s]: %s",
-			controller.ServiceName, urlErr.Error())
-	}
-	body := make(map[string]interface{})
-
-	if controller.Initialize != nil {
-		body["initialize"] = controller.Initialize
+		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
-	if controller.Cleanup != nil {
-		body["cleanup"] = controller.Cleanup
+	startTime := time.Now()
+	results, err := run.BenchmarkControllerClient.RunCalibration(url, stageId, controller, run.ApplicationConfig.SLO)
+	if err != nil {
+		return errors.New("Unable to run calibration: " + err.Error())
 	}
 
-	body["loadTests"] = controller.LoadTests
-	body["stageId"] = stageId
-
-	request := HTTPRequest{
-		HTTPMethod: "POST",
-		UrlPath:    "/api/benchmarks",
-		Body:       body,
+	testResults := []CalibrationTestResult{}
+	for _, runResult := range results.RunResults {
+		qosMetric := runResult.Results[run.ApplicationConfig.SLO.Metric].(int)
+		// TODO: For now we assume just one intensity argument, but we can support multiple
+		// in the future.
+		loadIntensity := runResult.IntensityArgs[controller.Command.IntensityArgs[0].Name].(int)
+		testResults = append(testResults, CalibrationTestResult{
+			QosMetric:     qosMetric,
+			LoadIntensity: loadIntensity,
+		})
 	}
 
-	if response, err := sendHTTPRequest(url, request); err != nil {
-		return fmt.Errorf("Unable to send workload request for load test %v: %s", request, err.Error())
-	} else if response.StatusCode() >= 300 {
-		return fmt.Errorf("Unexpected response code: %d, body: %s", response.StatusCode(), response.String())
+	// Translate benchmark controller results to expected results format for analyzer
+	calibrationResults := &CalibrationResults{
+		TestId:       run.Id,
+		AppName:      run.ApplicationConfig.Name,
+		LoadTester:   loadTesterName,
+		QosMetrics:   []string{run.ApplicationConfig.SLO.Unit},
+		TestDuration: time.Since(startTime).String(),
+		TestResult:   testResults,
 	}
 
-	if err := waitUntilLoadTestFinishes(url, stageId); err != nil {
-		return errors.New("Unable to wait until load test to finish: " + err.Error())
-	}
+	run.MetricsDB.WriteMetrics("calibration", calibrationResults)
 
 	return nil
 }
@@ -210,42 +154,47 @@ func min(a int, b int) int {
 	}
 }
 
-func (run *ProfileRun) runLocustController(stageId string, controller *LocustController) error {
-	waitTime, err := time.ParseDuration(controller.StepDuration)
-	if err != nil {
-		return fmt.Errorf("Unable to parse wait time %s: %s", controller.StepDuration, err.Error())
-	}
-
-	url, urlErr := run.getServiceUrl("locust-master")
-	if urlErr != nil {
-		return fmt.Errorf("Unable to retrieve locust master url: %s", urlErr.Error())
-	}
-
-	lastUserCount := 0
-	nextUserCount := controller.StartCount
-
-	for lastUserCount < nextUserCount {
-		body := make(map[string]string)
-		body["locust_count"] = strconv.Itoa(nextUserCount)
-		body["hatch_rate"] = strconv.Itoa(nextUserCount)
-		body["stage_id"] = stageId
-
-		startRequest := HTTPRequest{
-			HTTPMethod: "POST",
-			UrlPath:    "/swarm",
-			FormData:   body,
+func (run *CalibrationRun) runLocustController(stageId string, controller *LocustController) error {
+	/*
+		waitTime, err := time.ParseDuration(controller.StepDuration)
+		if err != nil {
+			return fmt.Errorf("Unable to parse wait time %s: %s", controller.StepDuration, err.Error())
 		}
 
-		glog.Infof("Starting locust run with id %s, count %d", stageId, nextUserCount)
-		if response, err := sendHTTPRequest(url, startRequest); err != nil {
-			return fmt.Errorf("Unable to send start request for locust test %v: %s", startRequest, err.Error())
-		} else if response.StatusCode() >= 300 {
-			return fmt.Errorf("Unexpected response code when starting locust: %d, body: %s",
-				response.StatusCode(), response.String())
+		url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, "locust-master")
+		if urlErr != nil {
+			return fmt.Errorf("Unable to retrieve locust master url: %s", urlErr.Error())
 		}
 
-		glog.Infof("Waiting locust run for %s..", controller.StepDuration)
-		<-time.After(waitTime)
+		lastUserCount := 0
+		nextUserCount := controller.StartCount
+
+		for lastUserCount < nextUserCount {
+			body := make(map[string]string)
+			body["locust_count"] = strconv.Itoa(nextUserCount)
+			body["hatch_rate"] = strconv.Itoa(nextUserCount)
+			body["stage_id"] = stageId
+
+			startRequest := HTTPRequest{
+				HTTPMethod: "POST",
+				UrlPath:    "/swarm",
+				FormData:   body,
+			}
+
+			glog.Infof("Starting locust run with id %s, count %d", stageId, nextUserCount)
+			if response, err := sendHTTPRequest(url, startRequest); err != nil {
+				return fmt.Errorf("Unable to send start request for locust test %v: %s", startRequest, err.Error())
+			} else if response.StatusCode() >= 300 {
+				return fmt.Errorf("Unexpected response code when starting locust: %d, body: %s",
+					response.StatusCode(), response.String())
+			}
+
+			glog.Infof("Waiting locust run for %s..", controller.StepDuration)
+			<-time.After(waitTime)
+
+			lastUserCount = nextUserCount
+			nextUserCount = min(nextUserCount+controller.StepCount, controller.EndCount)
+		}
 
 		stopRequest := HTTPRequest{
 			HTTPMethod: "GET",
@@ -260,33 +209,31 @@ func (run *ProfileRun) runLocustController(stageId string, controller *LocustCon
 			return fmt.Errorf("Unexpected response code when stopping locust: %d, body: %s",
 				response.StatusCode(), response.String())
 		}
-
-		lastUserCount = nextUserCount
-		nextUserCount = min(nextUserCount+controller.StepCount, controller.EndCount)
-	}
+	*/
 
 	return nil
 }
 
-func (run *ProfileRun) runAppLoadTest(stageId string, controller LoadController) error {
-	if controller.LoadTestController != nil {
-		return run.runLoadTestController(stageId, controller.LoadTestController)
-	} else if controller.LocustController != nil {
-		return run.runLocustController(stageId, controller.LocustController)
+func (run *CalibrationRun) Run() error {
+	loadTester := run.ApplicationConfig.LoadTester
+	if loadTester.BenchmarkController != nil {
+		return run.runBenchmarkController(run.Id, loadTester.BenchmarkController)
+	} else if loadTester.LocustController != nil {
+		return run.runLocustController(run.Id, loadTester.LocustController)
 	}
 
-	return errors.New("No controller found")
+	return errors.New("No controller found in calibration request")
 }
 
-func (run *ProfileRun) runStageBenchmark(deployment string, stage *Stage) (*StageResult, error) {
-	u4, err := uuid.NewV4()
+func (run *BenchmarkRun) runBenchmark(deployment string, stage *Stage) (*StageResult, error) {
+	stageId, err := generateId()
 	if err != nil {
-		return nil, errors.New("Unable to generate stage id: " + err.Error())
+		return nil, err
 	}
-	stageId := u4.String()
 	st := time.Now()
 	startTime := st.Format(time.RFC3339)
-	err = run.runAppLoadTest(stageId, stage.AppLoadTest)
+	// TODO: Replace this with actually benchmark run
+	//err = run.runAppLoadTest(stageId)
 	results := &StageResult{
 		Id:        stageId,
 		StartTime: startTime,
@@ -295,7 +242,7 @@ func (run *ProfileRun) runStageBenchmark(deployment string, stage *Stage) (*Stag
 	return results, err
 }
 
-func (run *ProfileRun) RunProfile(config *viper.Viper, profile *Profile) (*ProfileResults, error) {
+func (run *BenchmarkRun) Run(config *viper.Viper, profile *Profile) (*ProfileResults, error) {
 	u4, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.New("Unable to generate profile id: " + err.Error())
@@ -307,14 +254,14 @@ func (run *ProfileRun) RunProfile(config *viper.Viper, profile *Profile) (*Profi
 	}
 
 	for _, stage := range profile.Stages {
-		if err := run.setupStage(&stage); err != nil {
-			run.cleanupStage(&stage)
+		if err := run.setupBenchmark(&stage); err != nil {
+			run.cleanupBenchmark(&stage)
 			return nil, errors.New("Unable to setup stage: " + err.Error())
 		}
 
 		// TODO: Store stage results
-		if result, err := run.runStageBenchmark(run.DeploymentId, &stage); err != nil {
-			run.cleanupStage(&stage)
+		if result, err := run.runBenchmark(run.DeploymentId, &stage); err != nil {
+			run.cleanupBenchmark(&stage)
 			return nil, errors.New("Unable to run stage benchmark: " + err.Error())
 		} else {
 			et := time.Now()
@@ -322,13 +269,9 @@ func (run *ProfileRun) RunProfile(config *viper.Viper, profile *Profile) (*Profi
 			results.addProfileResult(*result)
 		}
 
-		if err := run.cleanupStage(&stage); err != nil {
+		if err := run.cleanupBenchmark(&stage); err != nil {
 			return nil, errors.New("Unable to clean stage: " + err.Error())
 		}
-	}
-
-	if err := PersistData(config, run.DeploymentId, results); err != nil {
-		return nil, errors.New("Unable to save profile results to db: " + err.Error())
 	}
 
 	return results, nil

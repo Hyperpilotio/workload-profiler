@@ -10,14 +10,16 @@ import (
 
 // Server store the stats / data of every deployment
 type Server struct {
-	Config *viper.Viper
-	mutex  sync.Mutex
+	Config   *viper.Viper
+	ConfigDB *ConfigDB
+	mutex    sync.Mutex
 }
 
 // NewServer return an instance of Server struct.
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
-		Config: config,
+		Config:   config,
+		ConfigDB: NewConfigDB(config),
 	}
 }
 
@@ -30,47 +32,56 @@ func (server *Server) StartServer() error {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
-	profilerGroup := router.Group("/profilers")
+	calibrateGroup := router.Group("/calibrate")
 	{
-		profilerGroup.POST("deployments/:deploymentId", server.runProfile)
+		calibrateGroup.POST("/:appName", server.runCalibration)
 	}
 
 	return router.Run(":" + server.Config.GetString("port"))
 }
 
-func (server *Server) runProfile(c *gin.Context) {
-	deploymentId := c.Param("deploymentId")
-	var profile Profile
-	if err := c.BindJSON(&profile); err != nil {
+func (server *Server) runCalibration(c *gin.Context) {
+	appName := c.Param("appName")
+
+	var request struct {
+		DeploymentId string `json:"deploymentId"`
+	}
+
+	if err := c.BindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  "Error deserializing profile: " + string(err.Error()),
+			"data":  "Unable to parse calibration request: " + err.Error(),
 		})
 		return
 	}
 
-	server.mutex.Lock()
-	defer server.mutex.Unlock()
+	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to get application config: " + err.Error(),
+		})
+		return
+	}
 
-	run, runErr := NewRun(deploymentId, server.Config)
+	run, runErr := NewCalibrationRun(request.DeploymentId, applicationConfig, server.Config)
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
-			"data":  "Unable to create profile run: " + runErr.Error(),
+			"data":  "Unable to create calibration run: " + runErr.Error(),
 		})
 		return
 	}
 
-	if results, err := run.RunProfile(server.Config, &profile); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+	if err = run.Run(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
-			"data":  "Unable to run profile: " + err.Error(),
+			"data":  "Unable to run calibration: " + runErr.Error(),
 		})
 		return
-	} else {
-		c.JSON(http.StatusAccepted, gin.H{
-			"error": false,
-			"data":  results,
-		})
 	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"error": false,
+	})
 }

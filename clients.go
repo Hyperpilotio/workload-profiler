@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"strconv"
+	"time"
 
 	"github.com/go-resty/resty"
+	"github.com/golang/glog"
 	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
+	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/spf13/viper"
 )
 
@@ -18,8 +22,12 @@ type ApiResponse struct {
 }
 
 type DeployerClient struct {
-	Url *url.URL
+	// Cached service urls
+	ServiceUrls map[string]string
+	Url         *url.URL
 }
+
+type BenchmarkControllerClient struct{}
 
 func urlBasePath(u *url.URL) string {
 	return u.Scheme + "://" + u.Host + "/"
@@ -34,6 +42,10 @@ func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 }
 
 func (client *DeployerClient) GetServiceUrl(deployment string, service string) (string, error) {
+	if url, ok := client.ServiceUrls[service]; ok {
+		return url, nil
+	}
+
 	requestUrl := urlBasePath(client.Url) +
 		path.Join(client.Url.Path, "v1", "deployments", deployment, "services", service, "url")
 
@@ -46,7 +58,10 @@ func (client *DeployerClient) GetServiceUrl(deployment string, service string) (
 		return "", fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
 	}
 
-	return "http://" + response.String(), nil
+	url := "http://" + response.String()
+	client.ServiceUrls[service] = url
+
+	return url, nil
 }
 
 func (client *DeployerClient) IsDeploymentReady(deployment string) (bool, error) {
@@ -147,4 +162,77 @@ func (client *BenchmarkAgentClient) UpdateBenchmarkResources(benchmarkName strin
 	}
 
 	return nil
+}
+
+type RunCalibrationResponse struct {
+	Status     string `json:"status"`
+	Error      string `json:"error"`
+	RunResults []struct {
+		Results       map[string]interface{} `json:"results"`
+		IntensityArgs map[string]interface{} `json:"intensityArgs"`
+	} `json:"runResults"`
+	FinalIntensityArgs map[string]interface{} `json:"finalIntensityArgs"`
+}
+
+func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId string, controller *BenchmarkController, slo SLO) (*RunCalibrationResponse, error) {
+	u, err := url.Parse(baseUrl)
+	if err != nil {
+		return nil, errors.New("Unable to parse url: " + err.Error())
+	}
+
+	u.Path = path.Join(u.Path, "/api/calibrate")
+	body := make(map[string]interface{})
+	if controller.Initialize != nil {
+		body["initialize"] = controller.Initialize
+	}
+
+	body["loadTest"] = controller.Command
+	body["slo"] = slo
+	body["stageId"] = stageId
+
+	response, err := resty.R().SetBody(body).Post(u.String())
+	if err != nil {
+		return nil, errors.New("Unable to send calibrate request to controller: " + err.Error())
+	}
+
+	if response.StatusCode() >= 300 {
+		return nil, fmt.Errorf("Unexpected response code: %d, body: %s", response.StatusCode(), response.String())
+	}
+
+	results := &RunCalibrationResponse{}
+
+	err = funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
+		response, err := resty.R().Get(u.String() + "/" + stageId)
+		if err != nil {
+			return false, errors.New("Unable to send calibrate results request to controller: " + err.Error())
+		}
+
+		if response.StatusCode() != 200 {
+			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+		}
+
+		if err := json.Unmarshal(response.Body(), results); err != nil {
+			return false, errors.New("Unable to parse response body: " + err.Error())
+		}
+
+		if results.Error != "" {
+			glog.Infof("Calibration failed with error: " + results.Error)
+			return false, errors.New("Calibration failed with error: " + results.Error)
+		}
+
+		if results.Status != "running" {
+			glog.Infof("Load test finished with status: " + results.Status)
+			return true, nil
+		}
+
+		glog.Infof("Continue to wait for calibration results, last poll response: %v", response)
+
+		return false, nil
+	})
+
+	if err != nil {
+		return nil, errors.New("Unable to get calibration results: " + err.Error())
+	}
+
+	return results, nil
 }
