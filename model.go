@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
+	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/model"
 )
 
 type LoadTestWithIntensity struct {
@@ -43,8 +43,8 @@ type HTTPRequest struct {
 }
 
 type Stage struct {
-	Benchmarks  []apis.Benchmark `json:"benchmarks"`
-	AppLoadTest LoadController   `json:"loadTest"`
+	Benchmarks  []model.Benchmark `json:"benchmarks"`
+	AppLoadTest LoadController    `json:"loadTest"`
 }
 
 type Profile struct {
