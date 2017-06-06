@@ -8,7 +8,7 @@ import (
 	"path"
 
 	"github.com/go-resty/resty"
-	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
+	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/model"
 	"github.com/spf13/viper"
 )
 
@@ -77,7 +77,7 @@ func NewBenchmarkAgentClient(urlString string) (*BenchmarkAgentClient, error) {
 	}
 }
 
-func (client *BenchmarkAgentClient) CreateBenchmark(benchmark *apis.Benchmark) error {
+func (client *BenchmarkAgentClient) CreateBenchmark(benchmark *model.Benchmark) error {
 	benchmarkJson, marshalErr := json.Marshal(benchmark)
 	if marshalErr != nil {
 		return errors.New("Unable to marshal benchmark to JSON: " + marshalErr.Error())
@@ -123,7 +123,7 @@ func (client *BenchmarkAgentClient) DeleteBenchmark(benchmarkName string) error 
 	return nil
 }
 
-func (client *BenchmarkAgentClient) UpdateBenchmarkResources(benchmarkName string, resources *apis.Resources) error {
+func (client *BenchmarkAgentClient) UpdateBenchmarkResources(benchmarkName string, resources *model.Resources) error {
 	resourcesJson, marshalErr := json.Marshal(resources)
 	if marshalErr != nil {
 		return errors.New("Unable to marshal resources to JSON: " + marshalErr.Error())
