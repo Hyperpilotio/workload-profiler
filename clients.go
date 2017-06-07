@@ -168,13 +168,15 @@ func (client *BenchmarkAgentClient) UpdateBenchmarkResources(benchmarkName strin
 }
 
 type RunCalibrationResponse struct {
-	Status     string `json:"status"`
-	Error      string `json:"error"`
-	RunResults []struct {
-		Results       map[string]interface{} `json:"results"`
-		IntensityArgs map[string]interface{} `json:"intensityArgs"`
-	} `json:"runResults"`
-	FinalIntensityArgs map[string]interface{} `json:"finalIntensityArgs"`
+	Status  string `json:"status"`
+	Error   string `json:"error"`
+	Results struct {
+		RunResults []struct {
+			Results       map[string]interface{} `json:"results"`
+			IntensityArgs map[string]interface{} `json:"intensityArgs"`
+		} `json:"runResults"`
+		FinalIntensityArgs map[string]interface{} `json:"finalIntensityArgs"`
+	} `json:"results"`
 }
 
 func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId string, controller *BenchmarkController, slo SLO) (*RunCalibrationResponse, error) {
@@ -226,6 +228,7 @@ func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId 
 
 		if results.Status != "running" {
 			glog.Infof("Load test finished with status: " + results.Status)
+			glog.Infof("Load test finished response: %v", response)
 			return true, nil
 		}
 
