@@ -63,7 +63,7 @@ func NewMetricsDB(config *viper.Viper) *MetricsDB {
 		Url:                   config.GetString("database.url"),
 		User:                  config.GetString("database.user"),
 		Password:              config.GetString("database.password"),
-		Database:              config.GetString("database.metricsDatabase"),
+		Database:              config.GetString("database.metricDatabase"),
 		CalibrationCollection: config.GetString("database.calibrationCollection"),
 	}
 }

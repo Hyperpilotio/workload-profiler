@@ -193,6 +193,7 @@ func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId 
 	body["slo"] = slo
 	body["stageId"] = stageId
 
+	glog.Infof("Sending calibration request to benchmark controller for stage: " + stageId)
 	response, err := resty.R().SetBody(body).Post(u.String())
 	if err != nil {
 		return nil, errors.New("Unable to send calibrate request to controller: " + err.Error())
