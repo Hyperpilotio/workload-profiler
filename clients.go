@@ -37,7 +37,10 @@ func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 	if u, err := url.Parse(config.GetString("deployerUrl")); err != nil {
 		return nil, errors.New("Unable to parse deployer url: " + err.Error())
 	} else {
-		return &DeployerClient{Url: u}, nil
+		return &DeployerClient{
+			Url:         u,
+			ServiceUrls: make(map[string]string),
+		}, nil
 	}
 }
 

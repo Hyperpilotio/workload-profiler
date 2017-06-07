@@ -37,7 +37,13 @@ func NewConfigDB(config *viper.Viper) *ConfigDB {
 }
 
 func (configDb *ConfigDB) GetApplicationConfig(name string) (*ApplicationConfig, error) {
-	session, sessionErr := mgo.Dial(configDb.Url)
+	dialInfo := &mgo.DialInfo{
+		Addrs:    []string{configDb.Url},
+		Database: configDb.Database,
+		Username: configDb.User,
+		Password: configDb.Password,
+	}
+	session, sessionErr := mgo.DialWithInfo(dialInfo)
 	if sessionErr != nil {
 		return nil, errors.New("Unable to create mongo session: " + sessionErr.Error())
 	}
@@ -78,7 +84,14 @@ func (metricsDb *MetricsDB) WriteMetrics(dataType string, obj interface{}) error
 	}
 
 	glog.Info("Storing calibration results to database")
-	session, sessionErr := mgo.Dial(metricsDb.Url)
+	dialInfo := &mgo.DialInfo{
+		Addrs:    []string{metricsDb.Url},
+		Database: metricsDb.Database,
+		Username: metricsDb.User,
+		Password: metricsDb.Password,
+	}
+
+	session, sessionErr := mgo.DialWithInfo(dialInfo)
 	if sessionErr != nil {
 		return errors.New("Unable to create mongo session: " + sessionErr.Error())
 	}

@@ -44,13 +44,21 @@ func (server *Server) runCalibration(c *gin.Context) {
 	appName := c.Param("appName")
 
 	var request struct {
-		DeploymentId string `json:"deploymentId"`
+		DeploymentId string `json:"deploymentId" binding:"required"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
 			"data":  "Unable to parse calibration request: " + err.Error(),
+		})
+		return
+	}
+
+	if request.DeploymentId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Empty request id found",
 		})
 		return
 	}
@@ -76,7 +84,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 	if err = run.Run(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
-			"data":  "Unable to run calibration: " + runErr.Error(),
+			"data":  "Unable to run calibration: " + err.Error(),
 		})
 		return
 	}

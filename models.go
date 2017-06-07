@@ -5,15 +5,15 @@ import (
 )
 
 type BenchmarkController struct {
-	Initialize *Command          `json:"initialize"`
-	Command    LoadTesterCommand `json:"command"`
+	Initialize *Command          `bson:"initialize" json:"initialize"`
+	Command    LoadTesterCommand `bson:"command" json:"command"`
 }
 
 type LocustController struct {
-	StartCount   int    `json:"startCount"`
-	EndCount     int    `json:"endCount"`
-	StepCount    int    `json:"stepCount"`
-	StepDuration string `json:"stepDuration"`
+	StartCount   int    `bson:"startCount" json:"startCount"`
+	EndCount     int    `bson:"endCount" json:"endCount"`
+	StepCount    int    `bson:"stepCount" json:"stepCount"`
+	StepDuration string `bson:"stepDuration" json:"stepDuration"`
 }
 
 type Command struct {
@@ -26,16 +26,16 @@ type Stage struct {
 }
 
 type SLO struct {
-	Metric string  `json:"metric"`
-	Value  float32 `json:"value"`
-	Unit   string  `json:"unit"`
+	Metric string  `bson:"metric" json:"metric"`
+	Value  float32 `bson:"value" json:"value"`
+	Unit   string  `bson:"unit" json:"unit"`
 }
 
 type ApplicationConfig struct {
-	Name       string     `json:"name"`
-	LoadTester LoadTester `json:"loadTester"`
-	Type       string     `json:"type"`
-	SLO        SLO        `json:"slo"`
+	Name       string     `bson:"name" json:"name"`
+	LoadTester LoadTester `bson:"loadTester" json:"loadTester"`
+	Type       string     `bson:"type" json:"type"`
+	SLO        SLO        `bson:"slo" json:"slo"`
 }
 
 type Profile struct {
@@ -44,22 +44,22 @@ type Profile struct {
 }
 
 type IntensityArgument struct {
-	Name          string `json:"name"`
-	Arg           string `json:"arg"`
-	StartingValue int    `json:"startingValue"`
-	Step          int    `json:"step"`
+	Name          string `bson:"name" json:"name"`
+	Arg           string `bson:"arg" json:"arg"`
+	StartingValue int    `bson:"startingValue" json:"startingValue"`
+	Step          int    `bson:"step" json:"step"`
 }
 
 type LoadTesterCommand struct {
-	Path          string              `json:"path"`
-	Args          []string            `json:"args"`
-	IntensityArgs []IntensityArgument `json:"intensityArgs"`
+	Path          string              `bson:"path" json:"path"`
+	Args          []string            `bson:"args" json:"args"`
+	IntensityArgs []IntensityArgument `bson:"intensityArgs" json:"intensityArgs"`
 }
 
 type LoadTester struct {
-	Name                string               `json:"name"`
-	BenchmarkController *BenchmarkController `json:"benchmarkController"`
-	LocustController    *LocustController    `json:"locustController"`
+	Name                string               `bson:"name" json:"name"`
+	BenchmarkController *BenchmarkController `bson:"benchmarkController" json:"benchmarkController"`
+	LocustController    *LocustController    `bson:"locustController" json:"locustController"`
 }
 
 type CalibrationTestResult struct {
