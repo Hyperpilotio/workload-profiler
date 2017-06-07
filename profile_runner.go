@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/nu7hatch/gouuid"
@@ -120,25 +121,29 @@ func (run *CalibrationRun) runBenchmarkController(stageId string, controller *Be
 	}
 
 	testResults := []CalibrationTestResult{}
-	for _, runResult := range results.RunResults {
-		qosMetric := runResult.Results[run.ApplicationConfig.SLO.Metric].(int)
+	for _, runResult := range results.Results.RunResults {
+		qosMetricString := runResult.Results[run.ApplicationConfig.SLO.Metric].(string)
+		qosMetricFloat64, _ := strconv.ParseFloat(qosMetricString, 64)
+
 		// TODO: For now we assume just one intensity argument, but we can support multiple
 		// in the future.
-		loadIntensity := runResult.IntensityArgs[controller.Command.IntensityArgs[0].Name].(int)
+		loadIntensity := runResult.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
 		testResults = append(testResults, CalibrationTestResult{
-			QosMetric:     qosMetric,
-			LoadIntensity: loadIntensity,
+			QosMetric:     int(qosMetricFloat64),
+			LoadIntensity: int(loadIntensity),
 		})
 	}
 
 	// Translate benchmark controller results to expected results format for analyzer
+	finalIntensity := results.Results.FinalIntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
 	calibrationResults := &CalibrationResults{
-		TestId:       run.Id,
-		AppName:      run.ApplicationConfig.Name,
-		LoadTester:   loadTesterName,
-		QosMetrics:   []string{run.ApplicationConfig.SLO.Unit},
-		TestDuration: time.Since(startTime).String(),
-		TestResult:   testResults,
+		TestId:         run.Id,
+		AppName:        run.ApplicationConfig.Name,
+		LoadTester:     loadTesterName,
+		QosMetrics:     []string{run.ApplicationConfig.SLO.Unit},
+		TestDuration:   time.Since(startTime).String(),
+		TestResult:     testResults,
+		FinalIntensity: int(finalIntensity),
 	}
 
 	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
