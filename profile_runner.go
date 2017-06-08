@@ -26,9 +26,10 @@ type CalibrationRun struct {
 type BenchmarkRun struct {
 	ProfileRun
 
-	StartingIntenisty    int
+	StartingIntensity    int
 	Step                 int
 	BenchmarkAgentClient *BenchmarkAgentClient
+	Benchmarks           []Benchmark
 }
 
 type ProfileResults struct {
@@ -78,8 +79,8 @@ func NewBenchmarkRun(
 		return nil, errors.New("Unable to create new benchmark agent client: " + benchmarkAgentErr.Error())
 	}
 
-	return &BenchmarkRun{
-		ProfileRun: {
+	run := &BenchmarkRun{
+		ProfileRun: ProfileRun{
 			DeployerClient:            deployerClient,
 			BenchmarkControllerClient: &BenchmarkControllerClient{},
 			MetricsDB:                 NewMetricsDB(config),
@@ -89,7 +90,10 @@ func NewBenchmarkRun(
 		StartingIntensity:    startingIntensity,
 		Step:                 step,
 		BenchmarkAgentClient: benchmarkAgentClient,
+		Benchmarks:           benchmarks,
 	}
+
+	return run, nil
 }
 
 func NewCalibrationRun(deploymentId string, applicationConfig *ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
@@ -117,19 +121,17 @@ func NewCalibrationRun(deploymentId string, applicationConfig *ApplicationConfig
 	return run, nil
 }
 
-func (run *BenchmarkRun) cleanupBenchmark(stage *Stage) error {
-	for _, benchmark := range stage.Benchmarks {
-		if err := run.BenchmarkAgentClient.DeleteBenchmark(benchmark.Name); err != nil {
-			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
-				benchmark.Name, err.Error())
-		}
+func (run *BenchmarkRun) cleanupBenchmark(benchmark Benchmark) error {
+	if err := run.BenchmarkAgentClient.DeleteBenchmark(benchmark.Name); err != nil {
+		return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
+			benchmark.Name, err.Error())
 	}
 
 	return nil
 }
 
-func (run *BenchmarkRun) setupBenchmark(stage *Stage) error {
-
+func (run *BenchmarkRun) setupBenchmark(benchmark Benchmark) error {
+	return nil
 }
 
 func (run *CalibrationRun) runBenchmarkController(stageId string, controller *BenchmarkController) error {
@@ -257,21 +259,27 @@ func (run *CalibrationRun) Run() error {
 	return errors.New("No controller found in calibration request")
 }
 
-func (run *BenchmarkRun) runBenchmark(string id, benchmark Benchmark, intensity int) error {
+func (run *BenchmarkRun) runBenchmark(id string, benchmark Benchmark, intensity int) error {
+	benchmark.Intensity = intensity
 	if err := run.BenchmarkAgentClient.CreateBenchmark(&benchmark); err != nil {
 		return fmt.Errorf("Unable to create benchmark %s: %s",
 			benchmark.Name, err.Error())
 	}
 
-	return results, err
+	return nil
 }
 
-func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark) {
+func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark) (*ProfilingTestResult, error) {
 	currentIntensity := run.StartingIntensity
+	loadTester := run.ApplicationConfig.LoadTester
 	for {
 		if err := run.runBenchmark(run.Id, benchmark, currentIntensity); err != nil {
-			run.cleanupBenchmark(&stage)
+			run.cleanupBenchmark(benchmark)
 			return nil, errors.New("Unable to setup stage: " + err.Error())
+		}
+
+		if loadTester.LocustController != nil {
+			// run.runLocustController(run.Id, loadTester.LocustController)
 		}
 
 		if currentIntensity == 100 {
@@ -280,30 +288,42 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark) {
 		currentIntensity += run.Step
 	}
 
-	if result, err := run.runBenchmark(run.DeploymentId, &stage); err != nil {
-		run.cleanupBenchmark(&stage)
-		return nil, errors.New("Unable to run stage benchmark: " + err.Error())
-	} else {
-		et := time.Now()
-		result.EndTime = et.Format(time.RFC3339)
-		results.addProfileResult(*result)
-	}
-
-	if err := run.cleanupBenchmark(&stage); err != nil {
-		return nil, errors.New("Unable to clean stage: " + err.Error())
-	}
+	return nil, nil
 }
 
 func (run *BenchmarkRun) Run() error {
-	for _, benchmark := range run.Benchmarks {
-		run.runAppWithBenchmark(benchmark)
-
+	calibration, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name)
+	if err != nil {
+		return errors.New("Unable to get calibration: " + err.Error())
 	}
 
-	return results, nil
-}
+	profilingResults := &ProfilingResults{
+		TestId:       calibration.(*CalibrationResults).TestId,
+		AppName:      run.ApplicationConfig.Name,
+		LoadTester:   calibration.(*CalibrationResults).LoadTester,
+		TestDuration: calibration.(*CalibrationResults).TestDuration,
+	}
 
-func (pr *ProfileResults) addProfileResult(sr StageResult) []StageResult {
-	pr.StageResults = append(pr.StageResults, sr)
-	return pr.StageResults
+	if run.StartingIntensity <= 0 {
+		run.StartingIntensity = calibration.(*CalibrationResults).FinalIntensity
+	}
+
+	benchmarks := []string{}
+	profilingTestResults := []ProfilingTestResult{}
+	for _, benchmark := range run.Benchmarks {
+		testResults, err := run.runAppWithBenchmark(benchmark)
+		if err != nil {
+			return errors.New("Unable to run benchmark: " + err.Error())
+		}
+		benchmarks = append(benchmarks, benchmark.Name)
+		profilingTestResults = append(profilingTestResults, *testResults)
+	}
+	profilingResults.Benchmarks = benchmarks
+	profilingResults.TestResult = profilingTestResults
+
+	if err := run.MetricsDB.WriteMetrics("profiling", profilingResults); err != nil {
+		return errors.New("Unable to store profiling results: " + err.Error())
+	}
+
+	return nil
 }
