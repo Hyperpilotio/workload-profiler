@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -24,6 +25,7 @@ type MetricsDB struct {
 	Password              string
 	Database              string
 	CalibrationCollection string
+	ProfilingCollection   string
 }
 
 func NewConfigDB(config *viper.Viper) *ConfigDB {
@@ -77,7 +79,6 @@ func (configDb *ConfigDB) GetBenchmarks() ([]Benchmark, error) {
 
 	var benchmarks []Benchmark
 	collection := session.DB(configDb.Database).C(configDb.BenchmarksCollection)
-	var appConfig ApplicationConfig
 	if err := collection.Find(nil).All(&benchmarks); err != nil {
 		return nil, errors.New("Unable to read benchmarks from config db: " + err.Error())
 	}
@@ -92,6 +93,7 @@ func NewMetricsDB(config *viper.Viper) *MetricsDB {
 		Password:              config.GetString("database.password"),
 		Database:              config.GetString("database.metricDatabase"),
 		CalibrationCollection: config.GetString("database.calibrationCollection"),
+		ProfilingCollection:   config.GetString("database.profilingCollection"),
 	}
 }
 
@@ -99,8 +101,21 @@ func (metricsDb *MetricsDB) getCollection(dataType string) (string, error) {
 	switch dataType {
 	case "calibration":
 		return metricsDb.CalibrationCollection, nil
+	case "profiling":
+		return metricsDb.ProfilingCollection, nil
 	default:
 		return "", errors.New("Unable to find collection for: " + dataType)
+	}
+}
+
+func (metricsDb *MetricsDB) getCollectionResults(dataType string) (interface{}, error) {
+	switch dataType {
+	case "calibration":
+		return &CalibrationResults{}, nil
+	case "profiling":
+		return &ProfilingResults{}, nil
+	default:
+		return nil, errors.New("Unable to find collection for: " + dataType)
 	}
 }
 
@@ -123,4 +138,30 @@ func (metricsDb *MetricsDB) WriteMetrics(dataType string, obj interface{}) error
 	}
 
 	return nil
+}
+
+func (metricsDb *MetricsDB) GetMetric(dataType string, appName string) (interface{}, error) {
+	collectionName, collectionErr := metricsDb.getCollection(dataType)
+	if collectionErr != nil {
+		return nil, collectionErr
+	}
+
+	session, sessionErr := connectMongo(metricsDb.Url, metricsDb.Database, metricsDb.User, metricsDb.Password)
+	if sessionErr != nil {
+		return nil, errors.New("Unable to create mongo session: " + sessionErr.Error())
+	}
+
+	defer session.Close()
+
+	results, resultsErr := metricsDb.getCollectionResults(dataType)
+	if resultsErr != nil {
+		return nil, resultsErr
+	}
+
+	collection := session.DB(metricsDb.Database).C(collectionName)
+	if err := collection.Find(bson.M{"appname": appName}).One(&results); err != nil {
+		return nil, fmt.Errorf("Unable to read %s from metrics db: %s", dataType, err.Error())
+	}
+
+	return results, nil
 }
