@@ -1,8 +1,6 @@
 package main
 
-import (
-	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
-)
+//"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 
 type BenchmarkController struct {
 	Initialize *Command          `bson:"initialize" json:"initialize"`
@@ -54,18 +52,40 @@ type LoadTester struct {
 }
 
 type CalibrationTestResult struct {
-	LoadIntensity int `json:"loadIntensity"`
-	QosMetric     int `json:"qosMetric"`
+	LoadIntensity int `bson:"loadIntensity" json:"loadIntensity"`
+	QosMetric     int `bson:"qosMetric" json:"qosMetric"`
 }
 
 type CalibrationResults struct {
-	TestId         string                  `json:"testId"`
-	AppName        string                  `json:"appName"`
-	LoadTester     string                  `json:"loadTester"`
-	QosMetrics     []string                `json:"qosMetrics"`
-	TestDuration   string                  `json:"testDuration"`
-	TestResult     []CalibrationTestResult `json:"testResult"`
-	FinalIntensity int                     `json:"finalIntensity"`
+	TestId         string                  `bson:"testId" json:"testId"`
+	AppName        string                  `bson:"appName" json:"appName"`
+	LoadTester     string                  `bson:"loadTester" json:"loadTester"`
+	QosMetrics     []string                `bson:"qosMetrics" json:"qosMetrics"`
+	TestDuration   string                  `bson:"testDuration" json:"testDuration"`
+	TestResult     []CalibrationTestResult `bson:"testResult" json:"testResult"`
+	FinalIntensity int                     `bson:"finalIntensity" json:"finalIntensity"`
+}
+
+type ProfilingTestResult struct {
+	Benchmark             string  `bson:"benchmark" json:"benchmark"`
+	ToleratedInterference float64 `bson:"toleratedInterference" json:"toleratedInterference"`
+}
+
+type ProfilingResults struct {
+	TestId        string                `bson:"testId" json:"testId"`
+	AppName       string                `bson:"appName" json:"appName"`
+	NumServices   int                   `bson:"numServices" json:"numServices"`
+	Services      []string              `bson:"services" json:"services"`
+	ServiceInTest string                `bson:"serviceInTest" json:"serviceInTest"`
+	ServiceNode   string                `bson:"serviceNode" json:"serviceNode"`
+	LoadTester    string                `bson:"loadTester" json:"loadTester"`
+	AppCapacity   float64               `bson:"appCapacity" json:"appCapacity"`
+	QosSensor     string                `bson:"namqosSensore" json:"qosSensor"`
+	SloMetric     string                `bson:"sloMetric" json:"sloMetric"`
+	SloTolerance  float64               `bson:"sloTolerance" json:"sloTolerance"`
+	TestDuration  string                `bson:"testDuration" json:"testDuration"`
+	Benchmarks    []string              `bson:"benchmarks" json:"benchmarks"`
+	TestResult    []ProfilingTestResult `bson:"testResult" json:"testResult"`
 }
 
 type CgroupConfig struct {
