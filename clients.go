@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-resty/resty"
 	"github.com/golang/glog"
-	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/spf13/viper"
 )
