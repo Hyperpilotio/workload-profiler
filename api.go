@@ -89,13 +89,13 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
-	run, runErr := NewBenchmarksRun(
+	run, runErr := NewBenchmarkRun(
 		applicationConfig,
 		benchmarks,
-		request.deploymentId,
-		request.startingIntensity,
-		request.step,
-		server.config)
+		request.DeploymentId,
+		request.StartingIntensity,
+		request.Step,
+		server.Config)
 
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
