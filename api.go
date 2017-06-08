@@ -37,7 +37,85 @@ func (server *Server) StartServer() error {
 		calibrateGroup.POST("/:appName", server.runCalibration)
 	}
 
+	benchmarkGroup := router.Group("/benchmarks")
+	{
+		benchmarkGroup.POST("/:appName", server.runBenchmarks)
+	}
+
 	return router.Run(":" + server.Config.GetString("port"))
+}
+
+func (server *Server) runBenchmarks(c *gin.Context) {
+	appName := c.Param("appName")
+
+	var request struct {
+		DeploymentId      string `json:"deploymentId" binding:"required"`
+		StartingIntensity int    `json:"startingIntensity"`
+		Step              int    `json:"step"`
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to parse calibration request: " + err.Error(),
+		})
+		return
+	}
+
+	if request.DeploymentId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Empty request id found",
+		})
+		return
+	}
+
+	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to get application config: " + err.Error(),
+		})
+		return
+	}
+
+	// TODO: Cache this
+	benchmarks, err := server.ConfigDB.GetBenchmarks()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"data":  "Unable to get benchmarks: " + err.Error(),
+		})
+		return
+	}
+
+	run, runErr := NewBenchmarksRun(
+		applicationConfig,
+		benchmarks,
+		request.deploymentId,
+		request.startingIntensity,
+		request.step,
+		server.config)
+
+	if runErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"data":  "Unable to create benchmarks run: " + err.Error(),
+		})
+		return
+	}
+
+	if err = run.Run(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"data":  "Unable to run benchmarks: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"error": false,
+	})
 }
 
 func (server *Server) runCalibration(c *gin.Context) {

@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-type CalibrationRun struct {
+type ProfileRun struct {
 	Id                        string
 	DeployerClient            *DeployerClient
 	BenchmarkControllerClient *BenchmarkControllerClient
@@ -19,9 +19,16 @@ type CalibrationRun struct {
 	ApplicationConfig         *ApplicationConfig
 }
 
+type CalibrationRun struct {
+	ProfileRun
+}
+
 type BenchmarkRun struct {
+	ProfileRun
+
+	StartingIntenisty    int
+	Step                 int
 	BenchmarkAgentClient *BenchmarkAgentClient
-	DeploymentId         string
 }
 
 type ProfileResults struct {
@@ -35,35 +42,58 @@ type StageResult struct {
 	EndTime   string
 }
 
-func generateId() (string, error) {
+func generateId(prefix string) (string, error) {
 	u4, err := uuid.NewV4()
 	if err != nil {
 		return "", errors.New("Unable to generate stage id: " + err.Error())
 	}
-	return u4.String(), nil
+	return prefix + "-" + u4.String(), nil
 }
 
-func NewBenchmarkRun() {
-	/*
-		deployerClient, deployerErr := NewDeployerClient(config)
-		if deployerErr != nil {
-			return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
-		}
+func NewBenchmarkRun(
+	applicationConfig *ApplicationConfig,
+	benchmarks []Benchmark,
+	deploymentId string,
+	startingIntensity int,
+	step int,
+	config *viper.Viper) (*BenchmarkRun, error) {
 
-		url, urlErr := deployerClient.GetServiceUrl(deploymentId, "benchmark-agent")
-		if urlErr != nil {
-			return nil, errors.New("Unable to get benchmark-agent url: " + urlErr.Error())
-		}
+	id, err := generateId("benchmark")
+	if err != nil {
+		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
+	}
 
-		benchmarkAgentClient, benchmarkAgentErr := NewBenchmarkAgentClient(url)
-		if benchmarkAgentErr != nil {
-			return nil, errors.New("Unable to create new benchmark agent client: " + benchmarkAgentErr.Error())
-		}
-	*/
+	deployerClient, deployerErr := NewDeployerClient(config)
+	if deployerErr != nil {
+		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	}
+
+	url, urlErr := deployerClient.GetServiceUrl(deploymentId, "benchmark-agent")
+	if urlErr != nil {
+		return nil, errors.New("Unable to get benchmark-agent url: " + urlErr.Error())
+	}
+
+	benchmarkAgentClient, benchmarkAgentErr := NewBenchmarkAgentClient(url)
+	if benchmarkAgentErr != nil {
+		return nil, errors.New("Unable to create new benchmark agent client: " + benchmarkAgentErr.Error())
+	}
+
+	return &BenchmarkRun{
+		ProfileRun: {
+			DeployerClient:            deployerClient,
+			BenchmarkControllerClient: &BenchmarkControllerClient{},
+			MetricsDB:                 NewMetricsDB(config),
+			DeploymentId:              deploymentId,
+			Id:                        id,
+		},
+		StartingIntensity:    startingIntensity,
+		Step:                 step,
+		BenchmarkAgentClient: benchmarkAgentClient,
+	}
 }
 
 func NewCalibrationRun(deploymentId string, applicationConfig *ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
-	id, err := generateId()
+	id, err := generateId("calibrate")
 	if err != nil {
 		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
 	}
@@ -74,12 +104,14 @@ func NewCalibrationRun(deploymentId string, applicationConfig *ApplicationConfig
 	}
 
 	run := &CalibrationRun{
-		Id:                        id,
-		ApplicationConfig:         applicationConfig,
-		DeployerClient:            deployerClient,
-		BenchmarkControllerClient: &BenchmarkControllerClient{},
-		MetricsDB:                 NewMetricsDB(config),
-		DeploymentId:              deploymentId,
+		ProfileRun: ProfileRun{
+			Id:                        id,
+			ApplicationConfig:         applicationConfig,
+			DeployerClient:            deployerClient,
+			BenchmarkControllerClient: &BenchmarkControllerClient{},
+			MetricsDB:                 NewMetricsDB(config),
+			DeploymentId:              deploymentId,
+		},
 	}
 
 	return run, nil
@@ -97,14 +129,7 @@ func (run *BenchmarkRun) cleanupBenchmark(stage *Stage) error {
 }
 
 func (run *BenchmarkRun) setupBenchmark(stage *Stage) error {
-	for _, benchmark := range stage.Benchmarks {
-		if err := run.BenchmarkAgentClient.CreateBenchmark(&benchmark); err != nil {
-			return fmt.Errorf("Unable to create benchmark %s: %s",
-				benchmark.Name, err.Error())
-		}
-	}
 
-	return nil
 }
 
 func (run *CalibrationRun) runBenchmarkController(stageId string, controller *BenchmarkController) error {
@@ -218,7 +243,7 @@ func (run *CalibrationRun) runLocustController(stageId string, controller *Locus
 		}
 	*/
 
-	return nil
+	return errors.New("Unimplemented")
 }
 
 func (run *CalibrationRun) Run() error {
@@ -232,53 +257,47 @@ func (run *CalibrationRun) Run() error {
 	return errors.New("No controller found in calibration request")
 }
 
-func (run *BenchmarkRun) runBenchmark(deployment string, stage *Stage) (*StageResult, error) {
-	stageId, err := generateId()
-	if err != nil {
-		return nil, err
-	}
-	st := time.Now()
-	startTime := st.Format(time.RFC3339)
-	// TODO: Replace this with actually benchmark run
-	//err = run.runAppLoadTest(stageId)
-	results := &StageResult{
-		Id:        stageId,
-		StartTime: startTime,
+func (run *BenchmarkRun) runBenchmark(string id, benchmark Benchmark, intensity int) error {
+	if err := run.BenchmarkAgentClient.CreateBenchmark(&benchmark); err != nil {
+		return fmt.Errorf("Unable to create benchmark %s: %s",
+			benchmark.Name, err.Error())
 	}
 
 	return results, err
 }
 
-func (run *BenchmarkRun) Run(config *viper.Viper, profile *Profile) (*ProfileResults, error) {
-	u4, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.New("Unable to generate profile id: " + err.Error())
-	}
-
-	profileId := u4.String()
-	results := &ProfileResults{
-		Id: profileId,
-	}
-
-	for _, stage := range profile.Stages {
-		if err := run.setupBenchmark(&stage); err != nil {
+func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark) {
+	currentIntensity := run.StartingIntensity
+	for {
+		if err := run.runBenchmark(run.Id, benchmark, currentIntensity); err != nil {
 			run.cleanupBenchmark(&stage)
 			return nil, errors.New("Unable to setup stage: " + err.Error())
 		}
 
-		// TODO: Store stage results
-		if result, err := run.runBenchmark(run.DeploymentId, &stage); err != nil {
-			run.cleanupBenchmark(&stage)
-			return nil, errors.New("Unable to run stage benchmark: " + err.Error())
-		} else {
-			et := time.Now()
-			result.EndTime = et.Format(time.RFC3339)
-			results.addProfileResult(*result)
+		if currentIntensity == 100 {
+			break
 		}
+		currentIntensity += run.Step
+	}
 
-		if err := run.cleanupBenchmark(&stage); err != nil {
-			return nil, errors.New("Unable to clean stage: " + err.Error())
-		}
+	if result, err := run.runBenchmark(run.DeploymentId, &stage); err != nil {
+		run.cleanupBenchmark(&stage)
+		return nil, errors.New("Unable to run stage benchmark: " + err.Error())
+	} else {
+		et := time.Now()
+		result.EndTime = et.Format(time.RFC3339)
+		results.addProfileResult(*result)
+	}
+
+	if err := run.cleanupBenchmark(&stage); err != nil {
+		return nil, errors.New("Unable to clean stage: " + err.Error())
+	}
+}
+
+func (run *BenchmarkRun) Run() error {
+	for _, benchmark := range run.Benchmarks {
+		run.runAppWithBenchmark(benchmark)
+
 	}
 
 	return results, nil

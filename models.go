@@ -21,10 +21,6 @@ type Command struct {
 	Args []string `json:"args"`
 }
 
-type Stage struct {
-	Benchmarks []apis.Benchmark `json:"benchmarks"`
-}
-
 type SLO struct {
 	Metric string  `bson:"metric" json:"metric"`
 	Value  float32 `bson:"value" json:"value"`
@@ -36,11 +32,6 @@ type ApplicationConfig struct {
 	LoadTester LoadTester `bson:"loadTester" json:"loadTester"`
 	Type       string     `bson:"type" json:"type"`
 	SLO        SLO        `bson:"slo" json:"slo"`
-}
-
-type Profile struct {
-	ApplicationConfig *ApplicationConfig `json:"applicationConfig"`
-	Stages            []Stage            `json:"stages"`
 }
 
 type IntensityArgument struct {
@@ -75,4 +66,18 @@ type CalibrationResults struct {
 	TestDuration   string                  `json:"testDuration"`
 	TestResult     []CalibrationTestResult `json:"testResult"`
 	FinalIntensity int                     `json:"finalIntensity"`
+}
+
+type CgroupConfig struct {
+	SetCpuQuota bool `bson:"setCpuQuota" json:"setCpuQuota"`
+}
+
+type Benchmark struct {
+	Name         string        `bson:"name" json:"name"`
+	ResourceType string        `bson:"resourceType" json:"resourceType"`
+	Image        string        `bson:"image" json:"image"`
+	Intensity    int           `bson:"intensity" json:"intensity"`
+	Command      Command       `bson:"command" json:"command"`
+	Count        int           `bson:"count" json:"count"`
+	CgroupConfig *CgroupConfig `bson:"cgroupConfig json:"cgroupConfig"`
 }
