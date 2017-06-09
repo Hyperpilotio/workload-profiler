@@ -143,7 +143,7 @@ func (metricsDb *MetricsDB) GetMetric(dataType string, appName string, metric in
 	defer session.Close()
 
 	collection := session.DB(metricsDb.Database).C(collectionName)
-	if err := collection.Find(bson.M{"appname": appName}).One(&metric); err != nil {
+	if err := collection.Find(bson.M{"appName": appName}).One(metric); err != nil {
 		return nil, fmt.Errorf("Unable to read %s from metrics db: %s", dataType, err.Error())
 	}
 
