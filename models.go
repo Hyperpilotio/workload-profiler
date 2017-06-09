@@ -66,26 +66,25 @@ type CalibrationResults struct {
 	FinalIntensity int                     `bson:"finalIntensity" json:"finalIntensity"`
 }
 
-type ProfilingTestResult struct {
+type BenchmarkResult struct {
 	Benchmark             string  `bson:"benchmark" json:"benchmark"`
 	ToleratedInterference float64 `bson:"toleratedInterference" json:"toleratedInterference"`
 }
 
-type ProfilingResults struct {
-	TestId        string                `bson:"testId" json:"testId"`
-	AppName       string                `bson:"appName" json:"appName"`
-	NumServices   int                   `bson:"numServices" json:"numServices"`
-	Services      []string              `bson:"services" json:"services"`
-	ServiceInTest string                `bson:"serviceInTest" json:"serviceInTest"`
-	ServiceNode   string                `bson:"serviceNode" json:"serviceNode"`
-	LoadTester    string                `bson:"loadTester" json:"loadTester"`
-	AppCapacity   float64               `bson:"appCapacity" json:"appCapacity"`
-	QosSensor     string                `bson:"namqosSensore" json:"qosSensor"`
-	SloMetric     string                `bson:"sloMetric" json:"sloMetric"`
-	SloTolerance  float64               `bson:"sloTolerance" json:"sloTolerance"`
-	TestDuration  string                `bson:"testDuration" json:"testDuration"`
-	Benchmarks    []string              `bson:"benchmarks" json:"benchmarks"`
-	TestResult    []ProfilingTestResult `bson:"testResult" json:"testResult"`
+type BenchmarkRunResults struct {
+	TestId        string             `bson:"testId" json:"testId"`
+	AppName       string             `bson:"appName" json:"appName"`
+	NumServices   int                `bson:"numServices" json:"numServices"`
+	Services      []string           `bson:"services" json:"services"`
+	ServiceInTest string             `bson:"serviceInTest" json:"serviceInTest"`
+	ServiceNode   string             `bson:"serviceNode" json:"serviceNode"`
+	LoadTester    string             `bson:"loadTester" json:"loadTester"`
+	AppCapacity   int                `bson:"appCapacity" json:"appCapacity"`
+	SloMetric     string             `bson:"sloMetric" json:"sloMetric"`
+	SloTolerance  float64            `bson:"sloTolerance" json:"sloTolerance"`
+	TestDuration  string             `bson:"testDuration" json:"testDuration"`
+	Benchmarks    []string           `bson:"benchmarks" json:"benchmarks"`
+	TestResult    []*BenchmarkResult `bson:"testResult" json:"testResult"`
 }
 
 type CgroupConfig struct {

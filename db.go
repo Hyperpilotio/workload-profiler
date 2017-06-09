@@ -108,17 +108,6 @@ func (metricsDb *MetricsDB) getCollection(dataType string) (string, error) {
 	}
 }
 
-func (metricsDb *MetricsDB) getCollectionResults(dataType string) (interface{}, error) {
-	switch dataType {
-	case "calibration":
-		return &CalibrationResults{}, nil
-	case "profiling":
-		return &ProfilingResults{}, nil
-	default:
-		return nil, errors.New("Unable to find collection for: " + dataType)
-	}
-}
-
 func (metricsDb *MetricsDB) WriteMetrics(dataType string, obj interface{}) error {
 	collectionName, collectionErr := metricsDb.getCollection(dataType)
 	if collectionErr != nil {
@@ -140,7 +129,7 @@ func (metricsDb *MetricsDB) WriteMetrics(dataType string, obj interface{}) error
 	return nil
 }
 
-func (metricsDb *MetricsDB) GetMetric(dataType string, appName string) (interface{}, error) {
+func (metricsDb *MetricsDB) GetMetric(dataType string, appName string, metric interface{}) (interface{}, error) {
 	collectionName, collectionErr := metricsDb.getCollection(dataType)
 	if collectionErr != nil {
 		return nil, collectionErr
@@ -153,15 +142,10 @@ func (metricsDb *MetricsDB) GetMetric(dataType string, appName string) (interfac
 
 	defer session.Close()
 
-	results, resultsErr := metricsDb.getCollectionResults(dataType)
-	if resultsErr != nil {
-		return nil, resultsErr
-	}
-
 	collection := session.DB(metricsDb.Database).C(collectionName)
-	if err := collection.Find(bson.M{"appname": appName}).One(&results); err != nil {
+	if err := collection.Find(bson.M{"appname": appName}).One(&metric); err != nil {
 		return nil, fmt.Errorf("Unable to read %s from metrics db: %s", dataType, err.Error())
 	}
 
-	return results, nil
+	return metric, nil
 }

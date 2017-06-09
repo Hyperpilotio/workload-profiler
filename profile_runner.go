@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/nu7hatch/gouuid"
 	"github.com/spf13/viper"
 )
@@ -121,7 +122,7 @@ func NewCalibrationRun(deploymentId string, applicationConfig *ApplicationConfig
 	return run, nil
 }
 
-func (run *BenchmarkRun) cleanupBenchmark(benchmark Benchmark) error {
+func (run *BenchmarkRun) deleteBenchmark(benchmark Benchmark) error {
 	if err := run.BenchmarkAgentClient.DeleteBenchmark(benchmark.Name); err != nil {
 		return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
 			benchmark.Name, err.Error())
@@ -130,11 +131,7 @@ func (run *BenchmarkRun) cleanupBenchmark(benchmark Benchmark) error {
 	return nil
 }
 
-func (run *BenchmarkRun) setupBenchmark(benchmark Benchmark) error {
-	return nil
-}
-
-func (run *CalibrationRun) runBenchmarkController(stageId string, controller *BenchmarkController) error {
+func (run *CalibrationRun) runBenchmarkController(runId string, controller *BenchmarkController) error {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
 	if urlErr != nil {
@@ -142,7 +139,7 @@ func (run *CalibrationRun) runBenchmarkController(stageId string, controller *Be
 	}
 
 	startTime := time.Now()
-	results, err := run.BenchmarkControllerClient.RunCalibration(url, stageId, controller, run.ApplicationConfig.SLO)
+	results, err := run.BenchmarkControllerClient.RunCalibration(url, runId, controller, run.ApplicationConfig.SLO)
 	if err != nil {
 		return errors.New("Unable to run calibration: " + err.Error())
 	}
@@ -180,6 +177,28 @@ func (run *CalibrationRun) runBenchmarkController(stageId string, controller *Be
 	return nil
 }
 
+func (run *BenchmarkRun) runBenchmarkController(
+	stageId string,
+	appIntensity int,
+	controller *BenchmarkController) (*BenchmarkResult, error) {
+	loadTesterName := run.ApplicationConfig.LoadTester.Name
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
+	if urlErr != nil {
+		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	}
+
+	//startTime := time.Now()
+	response, err := run.BenchmarkControllerClient.RunBenchmark(url, stageId, appIntensity, controller)
+	if err != nil {
+		return nil, errors.New("Unable to run benchmark: " + err.Error())
+	}
+
+	// TODO: Transfer response to benchmark result
+	result := &BenchmarkResult{}
+
+	return result, nil
+}
+
 func min(a int, b int) int {
 	if a > b {
 		return b
@@ -188,7 +207,11 @@ func min(a int, b int) int {
 	}
 }
 
-func (run *CalibrationRun) runLocustController(stageId string, controller *LocustController) error {
+func (run *BenchmarkRun) runLocustController(runId string, appIntensity int, controller *LocustController) (*BenchmarkResult, error) {
+	return nil, errors.New("Unimplemented")
+}
+
+func (run *CalibrationRun) runLocustController(runId string, controller *LocustController) error {
 	/*
 		waitTime, err := time.ParseDuration(controller.StepDuration)
 		if err != nil {
@@ -269,17 +292,41 @@ func (run *BenchmarkRun) runBenchmark(id string, benchmark Benchmark, intensity 
 	return nil
 }
 
-func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark) (*ProfilingTestResult, error) {
-	currentIntensity := run.StartingIntensity
+func (run *BenchmarkRun) runApplicationLoadTest(stageId string, appIntensity int) (*BenchmarkResult, error) {
 	loadTester := run.ApplicationConfig.LoadTester
+	if loadTester.BenchmarkController != nil {
+		return run.runBenchmarkController(stageId, appIntensity, loadTester.BenchmarkController)
+	} else if loadTester.LocustController != nil {
+		return run.runLocustController(stageId, appIntensity, loadTester.LocustController)
+	} else {
+		return nil, errors.New("No controller found in calibration request")
+	}
+
+}
+
+func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark, appIntensity int) ([]*BenchmarkResult, error) {
+	currentIntensity := run.StartingIntensity
+	results := []*BenchmarkResult{}
 	for {
-		if err := run.runBenchmark(run.Id, benchmark, currentIntensity); err != nil {
-			run.cleanupBenchmark(benchmark)
-			return nil, errors.New("Unable to setup stage: " + err.Error())
+		stageId, err := generateId(benchmark.Name)
+		if err != nil {
+			return nil, errors.New("Unable to generate id: " + err.Error())
 		}
 
-		if loadTester.LocustController != nil {
-			// run.runLocustController(run.Id, loadTester.LocustController)
+		if err = run.runBenchmark(stageId, benchmark, currentIntensity); err != nil {
+			run.deleteBenchmark(benchmark)
+			return nil, errors.New("Unable to run micro benchmark: " + err.Error())
+		}
+
+		result, resultErr := run.runApplicationLoadTest(stageId, appIntensity)
+		if resultErr != nil {
+			// Run through all benchmarks even if one failed
+			glog.Warningf("Unable to run load test with benchmark %s: %s", benchmark.Name, resultErr.Error())
+		}
+		results = append(results, result)
+
+		if err := run.deleteBenchmark(benchmark); err != nil {
+			return nil, errors.New("Unable to delete micro benchmark: " + err.Error())
 		}
 
 		if currentIntensity == 100 {
@@ -288,41 +335,40 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark) (*ProfilingTes
 		currentIntensity += run.Step
 	}
 
-	return nil, nil
+	return results, nil
 }
 
 func (run *BenchmarkRun) Run() error {
-	calibration, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name)
+	metric, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name, &CalibrationResults{})
 	if err != nil {
 		return errors.New("Unable to get calibration: " + err.Error())
 	}
 
-	profilingResults := &ProfilingResults{
-		TestId:       calibration.(*CalibrationResults).TestId,
-		AppName:      run.ApplicationConfig.Name,
-		LoadTester:   calibration.(*CalibrationResults).LoadTester,
-		TestDuration: calibration.(*CalibrationResults).TestDuration,
+	calibration := metric.(*CalibrationResults)
+
+	runResults := &BenchmarkRunResults{
+		TestId:        calibration.TestId,
+		AppName:       run.ApplicationConfig.Name,
+		ServiceInTest: run.ApplicationConfig.Name, // TODO: We assume only one service for now
+		LoadTester:    calibration.LoadTester,
+		Benchmarks:    []string{},
+		TestResult:    []*BenchmarkResult{},
+		AppCapacity:   calibration.FinalIntensity,
 	}
 
-	if run.StartingIntensity <= 0 {
-		run.StartingIntensity = calibration.(*CalibrationResults).FinalIntensity
-	}
-
-	benchmarks := []string{}
-	profilingTestResults := []ProfilingTestResult{}
 	for _, benchmark := range run.Benchmarks {
-		testResults, err := run.runAppWithBenchmark(benchmark)
+		results, err := run.runAppWithBenchmark(benchmark, calibration.FinalIntensity)
 		if err != nil {
 			return errors.New("Unable to run benchmark: " + err.Error())
 		}
-		benchmarks = append(benchmarks, benchmark.Name)
-		profilingTestResults = append(profilingTestResults, *testResults)
+		runResults.Benchmarks = append(runResults.Benchmarks, benchmark.Name)
+		for _, result := range results {
+			runResults.TestResult = append(runResults.TestResult, result)
+		}
 	}
-	profilingResults.Benchmarks = benchmarks
-	profilingResults.TestResult = profilingTestResults
 
-	if err := run.MetricsDB.WriteMetrics("profiling", profilingResults); err != nil {
-		return errors.New("Unable to store profiling results: " + err.Error())
+	if err := run.MetricsDB.WriteMetrics("profiling", runResults); err != nil {
+		return errors.New("Unable to store benchmark results: " + err.Error())
 	}
 
 	return nil

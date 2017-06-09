@@ -152,6 +152,12 @@ type RunCalibrationResponse struct {
 	} `json:"results"`
 }
 
+type RunBenchmarkResponse struct {
+	Status  string                 `json:"status"`
+	Error   string                 `json:"error"`
+	Results map[string]interface{} `json:"results"`
+}
+
 func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId string, controller *BenchmarkController, slo SLO) (*RunCalibrationResponse, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
@@ -212,6 +218,80 @@ func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId 
 
 	if err != nil {
 		return nil, errors.New("Unable to get calibration results: " + err.Error())
+	}
+
+	return results, nil
+}
+
+func (client *BenchmarkControllerClient) RunBenchmark(baseUrl string, stageId string, intensity int, controller *BenchmarkController) (*RunBenchmarkResponse, error) {
+	u, err := url.Parse(baseUrl)
+	if err != nil {
+		return nil, errors.New("Unable to parse url: " + err.Error())
+	}
+
+	u.Path = path.Join(u.Path, "/api/benchmarks")
+	body := make(map[string]interface{})
+	if controller.Initialize != nil {
+		body["initialize"] = controller.Initialize
+	}
+
+	loadTesterCommand := controller.Command
+	args := loadTesterCommand.Args
+	// TODO: We assume one intensity args for now
+	intensityArg := loadTesterCommand.IntensityArgs[0]
+	args = append(args, intensityArg.Arg)
+	args = append(args, strconv.Itoa(intensity))
+	command := Command{
+		Path: loadTesterCommand.Path,
+		Args: args,
+	}
+	body["loadTest"] = command
+	body["intensity"] = intensity
+	body["stageId"] = stageId
+
+	glog.Infof("Sending benchmark request to benchmark controller for stage: " + stageId)
+	response, err := resty.R().SetBody(body).Post(u.String())
+	if err != nil {
+		return nil, errors.New("Unable to send calibrate request to controller: " + err.Error())
+	}
+
+	if response.StatusCode() >= 300 {
+		return nil, fmt.Errorf("Unexpected response code: %d, body: %s", response.StatusCode(), response.String())
+	}
+
+	results := &RunBenchmarkResponse{}
+
+	err = funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
+		response, err := resty.R().Get(u.String() + "/" + stageId)
+		if err != nil {
+			return false, errors.New("Unable to send benchmark results request to controller: " + err.Error())
+		}
+
+		if response.StatusCode() != 200 {
+			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+		}
+
+		if err := json.Unmarshal(response.Body(), results); err != nil {
+			return false, errors.New("Unable to parse response body: " + err.Error())
+		}
+
+		if results.Error != "" {
+			glog.Infof("Benchmark failed with error: " + results.Error)
+			return false, errors.New("Benchmark failed with error: " + results.Error)
+		}
+
+		if results.Status != "running" {
+			glog.V(1).Infof("Load test finished with status: %s, response: %v", results.Status, response)
+			return true, nil
+		}
+
+		glog.V(1).Infof("Continue to wait for benchmark results, last poll response: %v", response)
+
+		return false, nil
+	})
+
+	if err != nil {
+		return nil, errors.New("Unable to get benchmark results: " + err.Error())
 	}
 
 	return results, nil
