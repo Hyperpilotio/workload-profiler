@@ -82,11 +82,12 @@ func NewBenchmarkRun(
 
 	run := &BenchmarkRun{
 		ProfileRun: ProfileRun{
+			Id:                        id,
+			ApplicationConfig:         applicationConfig,
 			DeployerClient:            deployerClient,
 			BenchmarkControllerClient: &BenchmarkControllerClient{},
 			MetricsDB:                 NewMetricsDB(config),
 			DeploymentId:              deploymentId,
-			Id:                        id,
 		},
 		StartingIntensity:    startingIntensity,
 		Step:                 step,
@@ -180,7 +181,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *Benc
 func (run *BenchmarkRun) runBenchmarkController(
 	stageId string,
 	appIntensity int,
-	controller *BenchmarkController) (*BenchmarkResult, error) {
+	controller *BenchmarkController) (*RunBenchmarkResponse, error) {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
 	if urlErr != nil {
@@ -194,9 +195,19 @@ func (run *BenchmarkRun) runBenchmarkController(
 	}
 
 	// TODO: Transfer response to benchmark result
-	result := &BenchmarkResult{}
+	/*
+		results := response.Results["results"].(map[string]interface{})
+		qosMetric := results[run.ApplicationConfig.SLO.Metric].(string)
+		qosMetricFloat64, parseErr := strconv.ParseFloat(qosMetric, 64)
+		if parseErr != nil {
+			return nil, errors.New("Unable to parse qos metric to float: " + parseErr.Error())
+		}
 
-	return result, nil
+		result := &BenchmarkResult{
+			ToleratedInterference: ?,
+		}
+	*/
+	return response, nil
 }
 
 func min(a int, b int) int {
@@ -207,7 +218,7 @@ func min(a int, b int) int {
 	}
 }
 
-func (run *BenchmarkRun) runLocustController(runId string, appIntensity int, controller *LocustController) (*BenchmarkResult, error) {
+func (run *BenchmarkRun) runLocustController(runId string, appIntensity int, controller *LocustController) (*RunBenchmarkResponse, error) {
 	return nil, errors.New("Unimplemented")
 }
 
@@ -292,7 +303,7 @@ func (run *BenchmarkRun) runBenchmark(id string, benchmark Benchmark, intensity 
 	return nil
 }
 
-func (run *BenchmarkRun) runApplicationLoadTest(stageId string, appIntensity int) (*BenchmarkResult, error) {
+func (run *BenchmarkRun) runApplicationLoadTest(stageId string, appIntensity int) (*RunBenchmarkResponse, error) {
 	loadTester := run.ApplicationConfig.LoadTester
 	if loadTester.BenchmarkController != nil {
 		return run.runBenchmarkController(stageId, appIntensity, loadTester.BenchmarkController)
@@ -304,10 +315,14 @@ func (run *BenchmarkRun) runApplicationLoadTest(stageId string, appIntensity int
 
 }
 
-func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark, appIntensity int) ([]*BenchmarkResult, error) {
+func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark, appIntensity int) (*BenchmarkResult, error) {
 	currentIntensity := run.StartingIntensity
-	results := []*BenchmarkResult{}
+	results := &BenchmarkResult{
+		Benchmark: benchmark.Name,
+	}
+	var counts int
 	for {
+		glog.Infof("Running benchmark and Load test for intensity: %d", currentIntensity)
 		stageId, err := generateId(benchmark.Name)
 		if err != nil {
 			return nil, errors.New("Unable to generate id: " + err.Error())
@@ -318,22 +333,35 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark, appIntensity i
 			return nil, errors.New("Unable to run micro benchmark: " + err.Error())
 		}
 
-		result, resultErr := run.runApplicationLoadTest(stageId, appIntensity)
+		_, resultErr := run.runApplicationLoadTest(stageId, appIntensity)
 		if resultErr != nil {
 			// Run through all benchmarks even if one failed
 			glog.Warningf("Unable to run load test with benchmark %s: %s", benchmark.Name, resultErr.Error())
 		}
-		results = append(results, result)
+
+		// TODO record the performance results and various intensities
+		/*
+			intensity := result.Results["intensity"].(string)
+			results := result.Results["results"].(map[string]interface{})
+			qosMetric := results[run.ApplicationConfig.SLO.Metric].(string)
+			qosMetricFloat64, parseErr := strconv.ParseFloat(qosMetric, 64)
+			if parseErr != nil {
+				return nil, errors.New("Unable to parse qos metric to float: " + parseErr.Error())
+			}
+		*/
+		counts += 1
 
 		if err := run.deleteBenchmark(benchmark); err != nil {
 			return nil, errors.New("Unable to delete micro benchmark: " + err.Error())
 		}
 
-		if currentIntensity == 100 {
+		if currentIntensity >= 100 {
 			break
 		}
 		currentIntensity += run.Step
 	}
+
+	// TODO calculate this benchmark toleratedInterference
 
 	return results, nil
 }
@@ -349,6 +377,8 @@ func (run *BenchmarkRun) Run() error {
 	runResults := &BenchmarkRunResults{
 		TestId:        calibration.TestId,
 		AppName:       run.ApplicationConfig.Name,
+		NumServices:   len(run.ApplicationConfig.ServiceNames),
+		Services:      run.ApplicationConfig.ServiceNames,
 		ServiceInTest: run.ApplicationConfig.Name, // TODO: We assume only one service for now
 		LoadTester:    calibration.LoadTester,
 		Benchmarks:    []string{},
@@ -357,14 +387,12 @@ func (run *BenchmarkRun) Run() error {
 	}
 
 	for _, benchmark := range run.Benchmarks {
-		results, err := run.runAppWithBenchmark(benchmark, calibration.FinalIntensity)
+		result, err := run.runAppWithBenchmark(benchmark, calibration.FinalIntensity)
 		if err != nil {
 			return errors.New("Unable to run benchmark: " + err.Error())
 		}
 		runResults.Benchmarks = append(runResults.Benchmarks, benchmark.Name)
-		for _, result := range results {
-			runResults.TestResult = append(runResults.TestResult, result)
-		}
+		runResults.TestResult = append(runResults.TestResult, result)
 	}
 
 	if err := run.MetricsDB.WriteMetrics("profiling", runResults); err != nil {
