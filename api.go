@@ -50,8 +50,8 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 
 	var request struct {
 		DeploymentId      string `json:"deploymentId" binding:"required"`
-		StartingIntensity int    `json:"startingIntensity"`
-		Step              int    `json:"step"`
+		StartingIntensity int    `json:"startingIntensity" binding:"required"`
+		Step              int    `json:"step" binding:"required"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {

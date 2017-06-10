@@ -69,6 +69,8 @@ type CalibrationResults struct {
 
 type BenchmarkResult struct {
 	Benchmark             string  `bson:"benchmark" json:"benchmark"`
+	Intensity             int     `bson:"intensity" json:"intensity"`
+	Qos                   float64 `bson:"qos" json:"qos"`
 	ToleratedInterference float64 `bson:"toleratedInterference" json:"toleratedInterference"`
 }
 
