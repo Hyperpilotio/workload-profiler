@@ -361,6 +361,8 @@ func (run *BenchmarkRun) Run() error {
 
 	calibration := metric.(*CalibrationResults)
 
+	glog.V(1).Infof("Read Calibration results for app %s: %+v", run.ApplicationConfig.Name, calibration)
+
 	runResults := &BenchmarkRunResults{
 		TestId:        calibration.TestId,
 		AppName:       run.ApplicationConfig.Name,
@@ -373,7 +375,7 @@ func (run *BenchmarkRun) Run() error {
 		AppCapacity:   calibration.FinalIntensity,
 	}
 
-	glog.V(1).Infof("Starting benchmark runs with these benchmarks: %v", run.Benchmarks)
+	glog.V(1).Infof("Starting benchmark runs with these benchmarks: %+v", run.Benchmarks)
 
 	for _, benchmark := range run.Benchmarks {
 		results, err := run.runAppWithBenchmark(benchmark, calibration.FinalIntensity)
@@ -386,6 +388,7 @@ func (run *BenchmarkRun) Run() error {
 		}
 	}
 
+	glog.Infof("Storing benchmark results for app " + run.ApplicationConfig.Name)
 	if err := run.MetricsDB.WriteMetrics("profiling", runResults); err != nil {
 		return errors.New("Unable to store benchmark results: " + err.Error())
 	}
