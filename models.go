@@ -101,5 +101,5 @@ type Benchmark struct {
 	Intensity    int           `bson:"intensity" json:"intensity"`
 	Command      Command       `bson:"command" json:"command"`
 	Count        int           `bson:"count" json:"count"`
-	CgroupConfig *CgroupConfig `bson:"cgroupConfig json:"cgroupConfig"`
+	CgroupConfig *CgroupConfig `bson:"cgroupConfig" json:"cgroupConfig"`
 }
