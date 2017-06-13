@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -200,31 +202,30 @@ func (server *Server) createDeployment(c *gin.Context) {
 		return
 	}
 
-	kubernetesTasks := []KubernetesTask{}
-	for _, loadTests := range applicationConfig.TaskDefinitions.LoadTests {
-		kubernetesTasks = append(kubernetesTasks, loadTests)
+	deployJSON = strings.Replace(deployJSON, "#USER_ID#", c.Param("userId"), 1)
+	deployJSON = strings.Replace(deployJSON, "#NAME#", appName, 1)
+	deployJSON = strings.Replace(deployJSON, "#REGION#", "us-east-1", 1)
+	deployJSON = strings.Replace(deployJSON, "#NODE_MAPPING#", "[]", 1)
+	deployJSON = strings.Replace(deployJSON, "#NODES#", "[]", 1)
+	deployJSON = strings.Replace(deployJSON, "#BASE#", applicationConfig.Base, 1)
+
+	taskDefinitions := make([]interface{}, 0)
+	for _, loadTests := range applicationConfig.TaskDefinitions["loadTests"].([]interface{}) {
+		taskDefinitions = append(taskDefinitions, loadTests)
 	}
-	for _, applications := range applicationConfig.TaskDefinitions.Applications {
-		kubernetesTasks = append(kubernetesTasks, applications)
+	for _, applications := range applicationConfig.TaskDefinitions["applications"].([]interface{}) {
+		taskDefinitions = append(taskDefinitions, applications)
 	}
 
-	deployment := &Deployment{
-		Name:   appName,
-		UserId: c.Param("userId"),
-		Region: "us-east-1",
-		NodeMapping: []NodeMapping{
-			NodeMapping{},
-		},
-		ClusterDefinition: ClusterDefinition{
-			Nodes: []Node{
-				Node{},
-			},
-		},
-		KubernetesDeployment: &KubernetesDeployment{
-			Kubernetes: kubernetesTasks,
-		},
-		Base: applicationConfig.Base,
+	b, jsonErr := json.Marshal(taskDefinitions)
+	if jsonErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to marshal taskDefinitions to json: " + jsonErr.Error(),
+		})
+		return
 	}
+	deployJSON = strings.Replace(deployJSON, "#TASK_DEFINITIONS#", string(b), 1)
 
 	deployerClient, deployerErr := NewDeployerClient(server.Config)
 	if deployerErr != nil {
@@ -235,7 +236,7 @@ func (server *Server) createDeployment(c *gin.Context) {
 		return
 	}
 
-	deploymentId, createErr := deployerClient.CreateDeployment(deployment)
+	deploymentId, createErr := deployerClient.CreateDeployment(deployJSON)
 	if createErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,

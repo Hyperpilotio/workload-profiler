@@ -46,14 +46,14 @@ func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 	}
 }
 
-func (client *DeployerClient) CreateDeployment(deployment *Deployment) (*string, error) {
+func (client *DeployerClient) CreateDeployment(deployJSON string) (*string, error) {
 	deploymentId := ""
 
 	requestUrl := urlBasePath(client.Url) +
 		path.Join(client.Url.Path, "v1", "deployments")
 
 	response, err := resty.R().
-		SetBody(deployment).
+		SetBody(deployJSON).
 		Post(requestUrl)
 	if err != nil {
 		return nil, err
