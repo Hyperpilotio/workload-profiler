@@ -6,6 +6,21 @@ import (
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
 
+var deployJSON = `
+{
+	"userId": "#USER_ID#",
+    "name": "#NAME#",
+    "region": "#REGION#",
+    "nodeMapping": #NODE_MAPPING#,
+    "clusterDefinition": {
+        "nodes": #NODES#
+    },
+    "kubernetes": {
+        "taskDefinitions": #TASK_DEFINITIONS#
+    }
+	,"base": "#BASE#"
+}`
+
 type Command struct {
 	Path string   `bson:"path" json:"path"`
 	Args []string `bson:"args" json:"args"`
@@ -73,13 +88,13 @@ type Benchmark struct {
 }
 
 type ApplicationConfig struct {
-	Name            string          `bson:"name" json:"name"`
-	ServiceNames    []string        `bson:"serviceNames" json:"serviceNames"`
-	LoadTester      LoadTester      `bson:"loadTester" json:"loadTester"`
-	Type            string          `bson:"type" json:"type"`
-	SLO             SLO             `bson:"slo" json:"slo"`
-	Base            string          `bson:"base" json:"base"`
-	TaskDefinitions TaskDefinitions `bson:"taskDefinitions" json:"taskDefinitions"`
+	Name            string                 `bson:"name" json:"name"`
+	ServiceNames    []string               `bson:"serviceNames" json:"serviceNames"`
+	LoadTester      LoadTester             `bson:"loadTester" json:"loadTester"`
+	Type            string                 `bson:"type" json:"type"`
+	SLO             SLO                    `bson:"slo" json:"slo"`
+	Base            string                 `bson:"base" json:"base"`
+	TaskDefinitions map[string]interface{} `bson:"taskDefinitions" json:"taskDefinitions"`
 }
 
 type IntensityArgument struct {
