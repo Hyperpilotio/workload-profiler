@@ -165,7 +165,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *Benc
 		TestId:         run.Id,
 		AppName:        run.ApplicationConfig.Name,
 		LoadTester:     loadTesterName,
-		QosMetrics:     []string{run.ApplicationConfig.SLO.Unit},
+		QosMetrics:     []string{run.ApplicationConfig.SLO.Type},
 		TestDuration:   time.Since(startTime).String(),
 		TestResult:     testResults,
 		FinalIntensity: int(finalIntensity),

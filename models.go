@@ -22,7 +22,7 @@ type Command struct {
 type SLO struct {
 	Metric string  `bson:"metric" json:"metric"`
 	Value  float32 `bson:"value" json:"value"`
-	Unit   string  `bson:"unit" json:"unit"`
+	Type   string  `bson:"type" json:"type"`
 }
 
 type ApplicationConfig struct {
