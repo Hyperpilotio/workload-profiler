@@ -13,14 +13,19 @@ import (
 type Server struct {
 	Config   *viper.Viper
 	ConfigDB *ConfigDB
-	mutex    sync.Mutex
+
+	// Maps appName to deployment name
+	LoadTestApps map[string]string
+
+	mutex sync.Mutex
 }
 
 // NewServer return an instance of Server struct.
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
-		Config:   config,
-		ConfigDB: NewConfigDB(config),
+		Config:       config,
+		ConfigDB:     NewConfigDB(config),
+		LoadTestApps: make(map[string]string),
 	}
 }
 
@@ -32,6 +37,12 @@ func (server *Server) StartServer() error {
 	// Global middleware
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+
+	applicationsGroup := router.Group("/applications")
+	{
+		applicationsGroup.POST("/:appName/users/:userId/deployments", server.createDeployment)
+		applicationsGroup.GET("/:appName", server.getDeploymentId)
+	}
 
 	calibrateGroup := router.Group("/calibrate")
 	{
@@ -175,4 +186,87 @@ func (server *Server) runCalibration(c *gin.Context) {
 		"error": false,
 		"data":  "",
 	})
+}
+
+func (server *Server) createDeployment(c *gin.Context) {
+	appName := c.Param("appName")
+
+	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to get application config: " + err.Error(),
+		})
+		return
+	}
+
+	kubernetesTasks := []KubernetesTask{}
+	for _, loadTests := range applicationConfig.TaskDefinitions.LoadTests {
+		kubernetesTasks = append(kubernetesTasks, loadTests)
+	}
+	for _, applications := range applicationConfig.TaskDefinitions.Applications {
+		kubernetesTasks = append(kubernetesTasks, applications)
+	}
+
+	deployment := &Deployment{
+		Name:   appName,
+		UserId: c.Param("userId"),
+		Region: "us-east-1",
+		NodeMapping: []NodeMapping{
+			NodeMapping{},
+		},
+		ClusterDefinition: ClusterDefinition{
+			Nodes: []Node{
+				Node{},
+			},
+		},
+		KubernetesDeployment: &KubernetesDeployment{
+			Kubernetes: kubernetesTasks,
+		},
+		Base: applicationConfig.Base,
+	}
+
+	deployerClient, deployerErr := NewDeployerClient(server.Config)
+	if deployerErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to create new deployer client: " + deployerErr.Error(),
+		})
+		return
+	}
+
+	deploymentId, createErr := deployerClient.CreateDeployment(deployment)
+	if createErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"data":  "Unable to create deployment: " + createErr.Error(),
+		})
+		return
+	}
+
+	server.mutex.Lock()
+	server.LoadTestApps[appName] = *deploymentId
+	server.mutex.Unlock()
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"error": false,
+	})
+}
+
+func (server *Server) getDeploymentId(c *gin.Context) {
+	appName := c.Param("appName")
+
+	server.mutex.Lock()
+	defer server.mutex.Unlock()
+
+	deploymentId, ok := server.LoadTestApps[appName]
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": true,
+			"data":  appName + " not found.",
+		})
+		return
+	}
+
+	c.String(http.StatusOK, deploymentId)
 }
