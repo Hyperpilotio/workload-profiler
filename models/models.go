@@ -2,6 +2,8 @@ package models
 
 import (
 	benchmarkagent "github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
+	deployer "github.com/hyperpilotio/deployer/apis"
+	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
 
 type Command struct {
@@ -47,6 +49,11 @@ type SLO struct {
 	Type   string  `bson:"type" json:"type"`
 }
 
+type TaskDefinitions struct {
+	LoadTests    []KubernetesTask `bson:"loadTests" json:"loadTests"`
+	Applications []KubernetesTask `bson:"applications" json:"applications"`
+}
+
 type BenchmarkConfig struct {
 	Name           string                         `bson:"name" json:"name"`
 	DurationConfig *benchmarkagent.DurationConfig `bson:"durationConfig" json:"durationConfig" binding:"required`
@@ -66,11 +73,13 @@ type Benchmark struct {
 }
 
 type ApplicationConfig struct {
-	Name         string     `bson:"name" json:"name"`
-	ServiceNames []string   `bson:"serviceNames" json:"serviceNames"`
-	LoadTester   LoadTester `bson:"loadTester" json:"loadTester"`
-	Type         string     `bson:"type" json:"type"`
-	SLO          SLO        `bson:"slo" json:"slo"`
+	Name            string          `bson:"name" json:"name"`
+	ServiceNames    []string        `bson:"serviceNames" json:"serviceNames"`
+	LoadTester      LoadTester      `bson:"loadTester" json:"loadTester"`
+	Type            string          `bson:"type" json:"type"`
+	SLO             SLO             `bson:"slo" json:"slo"`
+	Base            string          `bson:"base" json:"base"`
+	TaskDefinitions TaskDefinitions `bson:"taskDefinitions" json:"taskDefinitions"`
 }
 
 type IntensityArgument struct {
