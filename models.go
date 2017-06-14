@@ -7,6 +7,13 @@ type BenchmarkController struct {
 	Command    LoadTesterCommand `bson:"command" json:"command"`
 }
 
+type SlowCookerController struct {
+	StartCount   int    `bson:"startCount" json:"startCount"`
+	EndCount     int    `bson:"endCount" json:"endCount"`
+	StepCount    int    `bson:"stepCount" json:"stepCount"`
+	StepDuration string `bson:"stepDuration" json:"stepDuration"`
+}
+
 type LocustController struct {
 	StartCount   int    `bson:"startCount" json:"startCount"`
 	EndCount     int    `bson:"endCount" json:"endCount"`
@@ -47,14 +54,15 @@ type LoadTesterCommand struct {
 }
 
 type LoadTester struct {
-	Name                string               `bson:"name" json:"name"`
-	BenchmarkController *BenchmarkController `bson:"benchmarkController" json:"benchmarkController"`
-	LocustController    *LocustController    `bson:"locustController" json:"locustController"`
+	Name                 string               `bson:"name" json:"name"`
+	BenchmarkController  *BenchmarkController `bson:"benchmarkController" json:"benchmarkController"`
+	LocustController     *LocustController    `bson:"locustController" json:"locustController"`
+	SlowCookerController *SlowCookerController `bson:"slowCookerController" json:"slowCookerController"`
 }
 
 type CalibrationTestResult struct {
-	LoadIntensity int `bson:"loadIntensity" json:"loadIntensity"`
-	QosMetric     int `bson:"qosMetric" json:"qosMetric"`
+	LoadIntensity float64 `bson:"loadIntensity" json:"loadIntensity"`
+	QosMetric     float64 `bson:"qosMetric" json:"qosMetric"`
 }
 
 type CalibrationResults struct {
@@ -64,7 +72,7 @@ type CalibrationResults struct {
 	QosMetrics     []string                `bson:"qosMetrics" json:"qosMetrics"`
 	TestDuration   string                  `bson:"testDuration" json:"testDuration"`
 	TestResult     []CalibrationTestResult `bson:"testResult" json:"testResult"`
-	FinalIntensity int                     `bson:"finalIntensity" json:"finalIntensity"`
+	FinalIntensity float64                     `bson:"finalIntensity" json:"finalIntensity"`
 }
 
 type BenchmarkResult struct {
@@ -82,7 +90,7 @@ type BenchmarkRunResults struct {
 	ServiceInTest string             `bson:"serviceInTest" json:"serviceInTest"`
 	ServiceNode   string             `bson:"serviceNode" json:"serviceNode"`
 	LoadTester    string             `bson:"loadTester" json:"loadTester"`
-	AppCapacity   int                `bson:"appCapacity" json:"appCapacity"`
+	AppCapacity   float64                `bson:"appCapacity" json:"appCapacity"`
 	SloMetric     string             `bson:"sloMetric" json:"sloMetric"`
 	SloTolerance  float64            `bson:"sloTolerance" json:"sloTolerance"`
 	TestDuration  string             `bson:"testDuration" json:"testDuration"`

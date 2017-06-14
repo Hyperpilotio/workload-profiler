@@ -193,7 +193,7 @@ type RunCalibrationResponse struct {
 type RunBenchmarkResponse struct {
 	Status  string `json:"status"`
 	Error   string `json:"error"`
-	Results struct {
+	Results []struct {
 		Results   map[string]interface{} `json:"results"`
 		Intensity int                    `json"intensity"`
 	} `json:"results"`
@@ -264,7 +264,11 @@ func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId 
 	return results, nil
 }
 
-func (client *BenchmarkControllerClient) RunBenchmark(baseUrl string, stageId string, intensity int, controller *BenchmarkController) (*RunBenchmarkResponse, error) {
+func (client *BenchmarkControllerClient) RunBenchmark(
+	baseUrl string,
+	stageId string,
+	intensity float64,
+	controller *BenchmarkController) (*RunBenchmarkResponse, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, errors.New("Unable to parse url: " + err.Error())
@@ -281,7 +285,8 @@ func (client *BenchmarkControllerClient) RunBenchmark(baseUrl string, stageId st
 	// TODO: We assume one intensity args for now
 	intensityArg := loadTesterCommand.IntensityArgs[0]
 	args = append(args, intensityArg.Arg)
-	args = append(args, strconv.Itoa(intensity))
+	// TODO: Intensity arguments might be differnet types, we assume it's all int at the moment
+	args = append(args, strconv.Itoa(int(intensity)))
 	command := Command{
 		Path: loadTesterCommand.Path,
 		Args: args,

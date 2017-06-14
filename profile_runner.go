@@ -147,15 +147,14 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *Benc
 
 	testResults := []CalibrationTestResult{}
 	for _, runResult := range results.Results.RunResults {
-		qosMetricString := runResult.Results[run.ApplicationConfig.SLO.Metric].(string)
-		qosMetricFloat64, _ := strconv.ParseFloat(qosMetricString, 64)
+		qosMetric := runResult.Results[run.ApplicationConfig.SLO.Metric].(float64)
 
 		// TODO: For now we assume just one intensity argument, but we can support multiple
 		// in the future.
 		loadIntensity := runResult.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
 		testResults = append(testResults, CalibrationTestResult{
-			QosMetric:     int(qosMetricFloat64),
-			LoadIntensity: int(loadIntensity),
+			QosMetric:     qosMetric,
+			LoadIntensity: loadIntensity,
 		})
 	}
 
@@ -168,7 +167,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *Benc
 		QosMetrics:     []string{run.ApplicationConfig.SLO.Type},
 		TestDuration:   time.Since(startTime).String(),
 		TestResult:     testResults,
-		FinalIntensity: int(finalIntensity),
+		FinalIntensity: finalIntensity,
 	}
 
 	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
@@ -180,7 +179,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *Benc
 
 func (run *BenchmarkRun) runBenchmarkController(
 	stageId string,
-	appIntensity int,
+	appIntensity float64,
 	controller *BenchmarkController) (*RunBenchmarkResponse, error) {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
@@ -188,7 +187,6 @@ func (run *BenchmarkRun) runBenchmarkController(
 		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
-	//startTime := time.Now()
 	response, err := run.BenchmarkControllerClient.RunBenchmark(url, stageId, appIntensity, controller)
 	if err != nil {
 		return nil, errors.New("Unable to run benchmark: " + err.Error())
@@ -205,7 +203,7 @@ func min(a int, b int) int {
 	}
 }
 
-func (run *BenchmarkRun) runLocustController(runId string, appIntensity int, controller *LocustController) (*RunBenchmarkResponse, error) {
+func (run *BenchmarkRun) runLocustController(runId string, appIntensity float64, controller *LocustController) (*RunBenchmarkResponse, error) {
 	return nil, errors.New("Unimplemented")
 }
 
@@ -290,7 +288,7 @@ func (run *BenchmarkRun) runBenchmark(id string, benchmark Benchmark, intensity 
 	return nil
 }
 
-func (run *BenchmarkRun) runApplicationLoadTest(stageId string, appIntensity int) (*RunBenchmarkResponse, error) {
+func (run *BenchmarkRun) runApplicationLoadTest(stageId string, appIntensity float64) (*RunBenchmarkResponse, error) {
 	loadTester := run.ApplicationConfig.LoadTester
 	if loadTester.BenchmarkController != nil {
 		return run.runBenchmarkController(stageId, appIntensity, loadTester.BenchmarkController)
@@ -302,7 +300,7 @@ func (run *BenchmarkRun) runApplicationLoadTest(stageId string, appIntensity int
 
 }
 
-func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark, appIntensity int) ([]*BenchmarkResult, error) {
+func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark, appIntensity float64) ([]*BenchmarkResult, error) {
 	currentIntensity := run.StartingIntensity
 	results := []*BenchmarkResult{}
 
@@ -324,19 +322,21 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark, appIntensity i
 			// Run through all benchmarks even if one failed
 			glog.Warningf("Unable to run load test with benchmark %s: %s", benchmark.Name, resultErr.Error())
 		} else {
-			qosResults := response.Results.Results
-			qosMetric := qosResults[run.ApplicationConfig.SLO.Metric].(string)
-			qosValue, parseErr := strconv.ParseFloat(qosMetric, 64)
-			if parseErr != nil {
-				return nil, fmt.Errorf("Unable to parse qos value %s to float: %s", qosMetric, parseErr.Error())
-			}
+			for _, runResult := range response.Results {
+				qosResults := runResult.Results
+				qosMetric := qosResults[run.ApplicationConfig.SLO.Metric].(string)
+				qosValue, parseErr := strconv.ParseFloat(qosMetric, 64)
+				if parseErr != nil {
+					return nil, fmt.Errorf("Unable to parse qos value %s to float: %s", qosMetric, parseErr.Error())
+				}
 
-			result := &BenchmarkResult{
-				Intensity: currentIntensity,
-				Qos:       qosValue,
-				Benchmark: benchmark.Name,
+				result := &BenchmarkResult{
+					Intensity: currentIntensity,
+					Qos:       qosValue,
+					Benchmark: benchmark.Name,
+				}
+				results = append(results, result)
 			}
-			results = append(results, result)
 			counts += 1
 		}
 
