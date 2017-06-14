@@ -75,6 +75,31 @@ func (client *DeployerClient) CreateDeployment(deployJSON string) (*string, erro
 	respDescs := strings.Split(createResponse.Data, "Creating deployment ")
 	deploymentId = strings.Replace(respDescs[1], ".", "", -1)
 
+	err = funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
+		deploymentStateUrl := urlBasePath(client.Url) +
+			path.Join(client.Url.Path, "v1", "deployments", deploymentId, "state")
+
+		response, err := resty.R().Get(deploymentStateUrl)
+		if err != nil {
+			return false, errors.New("Unable to send deployment state request to deployer: " + err.Error())
+		}
+
+		if response.StatusCode() != 200 {
+			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+		}
+
+		if string(response.Body()) == "Available" {
+			glog.Infof("%s state is available", deploymentId)
+			return true, nil
+		}
+
+		return false, nil
+	})
+
+	if err != nil {
+		return nil, errors.New("Unable to waiting for deployment state to be available: " + err.Error())
+	}
+
 	return &deploymentId, nil
 }
 
