@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -40,12 +41,6 @@ func (server *Server) StartServer() error {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
-	applicationsGroup := router.Group("/applications")
-	{
-		applicationsGroup.POST("/:appName/users/:userId/deployments", server.createDeployment)
-		applicationsGroup.GET("/:appName", server.getDeploymentId)
-	}
-
 	calibrateGroup := router.Group("/calibrate")
 	{
 		calibrateGroup.POST("/:appName", server.runCalibration)
@@ -76,7 +71,11 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
-	if request.DeploymentId == "" {
+	server.mutex.Lock()
+	deploymentId, ok := server.LoadTestApps[appName]
+	server.mutex.Unlock()
+
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
 			"data":  "Empty deployment id found",
@@ -138,25 +137,33 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 func (server *Server) runCalibration(c *gin.Context) {
 	appName := c.Param("appName")
 
-	var request struct {
-		DeploymentId string `json:"deploymentId" binding:"required"`
+	server.mutex.Lock()
+	deploymentId, ok := server.LoadTestApps[appName]
+	server.mutex.Unlock()
+
+	if !ok {
+		newDeploymentId, err := server.createDeployment(appName)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": true,
+				"data":  "Unable to create deployment: " + err.Error(),
+			})
+			return
+		}
+		deploymentId = *newDeploymentId
 	}
 
-	if err := c.BindJSON(&request); err != nil {
+	if deploymentId == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  "Unable to parse calibration request: " + err.Error(),
+			"data":  "Empty deployment id found",
 		})
 		return
 	}
 
-	if request.DeploymentId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Empty request id found",
-		})
-		return
-	}
+	server.mutex.Lock()
+	server.LoadTestApps[appName] = deploymentId
+	server.mutex.Unlock()
 
 	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
 	if err != nil {
@@ -167,7 +174,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	run, runErr := NewCalibrationRun(request.DeploymentId, applicationConfig, server.Config)
+	run, runErr := NewCalibrationRun(deploymentId, applicationConfig, server.Config)
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
@@ -190,19 +197,13 @@ func (server *Server) runCalibration(c *gin.Context) {
 	})
 }
 
-func (server *Server) createDeployment(c *gin.Context) {
-	appName := c.Param("appName")
-
+func (server *Server) createDeployment(appName string) (*string, error) {
 	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to get application config: " + err.Error(),
-		})
-		return
+		return nil, errors.New("Unable to get application config: " + err.Error())
 	}
 
-	deployJSON = strings.Replace(deployJSON, "#USER_ID#", c.Param("userId"), 1)
+	deployJSON = strings.Replace(deployJSON, "#USER_ID#", server.Config.GetString("userId"), 1)
 	deployJSON = strings.Replace(deployJSON, "#NAME#", appName, 1)
 	deployJSON = strings.Replace(deployJSON, "#REGION#", "us-east-1", 1)
 	deployJSON = strings.Replace(deployJSON, "#NODE_MAPPING#", "[]", 1)
@@ -219,55 +220,19 @@ func (server *Server) createDeployment(c *gin.Context) {
 
 	b, jsonErr := json.Marshal(taskDefinitions)
 	if jsonErr != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to marshal taskDefinitions to json: " + jsonErr.Error(),
-		})
-		return
+		return nil, errors.New("Unable to marshal taskDefinitions to json: " + jsonErr.Error())
 	}
 	deployJSON = strings.Replace(deployJSON, "#TASK_DEFINITIONS#", string(b), 1)
 
 	deployerClient, deployerErr := NewDeployerClient(server.Config)
 	if deployerErr != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to create new deployer client: " + deployerErr.Error(),
-		})
-		return
+		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
 	deploymentId, createErr := deployerClient.CreateDeployment(deployJSON)
 	if createErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": true,
-			"data":  "Unable to create deployment: " + createErr.Error(),
-		})
-		return
+		return nil, errors.New("Unable to create deployment: " + createErr.Error())
 	}
 
-	server.mutex.Lock()
-	server.LoadTestApps[appName] = *deploymentId
-	server.mutex.Unlock()
-
-	c.JSON(http.StatusAccepted, gin.H{
-		"error": false,
-	})
-}
-
-func (server *Server) getDeploymentId(c *gin.Context) {
-	appName := c.Param("appName")
-
-	server.mutex.Lock()
-	defer server.mutex.Unlock()
-
-	deploymentId, ok := server.LoadTestApps[appName]
-	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": true,
-			"data":  appName + " not found.",
-		})
-		return
-	}
-
-	c.String(http.StatusOK, deploymentId)
+	return deploymentId, nil
 }
