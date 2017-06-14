@@ -8,7 +8,7 @@ import (
 
 var deployJSON = `
 {
-	"userId": "#USER_ID#",
+    "userId": "#USER_ID#",
     "name": "#NAME#",
     "region": "#REGION#",
     "nodeMapping": #NODE_MAPPING#,
@@ -18,7 +18,7 @@ var deployJSON = `
     "kubernetes": {
         "taskDefinitions": #TASK_DEFINITIONS#
     }
-	,"base": "#BASE#"
+    ,"base": "#BASE#"
 }`
 
 type Command struct {
