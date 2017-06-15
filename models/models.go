@@ -3,28 +3,7 @@ package models
 import (
 	benchmarkagent "github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	deployer "github.com/hyperpilotio/deployer/apis"
-	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
-
-var deployJSON = `
-{
-    "userId": "#USER_ID#",
-    "name": "#NAME#",
-    "region": "#REGION#",
-    "nodeMapping": #NODE_MAPPING#,
-    "clusterDefinition": {
-        "nodes": #NODES#
-    },
-    "kubernetes": {
-        "taskDefinitions": #TASK_DEFINITIONS#
-    }
-    ,"base": "#BASE#"
-}`
-
-type Command struct {
-	Path string   `bson:"path" json:"path"`
-	Args []string `bson:"args" json:"args"`
-}
 
 type BenchmarkController struct {
 	Initialize *Command          `bson:"initialize" json:"initialize"`
@@ -64,6 +43,11 @@ type SLO struct {
 	Type   string  `bson:"type" json:"type"`
 }
 
+type ApplicationTask struct {
+	NodeMapping    deployer.NodeMapping `bson:"nodeMapping" json:"nodeMapping"`
+	TaskDefinition interface{}          `bson:"taskDefinition" json:"taskDefinition"`
+}
+
 type TaskDefinitions struct {
 	LoadTests    []KubernetesTask `bson:"loadTests" json:"loadTests"`
 	Applications []KubernetesTask `bson:"applications" json:"applications"`
@@ -88,13 +72,13 @@ type Benchmark struct {
 }
 
 type ApplicationConfig struct {
-	Name            string                 `bson:"name" json:"name"`
-	ServiceNames    []string               `bson:"serviceNames" json:"serviceNames"`
-	LoadTester      LoadTester             `bson:"loadTester" json:"loadTester"`
-	Type            string                 `bson:"type" json:"type"`
-	SLO             SLO                    `bson:"slo" json:"slo"`
-	Base            string                 `bson:"base" json:"base"`
-	TaskDefinitions map[string]interface{} `bson:"taskDefinitions" json:"taskDefinitions"`
+	Name               string            `bson:"name" json:"name"`
+	ServiceNames       []string          `bson:"serviceNames" json:"serviceNames"`
+	LoadTester         LoadTester        `bson:"loadTester" json:"loadTester"`
+	Type               string            `bson:"type" json:"type"`
+	SLO                SLO               `bson:"slo" json:"slo"`
+	DeploymentTemplate string            `bson:"deploymentTemplate" json:"deploymentTemplate"`
+	TaskDefinitions    []ApplicationTask `bson:"taskDefinitions" json:"taskDefinitions"`
 }
 
 type IntensityArgument struct {

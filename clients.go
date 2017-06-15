@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/go-resty/resty"
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
@@ -46,15 +47,10 @@ func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 	}
 }
 
-func (client *DeployerClient) CreateDeployment(deployJSON string) (*string, error) {
-	deploymentId := ""
+func (client *DeployerClient) CreateDeployment(deployment *deployer.Deployment) (*string, error) {
+	requestUrl := urlBasePath(client.Url) + path.Join(client.Url.Path, "v1", "deployments")
 
-	requestUrl := urlBasePath(client.Url) +
-		path.Join(client.Url.Path, "v1", "deployments")
-
-	response, err := resty.R().
-		SetBody(deployJSON).
-		Post(requestUrl)
+	response, err := resty.R().SetBody(deployJSON).Post(requestUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +69,7 @@ func (client *DeployerClient) CreateDeployment(deployJSON string) (*string, erro
 	}
 
 	respDescs := strings.Split(createResponse.Data, "Creating deployment ")
-	deploymentId = strings.Replace(respDescs[1], ".", "", -1)
+	deploymentId := strings.Replace(respDescs[1], ".", "", -1)
 
 	err = funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
 		deploymentStateUrl := urlBasePath(client.Url) +
