@@ -61,9 +61,8 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	appName := c.Param("appName")
 
 	var request struct {
-		DeploymentId      string `json:"deploymentId" binding:"required"`
-		StartingIntensity int    `json:"startingIntensity" binding:"required"`
-		Step              int    `json:"step" binding:"required"`
+		StartingIntensity int `json:"startingIntensity" binding:"required"`
+		Step              int `json:"step" binding:"required"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -83,6 +82,15 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
+	runId, err := generateId(appName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to generate run Id: " + err.Error(),
+		})
+		return
+	}
+
 	// TODO: Cache this
 	benchmarks, err := server.ConfigDB.GetBenchmarks()
 	if err != nil {
@@ -96,7 +104,6 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	run, err := NewBenchmarkRun(
 		applicationConfig,
 		benchmarks,
-		request.DeploymentId,
 		request.StartingIntensity,
 		request.Step,
 		0, // TODO: Replace with some real value when needed
@@ -128,35 +135,33 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 func (server *Server) runCalibration(c *gin.Context) {
 	appName := c.Param("appName")
 
-	server.Clusters.ReserveDeployment()
-
-	server.mutex.Lock()
-	deploymentId, ok := server.LoadTestApps[appName]
-	server.mutex.Unlock()
-
-	if !ok {
-		newDeploymentId, err := server.createDeployment(appName)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": true,
-				"data":  "Unable to create deployment: " + err.Error(),
-			})
-			return
-		}
-		deploymentId = *newDeploymentId
-	}
-
-	if deploymentId == "" {
+	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  "Empty deployment id found",
+			"data":  "Unable to get application config: " + err.Error(),
 		})
 		return
 	}
 
-	server.mutex.Lock()
-	server.LoadTestApps[appName] = deploymentId
-	server.mutex.Unlock()
+	runId, err := generateId(appName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to generate run Id: " + err.Error(),
+		})
+		return
+	}
+
+	userId := server.Config.GetString("userId")
+	deploymentId, reserveErr := server.Clusters.ReserveDeployment(applicationConfig, runId, userId)
+	if reserveErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to reserve deployment: " + reserveErr.Error(),
+		})
+		return
+	}
 
 	run, runErr := NewCalibrationRun(deploymentId, applicationConfig, server.Config)
 	if runErr != nil {
