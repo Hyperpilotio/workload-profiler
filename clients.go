@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/go-resty/resty"
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
+	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/spf13/viper"
 )
@@ -47,10 +47,11 @@ func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 	}
 }
 
-func (client *DeployerClient) CreateDeployment(deployment *deployer.Deployment) (*string, error) {
-	requestUrl := urlBasePath(client.Url) + path.Join(client.Url.Path, "v1", "deployments")
+func (client *DeployerClient) CreateDeployment(deploymentTemplate string, deployment *deployer.Deployment) (*string, error) {
+	requestUrl := urlBasePath(client.Url) + path.Join(
+		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments")
 
-	response, err := resty.R().SetBody(deployJSON).Post(requestUrl)
+	response, err := resty.R().SetBody(deployment).Post(requestUrl)
 	if err != nil {
 		return nil, err
 	}
