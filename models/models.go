@@ -44,8 +44,8 @@ type SLO struct {
 }
 
 type ApplicationTask struct {
-	NodeMapping    deployer.NodeMapping `bson:"nodeMapping" json:"nodeMapping"`
-	TaskDefinition interface{}          `bson:"taskDefinition" json:"taskDefinition"`
+	NodeMapping    interface{} `bson:"nodeMapping" json:"nodeMapping"`
+	TaskDefinition interface{} `bson:"taskDefinition" json:"taskDefinition"`
 }
 
 type TaskDefinitions struct {
@@ -78,6 +78,7 @@ type ApplicationConfig struct {
 	Type               string            `bson:"type" json:"type"`
 	SLO                SLO               `bson:"slo" json:"slo"`
 	DeploymentTemplate string            `bson:"deploymentTemplate" json:"deploymentTemplate"`
+	ClusterDefinition  interface{}       `bson:"clusterDefinition" json:"clusterDefinition"`
 	TaskDefinitions    []ApplicationTask `bson:"taskDefinitions" json:"taskDefinitions"`
 }
 
