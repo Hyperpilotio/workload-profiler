@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 
 	deployer "github.com/hyperpilotio/deployer/apis"
@@ -13,8 +14,10 @@ type clusterState int
 // Possible deployment states
 const (
 	AVAILABLE = 0
-	RUNNING   = 1
-	WAITTING  = 2
+	WAITTING  = 1
+	RUNNING   = 2
+	FINISHED  = 3
+	FAILED    = 4
 )
 
 type cluster struct {
@@ -29,6 +32,23 @@ type Clusters struct {
 	mutex          sync.Mutex
 	MaxClusters    int
 	Deployments    []cluster
+}
+
+func GetStateString(state clusterState) string {
+	switch state {
+	case AVAILABLE:
+		return "Available"
+	case WAITTING:
+		return "Waitting"
+	case RUNNING:
+		return "Running"
+	case FINISHED:
+		return "Finished"
+	case FAILED:
+		return "Failed"
+	}
+
+	return ""
 }
 
 func NewClusters(deployerClient *DeployerClient) *Clusters {
@@ -130,7 +150,8 @@ func (clusters *Clusters) createDeployment(applicationConfig *ApplicationConfig,
 			append(deployment.KubernetesDeployment.Kubernetes, *kubernetesTask)
 	}
 
-	deploymentId, createErr := clusters.DeployerClient.CreateDeployment(applicationConfig.DeploymentTemplate, deployment)
+	deploymentId, createErr := clusters.DeployerClient.CreateDeployment(
+		applicationConfig.DeploymentTemplate, deployment, applicationConfig.LoadTester.Name)
 	if createErr != nil {
 		return nil, errors.New("Unable to create deployment: " + createErr.Error())
 	}
@@ -147,6 +168,23 @@ func (clusters *Clusters) convertBsonType(bson interface{}, convert interface{})
 	unmarshalErr := json.Unmarshal(b, convert)
 	if unmarshalErr != nil {
 		return errors.New("Unable to convert bson interface: " + unmarshalErr.Error())
+	}
+
+	return nil
+}
+
+func SetClusterState(deployments []cluster, runId string, state clusterState) error {
+	findCluster := false
+	for _, deployment := range deployments {
+		if deployment.runId == runId {
+			deployment.state = state
+			findCluster = true
+			break
+		}
+	}
+
+	if !findCluster {
+		return fmt.Errorf("Unable to set %s cluster state", runId)
 	}
 
 	return nil

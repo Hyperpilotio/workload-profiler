@@ -47,7 +47,10 @@ func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 	}
 }
 
-func (client *DeployerClient) CreateDeployment(deploymentTemplate string, deployment *deployer.Deployment) (*string, error) {
+func (client *DeployerClient) CreateDeployment(
+	deploymentTemplate string,
+	deployment *deployer.Deployment,
+	loadTesterName string) (*string, error) {
 	requestUrl := urlBasePath(client.Url) + path.Join(
 		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments")
 
@@ -95,6 +98,30 @@ func (client *DeployerClient) CreateDeployment(deploymentTemplate string, deploy
 
 	if err != nil {
 		return nil, errors.New("Unable to waiting for deployment state to be available: " + err.Error())
+	}
+
+	// Poll to wait for the elb dns is svailable
+	url, urlErr := client.GetServiceUrl(deploymentId, loadTesterName)
+	if urlErr != nil {
+		glog.Warningf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	} else {
+		err = funcs.LoopUntil(time.Minute*2, time.Second*10, func() (bool, error) {
+			response, err := resty.R().Get(url)
+			if err != nil {
+				return false, nil
+			}
+
+			if response.StatusCode() != 200 {
+				return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+			}
+
+			glog.Infof("%s url to be available", loadTesterName)
+			return true, nil
+		})
+
+		if err != nil {
+			glog.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
+		}
 	}
 
 	return &deploymentId, nil
