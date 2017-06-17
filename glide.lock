@@ -1,5 +1,5 @@
-hash: 4b0e205b07560215a4cf54bf26cf61fcef7aed59f7c446e03928518bb087ef9e
-updated: 2017-01-18T17:22:25.115341348+08:00
+hash: 8a36a18e786aa27e3b740ab6738f68f0978622d5d966d8450a51997a7a6bd64e
+updated: 2017-06-17T01:53:00.411983017+08:00
 imports:
 - name: github.com/fsnotify/fsnotify
   version: fd9ec7deca8bf46ecd2a795baaacf2b3a9be1197
@@ -27,10 +27,10 @@ imports:
   - json/parser
   - json/scanner
   - json/token
-- name: github.com/hyperpilotio/container-benchmarks
-  version: 84c11ab4f227da631145a7590ede011044a93c90
+- name: github.com/hyperpilotio/go-utils
+  version: 0b96b21e832c53add479e813b982af939fefc538
   subpackages:
-  - benchmark-agent/apis
+  - funcs
 - name: github.com/magiconair/properties
   version: 9c47895dc1ce54302908ab8a43385d1f5df2c11c
 - name: github.com/manucorporat/sse
@@ -75,7 +75,6 @@ imports:
   version: c193cecd124b5cc722d7ee5538e945bdb3348435
 - name: gopkg.in/mgo.v2
   version: b6e2fa371e64216a45e61072a96d4e3859f169da
-  repo: https://gopkg.in/mgo.v2
   subpackages:
   - bson
   - internal/sasl
