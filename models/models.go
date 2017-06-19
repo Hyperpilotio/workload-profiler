@@ -78,7 +78,6 @@ type ApplicationConfig struct {
 	Type               string            `bson:"type" json:"type"`
 	SLO                SLO               `bson:"slo" json:"slo"`
 	DeploymentTemplate string            `bson:"deploymentTemplate" json:"deploymentTemplate"`
-	ClusterDefinition  interface{}       `bson:"clusterDefinition" json:"clusterDefinition"`
 	TaskDefinitions    []ApplicationTask `bson:"taskDefinitions" json:"taskDefinitions"`
 }
 
