@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Profiler</title>
+    <link rel="import" href="/static/common/linkCss.html">
+</head>
+
+<body>
+    <!-- header -->
+    <header>
+        <nav>
+            <a href="/ui" class="banner">Profiler</a>
+            <ul>
+                <li>
+                    <a href="/ui" class="active">profilers</a>
+                </li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- sidebar -->
+    <aside>
+        <ul class="deployment-list">
+            <li id="deploymentTemplate" class="deployment" style="display: none;" data-name data-type data-status>
+                <div class="logName"></div>
+                <span class="timeLabel">Create:</span><span class="createTime"></span><br/>
+                <span class="badge"></span>
+            </li>
+            {{range $k,$v := .logs}}
+            <li class="deployment" data-name="{{$v.Name}}" data-status="{{$v.Status}}">
+                <div class="logName">{{$v.Name}}</div>
+                <span class="timeLabel">Create:</span><span class="createTime">{{$v.Create}}</span>
+                <span class="badge badge-{{$v.Status}}">{{$v.Status}}</span>
+            </li>
+            {{end}}
+        </ul>
+    </aside>
+
+    <!-- main -->
+    <main>
+        <h3 id="statusMsg"></h3>
+        <div class="deployment-detail" style="display: none;">
+            <div class="deployment-btn">
+                <span id="deleteBtn" class="btn btn-danger"><i class="fa fa-trash-o"></i> Delete</span>
+                <span id="downloadSshKeyBtn" class="btn btn-default"><i class="fa fa-download"></i> SSH_KEY</span>
+                <span id="downloadKubeconfigBtn" class="btn btn-default" style="display: none;"><i class="fa fa-download"></i> Kubeconfig</span>
+            </div>
+            <h2>Deployment Log</h2>
+            <div class="deployment-log">
+            </div>
+        </div>
+    </main>
+</body>
+<link rel="import" href="/static/common/linkJs.html">
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+<script>
+    $(function() {
+        
+    });
+
+    function getDeploymentLogContent(logFileName) {
+        $.ajax({
+            url: '/ui/logs/' + logFileName,
+            type: 'GET',
+            dataType: 'json',
+            success: function(json) {
+                if (json.error == false) {
+                    $('.deployment-log').html('');
+                    $.each(json.data, function(i, line) {
+                        $('.deployment-log').append('<p class="line">' + line + '</p>');
+                    });
+                    $('.deployment-log').show();
+                }
+            }
+        });
+    }
+</script>
+</html>
