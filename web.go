@@ -64,8 +64,8 @@ func (server *Server) getDeploymentLogContent(c *gin.Context) {
 func (server *Server) getDeploymentLogs(c *gin.Context) (DeploymentLogs, error) {
 	deploymentLogs := DeploymentLogs{}
 
-	server.mutex.Lock()
-	defer server.mutex.Unlock()
+	server.Clusters.mutex.Lock()
+	defer server.Clusters.mutex.Unlock()
 
 	for _, cluster := range server.Clusters.Deployments {
 		deploymentLog := &DeploymentLog{
