@@ -3,12 +3,22 @@ package main
 import (
 	"errors"
 	"net/http"
-	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
+
+type Job interface {
+	GetId() string
+	GetApplicationConfig() *ApplicationConfig
+	Run(deploymentId string) error
+}
+
+func (server *Server) AddJob(job Job) {
+	server.JobQueue <- job
+}
 
 // Server store the stats / data of every deployment
 type Server struct {
@@ -16,14 +26,14 @@ type Server struct {
 	ConfigDB *ConfigDB
 
 	Clusters *Clusters
-
-	mutex sync.Mutex
+	JobQueue chan Job
 }
 
 // NewServer return an instance of Server struct.
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
 		Config:   config,
+		JobQueue: make(chan Job, 100),
 		ConfigDB: NewConfigDB(config),
 	}
 }
@@ -55,6 +65,34 @@ func (server *Server) StartServer() error {
 	server.Clusters = NewClusters(deployerClient)
 
 	return router.Run(":" + server.Config.GetString("port"))
+}
+
+func (server *Server) RunJobLoop() {
+	userId := server.Config.GetString("userId")
+	go func() {
+		for {
+			select {
+			case job := <-server.JobQueue:
+				deploymentId := ""
+				for {
+					result := <-server.Clusters.ReserveDeployment(job.GetApplicationConfig(), job.GetId(), userId)
+					if result.Err != "" {
+						glog.Warningf("Unable to reserve deployment for job: " + result.Err)
+						// Try reserving again after sleep
+						time.Sleep(60 * time.Second)
+					} else {
+						deploymentId = result.DeploymentId
+						break
+					}
+				}
+
+				// TODO: Allow multiple workers to process job
+				if err := job.Run(deploymentId); err != nil {
+					// TODO: Store the error state in a map and display/return job status
+				}
+			}
+		}
+	}()
 }
 
 func (server *Server) runBenchmarks(c *gin.Context) {
@@ -117,14 +155,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
-	if err = run.Run(); err != nil {
-		glog.Warningf("Failed to run benchmarks for app %s: %s", appName, err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": true,
-			"data":  "Unable to run benchmarks: " + err.Error(),
-		})
-		return
-	}
+	server.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
@@ -153,17 +184,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	userId := server.Config.GetString("userId")
-	deploymentId, reserveErr := server.Clusters.ReserveDeployment(applicationConfig, runId, userId)
-	if reserveErr != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to reserve deployment: " + reserveErr.Error(),
-		})
-		return
-	}
-
-	run, runErr := NewCalibrationRun(deploymentId, applicationConfig, server.Config)
+	run, runErr := NewCalibrationRun(runId, applicationConfig, server.Config)
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
@@ -172,13 +193,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	if err = run.Run(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": true,
-			"data":  "Unable to run calibration: " + err.Error(),
-		})
-		return
-	}
+	server.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,

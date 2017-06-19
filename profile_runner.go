@@ -84,7 +84,6 @@ func NewBenchmarkRun(
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			SlowCookerClient:          &clients.SlowCookerClient{},
 			MetricsDB:                 NewMetricsDB(config),
-			DeploymentId:              deploymentId,
 		},
 		StartingIntensity:    startingIntensity,
 		Step:                 step,
@@ -96,7 +95,7 @@ func NewBenchmarkRun(
 	return run, nil
 }
 
-func NewCalibrationRun(deploymentId string, applicationConfig *models.ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
+func NewCalibrationRun(applicationConfig *models.ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
 	id, err := generateId("calibrate")
 	if err != nil {
 		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
@@ -114,7 +113,6 @@ func NewCalibrationRun(deploymentId string, applicationConfig *models.Applicatio
 			DeployerClient:            deployerClient,
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			MetricsDB:                 NewMetricsDB(config),
-			DeploymentId:              deploymentId,
 		},
 	}
 
@@ -136,6 +134,14 @@ func (run *BenchmarkRun) deleteBenchmark(benchmark models.Benchmark) error {
 	}
 
 	return nil
+}
+
+func (run *CalibrationRun) GetId() string {
+	return run.RunId
+}
+
+func (run *CalibrationRun) GetApplicationConfig() *ApplicationConfig {
+	return run.ApplicationConfig
 }
 
 func (run *CalibrationRun) runBenchmarkController(runId string, controller *models.BenchmarkController) error {
@@ -392,7 +398,9 @@ func (run *CalibrationRun) runLocustController(runId string, controller *models.
 	return errors.New("Unimplemented")
 }
 
-func (run *CalibrationRun) Run() error {
+func (run *CalibrationRun) Run(deploymentId string) error {
+	run.DeploymentId = deploymentId
+
 	loadTester := run.ApplicationConfig.LoadTester
 	if loadTester.BenchmarkController != nil {
 		return run.runBenchmarkController(run.Id, loadTester.BenchmarkController)
@@ -519,7 +527,9 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appInte
 	return results, nil
 }
 
-func (run *BenchmarkRun) Run() error {
+func (run *BenchmarkRun) Run(deploymentId string) error {
+	run.DeploymentId = deploymentId
+
 	metric, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name, &models.CalibrationResults{})
 	if err != nil {
 		return errors.New("Unable to get calibration results for app " + run.ApplicationConfig.Name + ": " + err.Error())

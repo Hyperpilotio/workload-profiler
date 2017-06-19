@@ -13,37 +13,43 @@ type clusterState int
 
 // Possible deployment states
 const (
-	AVAILABLE = 0
-	WAITTING  = 1
-	RUNNING   = 2
-	FINISHED  = 3
-	FAILED    = 4
+	DEPLOYING = 0
+	AVAILABLE = 1
+	RESERVED  = 2
+	FAILED    = 3
+
+	ErrMaxClusters = "Max clusters reached"
 )
+
+type ReserveResult struct {
+	DeploymentId string
+	Err          string
+}
 
 type cluster struct {
 	deploymentTemplate string
 	deploymentId       string
 	runId              string
 	state              clusterState
+	failure            string
 }
 
 type Clusters struct {
-	DeployerClient *DeployerClient
-	mutex          sync.Mutex
-	MaxClusters    int
-	Deployments    []cluster
+	DeployerClient    *DeployerClient
+	mutex             sync.Mutex
+	MaxClusters       int
+	Deployments       []*cluster
+	FailedDeployments []*cluster
 }
 
 func GetStateString(state clusterState) string {
 	switch state {
+	case DEPLOYING:
+		return "Deploying"
+	case RESERVED:
+		return "Reserved"
 	case AVAILABLE:
 		return "Available"
-	case WAITTING:
-		return "Waitting"
-	case RUNNING:
-		return "Running"
-	case FINISHED:
-		return "Finished"
 	case FAILED:
 		return "Failed"
 	}
@@ -54,60 +60,73 @@ func GetStateString(state clusterState) string {
 func NewClusters(deployerClient *DeployerClient) *Clusters {
 	return &Clusters{
 		DeployerClient: deployerClient,
-		Deployments:    []cluster{},
+		Deployments:    []*cluster{},
 		MaxClusters:    5,
 	}
 }
 
-func (clusters *Clusters) ReserveDeployment(applicationConfig *ApplicationConfig,
-	runId string, userId string) (string, error) {
+func (clusters *Clusters) ReserveDeployment(
+	applicationConfig *ApplicationConfig,
+	runId string,
+	userId string) <-chan ReserveResult {
 	clusters.mutex.Lock()
-	defer clusters.mutex.Unlock()
+
 	// TODO: Find a cluster that has the same deployment template base, and reserve it.
 	// If not, launch a new one up to the configured limit.
-
-	deploymentResources := []string{}
+	var selectedCluster *cluster
 	for _, deployment := range clusters.Deployments {
-		if deployment.deploymentTemplate == applicationConfig.DeploymentTemplate {
-			if deployment.state == AVAILABLE {
-				deploymentResources = append(deploymentResources, deployment.deploymentId)
+		if deployment.deploymentTemplate == applicationConfig.DeploymentTemplate && deployment.state == AVAILABLE {
+			selectedCluster = deployment
+			break
+		}
+	}
+
+	reserveResult := make(chan ReserveResult)
+
+	if selectedCluster == nil {
+		if len(clusters.Deployments) == clusters.MaxClusters {
+			clusters.mutex.Unlock()
+			reserveResult <- ReserveResult{
+				Err: ErrMaxClusters,
 			}
+			return reserveResult
 		}
-	}
 
-	cluster := cluster{
-		deploymentTemplate: applicationConfig.DeploymentTemplate,
-		runId:              runId,
-		state:              AVAILABLE,
-	}
-
-	if len(deploymentResources) == 0 {
-		deploymentId, createErr := clusters.createDeployment(applicationConfig, userId, runId)
-		if createErr != nil {
-			return "", errors.New("Unable to launch deployment id: " + createErr.Error())
+		selectedCluster = &cluster{
+			deploymentTemplate: applicationConfig.DeploymentTemplate,
+			runId:              runId,
+			state:              DEPLOYING,
 		}
-		cluster.deploymentId = *deploymentId
+
+		clusters.Deployments = append(clusters.Deployments, selectedCluster)
+
+		go func() {
+			if deploymentId, err := clusters.createDeployment(applicationConfig, userId, runId); err != nil {
+				selectedCluster.state = FAILED
+				selectedCluster.failure = err.Error()
+				reserveResult <- ReserveResult{
+					Err: err.Error(),
+				}
+			} else {
+				selectedCluster.deploymentId = *deploymentId
+				selectedCluster.state = RESERVED
+				reserveResult <- ReserveResult{
+					DeploymentId: *deploymentId,
+				}
+			}
+		}()
 	} else {
-		cluster.deploymentId = deploymentResources[0]
+		selectedCluster.state = RESERVED
+		selectedCluster.runId = runId
 	}
 
-	if err := clusters.appendDeployments(cluster); err != nil {
-		return "", errors.New("Unable to reserve cluster: " + err.Error())
+	clusters.mutex.Unlock()
+
+	reserveResult <- ReserveResult{
+		DeploymentId: selectedCluster.deploymentId,
 	}
 
-	return cluster.deploymentId, nil
-}
-
-func (clusters *Clusters) appendDeployments(deployment cluster) error {
-	if len(clusters.Deployments) == clusters.MaxClusters {
-		deployment.state = WAITTING
-		// TODO: waitting cluster queue, call UnreserveDeployment retry relase
-		return errors.New("Unable to append deployment to the cluster, because the limit is exceeded")
-	} else {
-		clusters.Deployments = append(clusters.Deployments, deployment)
-	}
-
-	return nil
+	return reserveResult
 }
 
 func (clusters *Clusters) UnreserveDeployment(runId string) error {
@@ -115,8 +134,10 @@ func (clusters *Clusters) UnreserveDeployment(runId string) error {
 	return nil
 }
 
-func (clusters *Clusters) createDeployment(applicationConfig *ApplicationConfig,
-	userId string, runId string) (*string, error) {
+func (clusters *Clusters) createDeployment(
+	applicationConfig *ApplicationConfig,
+	userId string,
+	runId string) (*string, error) {
 	// TODO: We assume there is one service per app and in one region
 	// Also we assume Kubernetes only.
 	clusterDefinition := &deployer.ClusterDefinition{}
