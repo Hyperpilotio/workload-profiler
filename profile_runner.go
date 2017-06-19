@@ -10,6 +10,7 @@ import (
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/nu7hatch/gouuid"
+	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
 
@@ -21,6 +22,7 @@ type ProfileRun struct {
 	DeploymentId              string
 	MetricsDB                 *MetricsDB
 	ApplicationConfig         *models.ApplicationConfig
+	Log                       *logging.Logger
 }
 
 type CalibrationRun struct {
@@ -95,13 +97,13 @@ func NewBenchmarkRun(
 	return run, nil
 }
 
-func NewCalibrationRun(applicationConfig *models.ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
+func NewCalibrationRun(applicationConfig *ApplicationConfig, config *viper.Viper, log *logging.Logger) (*CalibrationRun, error) {
 	id, err := generateId("calibrate")
 	if err != nil {
 		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
 	}
 
-	deployerClient, deployerErr := clients.NewDeployerClient(config)
+	deployerClient, deployerErr := NewDeployerClient(config)
 	if deployerErr != nil {
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
@@ -113,6 +115,7 @@ func NewCalibrationRun(applicationConfig *models.ApplicationConfig, config *vipe
 			DeployerClient:            deployerClient,
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			MetricsDB:                 NewMetricsDB(config),
+			Log:                       log,
 		},
 	}
 
@@ -152,7 +155,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 	}
 
 	startTime := time.Now()
-	results, err := run.BenchmarkControllerClient.RunCalibration(url, runId, controller, run.ApplicationConfig.SLO)
+	results, err := run.BenchmarkControllerClient.RunCalibration(url, runId, controller, run.ApplicationConfig.SLO, run.ProfileRun.Log)
 	if err != nil {
 		return errors.New("Unable to run calibration: " + err.Error())
 	}

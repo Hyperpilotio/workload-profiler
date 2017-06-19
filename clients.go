@@ -15,6 +15,7 @@ import (
 	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/funcs"
+	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
 
@@ -88,9 +89,13 @@ func (client *DeployerClient) CreateDeployment(
 			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 		}
 
-		if string(response.Body()) == "Available" {
+		deploymentState := string(response.Body())
+		switch deploymentState {
+		case "Available":
 			glog.Infof("%s state is available", deploymentId)
 			return true, nil
+		case "Failed":
+			return false, fmt.Errorf("%s state is Failed: ", deploymentId)
 		}
 
 		return false, nil
@@ -282,7 +287,12 @@ type RunBenchmarkResponse struct {
 	} `json:"results"`
 }
 
-func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId string, controller *BenchmarkController, slo SLO) (*RunCalibrationResponse, error) {
+func (client *BenchmarkControllerClient) RunCalibration(
+	baseUrl string,
+	stageId string,
+	controller *BenchmarkController,
+	slo SLO,
+	log *logging.Logger) (*RunCalibrationResponse, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, errors.New("Unable to parse url: " + err.Error())
@@ -298,7 +308,7 @@ func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId 
 	body["slo"] = slo
 	body["stageId"] = stageId
 
-	glog.Infof("Sending calibration request to benchmark controller for stage: " + stageId)
+	log.Infof("Sending calibration request to benchmark controller for stage: " + stageId)
 	response, err := resty.R().SetBody(body).Post(u.String())
 	if err != nil {
 		return nil, errors.New("Unable to send calibrate request to controller: " + err.Error())
@@ -325,17 +335,17 @@ func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId 
 		}
 
 		if results.Error != "" {
-			glog.Infof("Calibration failed with error: " + results.Error)
+			log.Infof("Calibration failed with error: " + results.Error)
 			return false, errors.New("Calibration failed with error: " + results.Error)
 		}
 
 		if results.Status != "running" {
-			glog.Infof("Load test finished with status: " + results.Status)
-			glog.Infof("Load test finished response: %v", response)
+			log.Infof("Load test finished with status: " + results.Status)
+			log.Infof("Load test finished response: %v", response)
 			return true, nil
 		}
 
-		glog.Infof("Continue to wait for calibration results, last poll response: %v", response)
+		log.Infof("Continue to wait for calibration results, last poll response: %v", response)
 
 		return false, nil
 	})

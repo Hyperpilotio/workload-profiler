@@ -3,10 +3,13 @@ package main
 import (
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
+	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	"github.com/spf13/viper"
 )
 
@@ -40,12 +43,34 @@ func NewServer(config *viper.Viper) *Server {
 
 // StartServer starts a web server
 func (server *Server) StartServer() error {
+	if server.Config.GetString("filesPath") == "" {
+		return errors.New("filesPath is not specified in the configuration file.")
+	}
+
+	if err := os.Mkdir(server.Config.GetString("filesPath"), 0755); err != nil {
+		if !os.IsExist(err) {
+			return errors.New("Unable to create filesPath directory: " + err.Error())
+		}
+	}
+
 	//gin.SetMode("release")
 	router := gin.New()
 
 	// Global middleware
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+
+	router.LoadHTMLGlob(filepath.Join(os.Getenv("GOPATH"),
+		"src/github.com/hyperpilotio/workload-profiler/ui/*.html"))
+	router.Static("/static", filepath.Join(os.Getenv("GOPATH"),
+		"src/github.com/hyperpilotio/workload-profiler/ui/static"))
+
+	uiGroup := router.Group("/ui")
+	{
+		uiGroup.GET("", server.logUI)
+		uiGroup.GET("/logs/:logFile", server.getDeploymentLogContent)
+		// uiGroup.GET("/list/:status", server.refreshUI)
+	}
 
 	calibrateGroup := router.Group("/calibrate")
 	{

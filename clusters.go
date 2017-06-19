@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	deployer "github.com/hyperpilotio/deployer/apis"
+	"github.com/hyperpilotio/deployer/log"
+	"github.com/spf13/viper"
 )
 
 type clusterState int
@@ -31,15 +33,14 @@ type cluster struct {
 	deploymentId       string
 	runId              string
 	state              clusterState
-	failure            string
+	deploymentLog      *log.DeploymentLog
 }
 
 type Clusters struct {
-	DeployerClient    *DeployerClient
-	mutex             sync.Mutex
-	MaxClusters       int
-	Deployments       []*cluster
-	FailedDeployments []*cluster
+	DeployerClient *DeployerClient
+	mutex          sync.Mutex
+	MaxClusters    int
+	Deployments    []*cluster
 }
 
 func GetStateString(state clusterState) string {
@@ -66,9 +67,9 @@ func NewClusters(deployerClient *DeployerClient) *Clusters {
 }
 
 func (clusters *Clusters) ReserveDeployment(
+	config *viper.Viper,
 	applicationConfig *ApplicationConfig,
-	runId string,
-	userId string) <-chan ReserveResult {
+	runId string, userId string) (*cluster, error) {
 	clusters.mutex.Lock()
 
 	// TODO: Find a cluster that has the same deployment template base, and reserve it.
@@ -81,49 +82,39 @@ func (clusters *Clusters) ReserveDeployment(
 		}
 	}
 
-	reserveResult := make(chan ReserveResult)
-
-	if selectedCluster == nil {
-		if len(clusters.Deployments) == clusters.MaxClusters {
-			clusters.mutex.Unlock()
-			reserveResult <- ReserveResult{
-				Err: ErrMaxClusters,
-			}
-			return reserveResult
-		}
-
-		selectedCluster = &cluster{
-			deploymentTemplate: applicationConfig.DeploymentTemplate,
-			runId:              runId,
-			state:              DEPLOYING,
-		}
-
-		clusters.Deployments = append(clusters.Deployments, selectedCluster)
-
-		go func() {
-			if deploymentId, err := clusters.createDeployment(applicationConfig, userId, runId); err != nil {
-				selectedCluster.state = FAILED
-				selectedCluster.failure = err.Error()
-				reserveResult <- ReserveResult{
-					Err: err.Error(),
-				}
-			} else {
-				selectedCluster.deploymentId = *deploymentId
-				selectedCluster.state = RESERVED
-				reserveResult <- ReserveResult{
-					DeploymentId: *deploymentId,
-				}
-			}
-		}()
-	} else {
-		selectedCluster.state = RESERVED
-		selectedCluster.runId = runId
+	cluster := &cluster{
+		deploymentTemplate: applicationConfig.DeploymentTemplate,
+		runId:              runId,
+		state:              AVAILABLE,
 	}
 
-	clusters.mutex.Unlock()
+	if len(deploymentResources) == 0 {
+		log, err := log.NewLogger(config, runId)
+		if err != nil {
+			return nil, errors.New("Error creating deployment logger: " + err.Error())
+		}
+		cluster.deploymentLog = log
 
-	reserveResult <- ReserveResult{
-		DeploymentId: selectedCluster.deploymentId,
+		deploymentId, createErr := clusters.createDeployment(applicationConfig, userId, runId)
+		if createErr != nil {
+			return nil, errors.New("Unable to launch deployment id: " + createErr.Error())
+		}
+	}
+
+	if err := clusters.appendDeployments(cluster); err != nil {
+		return nil, errors.New("Unable to reserve cluster: " + err.Error())
+	}
+
+	return cluster, nil
+}
+
+func (clusters *Clusters) appendDeployments(deployment *cluster) error {
+	if len(clusters.Deployments) == clusters.MaxClusters {
+		deployment.state = WAITTING
+		// TODO: waitting cluster queue, call UnreserveDeployment retry relase
+		return errors.New("Unable to append deployment to the cluster, because the limit is exceeded")
+	} else {
+		clusters.Deployments = append(clusters.Deployments, deployment)
 	}
 
 	return reserveResult
@@ -140,9 +131,10 @@ func (clusters *Clusters) createDeployment(
 	runId string) (*string, error) {
 	// TODO: We assume there is one service per app and in one region
 	// Also we assume Kubernetes only.
+	emptyNodesJSON := `{ "nodes": [] }`
 	clusterDefinition := &deployer.ClusterDefinition{}
-	if err := clusters.convertBsonType(applicationConfig.ClusterDefinition, clusterDefinition); err != nil {
-		return nil, errors.New("Unable to convert to clusterDefinition: " + err.Error())
+	if err := json.Unmarshal([]byte(emptyNodesJSON), clusterDefinition); err != nil {
+		return nil, errors.New("Unable to deserializing empty clusterDefinition: " + err.Error())
 	}
 
 	deployment := &deployer.Deployment{
