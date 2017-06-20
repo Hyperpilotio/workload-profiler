@@ -139,6 +139,18 @@ func (run *BenchmarkRun) deleteBenchmark(benchmark models.Benchmark) error {
 	return nil
 }
 
+func (run *BenchmarkRun) GetId() string {
+	return run.RunId
+}
+
+func (run *BenchmarkRun) GetApplicationConfig() *ApplicationConfig {
+	return run.ApplicationConfig
+}
+
+func (run *BenchmarkRun) GetLog() *logging.Logger {
+	return run.ProfileRun.DeploymentLog.Logger
+}
+
 func (run *CalibrationRun) GetId() string {
 	return run.RunId
 }
@@ -147,7 +159,11 @@ func (run *CalibrationRun) GetApplicationConfig() *ApplicationConfig {
 	return run.ApplicationConfig
 }
 
-func (run *CalibrationRun) runBenchmarkController(runId string, controller *models.BenchmarkController) error {
+func (run *CalibrationRun) GetLog() *logging.Logger {
+	return run.ProfileRun.DeploymentLog.Logger
+}
+
+func (run *CalibrationRun) runBenchmarkController(runId string, controller *BenchmarkController) error {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
 	if urlErr != nil {

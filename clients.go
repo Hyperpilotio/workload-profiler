@@ -51,7 +51,8 @@ func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 func (client *DeployerClient) CreateDeployment(
 	deploymentTemplate string,
 	deployment *deployer.Deployment,
-	loadTesterName string) (*string, error) {
+	loadTesterName string,
+	log *logging.Logger) (*string, error) {
 	requestUrl := urlBasePath(client.Url) + path.Join(
 		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments")
 
@@ -92,7 +93,7 @@ func (client *DeployerClient) CreateDeployment(
 		deploymentState := string(response.Body())
 		switch deploymentState {
 		case "Available":
-			glog.Infof("%s state is available", deploymentId)
+			log.Infof("%s state is available", deploymentId)
 			return true, nil
 		case "Failed":
 			return false, fmt.Errorf("%s state is Failed: ", deploymentId)
@@ -108,9 +109,9 @@ func (client *DeployerClient) CreateDeployment(
 	// Poll to wait for the elb dns is svailable
 	url, urlErr := client.GetServiceUrl(deploymentId, loadTesterName)
 	if urlErr != nil {
-		glog.Warningf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+		log.Warningf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	} else {
-		err = funcs.LoopUntil(time.Minute*2, time.Second*10, func() (bool, error) {
+		err = funcs.LoopUntil(time.Minute*3, time.Second*10, func() (bool, error) {
 			response, err := resty.R().Get(url)
 			if err != nil {
 				return false, nil
@@ -120,12 +121,12 @@ func (client *DeployerClient) CreateDeployment(
 				return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 			}
 
-			glog.Infof("%s url to be available", loadTesterName)
+			log.Infof("%s url to be available", loadTesterName)
 			return true, nil
 		})
 
 		if err != nil {
-			glog.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
+			log.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
 		}
 	}
 

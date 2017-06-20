@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/deployer/log"
+	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
 
@@ -33,7 +35,8 @@ type cluster struct {
 	deploymentId       string
 	runId              string
 	state              clusterState
-	deploymentLog      *log.DeploymentLog
+	failure            string
+	created            time.Time
 }
 
 type Clusters struct {
@@ -69,7 +72,9 @@ func NewClusters(deployerClient *DeployerClient) *Clusters {
 func (clusters *Clusters) ReserveDeployment(
 	config *viper.Viper,
 	applicationConfig *ApplicationConfig,
-	runId string, userId string) (*cluster, error) {
+	runId string,
+	userId string,
+	log *logging.Logger) <-chan ReserveResult {
 	clusters.mutex.Lock()
 
 	// TODO: Find a cluster that has the same deployment template base, and reserve it.
@@ -81,6 +86,8 @@ func (clusters *Clusters) ReserveDeployment(
 			break
 		}
 	}
+
+	reserveResult := make(chan ReserveResult)
 
 	cluster := &cluster{
 		deploymentTemplate: applicationConfig.DeploymentTemplate,
@@ -95,14 +102,34 @@ func (clusters *Clusters) ReserveDeployment(
 		}
 		cluster.deploymentLog = log
 
-		deploymentId, createErr := clusters.createDeployment(applicationConfig, userId, runId)
-		if createErr != nil {
-			return nil, errors.New("Unable to launch deployment id: " + createErr.Error())
+		selectedCluster = &cluster{
+			deploymentTemplate: applicationConfig.DeploymentTemplate,
+			runId:              runId,
+			state:              DEPLOYING,
+			created:            time.Now(),
 		}
 	}
 
-	if err := clusters.appendDeployments(cluster); err != nil {
-		return nil, errors.New("Unable to reserve cluster: " + err.Error())
+		clusters.Deployments = append(clusters.Deployments, selectedCluster)
+
+		go func() {
+			if deploymentId, err := clusters.createDeployment(applicationConfig, userId, runId, log); err != nil {
+				selectedCluster.state = FAILED
+				selectedCluster.failure = err.Error()
+				reserveResult <- ReserveResult{
+					Err: err.Error(),
+				}
+			} else {
+				selectedCluster.deploymentId = *deploymentId
+				selectedCluster.state = RESERVED
+				reserveResult <- ReserveResult{
+					DeploymentId: *deploymentId,
+				}
+			}
+		}()
+	} else {
+		selectedCluster.state = RESERVED
+		selectedCluster.runId = runId
 	}
 
 	return cluster, nil
@@ -117,6 +144,8 @@ func (clusters *Clusters) appendDeployments(deployment *cluster) error {
 		clusters.Deployments = append(clusters.Deployments, deployment)
 	}
 
+	log.Infof("reserveResult is %v", reserveResult)
+
 	return reserveResult
 }
 
@@ -128,7 +157,8 @@ func (clusters *Clusters) UnreserveDeployment(runId string) error {
 func (clusters *Clusters) createDeployment(
 	applicationConfig *ApplicationConfig,
 	userId string,
-	runId string) (*string, error) {
+	runId string,
+	log *logging.Logger) (*string, error) {
 	// TODO: We assume there is one service per app and in one region
 	// Also we assume Kubernetes only.
 	emptyNodesJSON := `{ "nodes": [] }`
@@ -164,7 +194,7 @@ func (clusters *Clusters) createDeployment(
 	}
 
 	deploymentId, createErr := clusters.DeployerClient.CreateDeployment(
-		applicationConfig.DeploymentTemplate, deployment, applicationConfig.LoadTester.Name)
+		applicationConfig.DeploymentTemplate, deployment, applicationConfig.LoadTester.Name, log)
 	if createErr != nil {
 		return nil, errors.New("Unable to create deployment: " + createErr.Error())
 	}
