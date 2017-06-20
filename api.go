@@ -10,14 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
-	logging "github.com/op/go-logging"
+	"github.com/hyperpilotio/deployer/log"
 	"github.com/spf13/viper"
 )
 
 type Job interface {
 	GetId() string
 	GetApplicationConfig() *ApplicationConfig
-	GetLog() *logging.Logger
+	GetLog() *log.DeploymentLog
 	Run(deploymentId string) error
 }
 
@@ -100,29 +100,33 @@ func (server *Server) RunJobLoop() {
 		for {
 			select {
 			case job := <-server.JobQueue:
+				log := job.GetLog()
+				defer log.LogFile.Close()
+
 				deploymentId := ""
 				runId := job.GetId()
-				log := job.GetLog()
-				log.Infof("Waiting until %s job is completed...", runId)
+				log.Logger.Infof("Waiting until %s job is completed...", runId)
 				for {
 					result := <-server.Clusters.ReserveDeployment(server.Config,
-						job.GetApplicationConfig(), runId, userId, log)
+						job.GetApplicationConfig(), runId, userId, log.Logger)
 					if result.Err != "" {
-						glog.Warningf("Unable to reserve deployment for job: " + result.Err)
+						log.Logger.Warningf("Unable to reserve deployment for job: " + result.Err)
 						// Try reserving again after sleep
 						time.Sleep(60 * time.Second)
 					} else {
-						log.Infof("Deploying job %s with deploymentId is %s", runId, deploymentId)
 						deploymentId = result.DeploymentId
+						log.Logger.Infof("Deploying job %s with deploymentId is %s", runId, deploymentId)
 						break
 					}
 				}
 
 				// TODO: Allow multiple workers to process job
-				log.Infof("Running %s job", job.GetId())
+				log.Logger.Infof("Running %s job", job.GetId())
 				if err := job.Run(deploymentId); err != nil {
-					log.Errorf("Unable to run %s job: %s", runId, err)
 					// TODO: Store the error state in a map and display/return job status
+					log.Logger.Errorf("Unable to run %s job: %s", runId, err)
+
+					server.Clusters.SetState(runId, FAILED)
 				}
 			}
 		}

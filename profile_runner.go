@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -147,8 +148,8 @@ func (run *BenchmarkRun) GetApplicationConfig() *ApplicationConfig {
 	return run.ApplicationConfig
 }
 
-func (run *BenchmarkRun) GetLog() *logging.Logger {
-	return run.ProfileRun.DeploymentLog.Logger
+func (run *BenchmarkRun) GetLog() *log.DeploymentLog {
+	return run.ProfileRun.DeploymentLog
 }
 
 func (run *CalibrationRun) GetId() string {
@@ -159,8 +160,8 @@ func (run *CalibrationRun) GetApplicationConfig() *ApplicationConfig {
 	return run.ApplicationConfig
 }
 
-func (run *CalibrationRun) GetLog() *logging.Logger {
-	return run.ProfileRun.DeploymentLog.Logger
+func (run *CalibrationRun) GetLog() *log.DeploymentLog {
+	return run.ProfileRun.DeploymentLog
 }
 
 func (run *CalibrationRun) runBenchmarkController(runId string, controller *BenchmarkController) error {
@@ -254,6 +255,10 @@ func (run *CalibrationRun) runSlowCookerController(runId string, controller *mod
 
 	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
 		return errors.New("Unable to store calibration results: " + err.Error())
+	}
+
+	if b, err := json.MarshalIndent(calibrationResults, "", "  "); err == nil {
+		log.Logger.Infof("Store calibration results: %s", string(b))
 	}
 
 	return nil

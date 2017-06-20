@@ -96,7 +96,7 @@ func (client *DeployerClient) CreateDeployment(
 			log.Infof("%s state is available", deploymentId)
 			return true, nil
 		case "Failed":
-			return false, fmt.Errorf("%s state is Failed: ", deploymentId)
+			return false, fmt.Errorf("%s state is Failed", deploymentId)
 		}
 
 		return false, nil
@@ -346,7 +346,7 @@ func (client *BenchmarkControllerClient) RunCalibration(
 			return true, nil
 		}
 
-		log.Infof("Continue to wait for calibration results, last poll response: %v", response)
+		glog.V(1).Infof("Continue to wait for calibration results, last poll response: %v", response)
 
 		return false, nil
 	})

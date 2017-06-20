@@ -3,12 +3,10 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
 	deployer "github.com/hyperpilotio/deployer/apis"
-	"github.com/hyperpilotio/deployer/log"
 	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
@@ -89,18 +87,14 @@ func (clusters *Clusters) ReserveDeployment(
 
 	reserveResult := make(chan ReserveResult)
 
-	cluster := &cluster{
-		deploymentTemplate: applicationConfig.DeploymentTemplate,
-		runId:              runId,
-		state:              AVAILABLE,
-	}
-
-	if len(deploymentResources) == 0 {
-		log, err := log.NewLogger(config, runId)
-		if err != nil {
-			return nil, errors.New("Error creating deployment logger: " + err.Error())
+	if selectedCluster == nil {
+		if len(clusters.Deployments) == clusters.MaxClusters {
+			clusters.mutex.Unlock()
+			reserveResult <- ReserveResult{
+				Err: ErrMaxClusters,
+			}
+			return reserveResult
 		}
-		cluster.deploymentLog = log
 
 		selectedCluster = &cluster{
 			deploymentTemplate: applicationConfig.DeploymentTemplate,
@@ -108,7 +102,6 @@ func (clusters *Clusters) ReserveDeployment(
 			state:              DEPLOYING,
 			created:            time.Now(),
 		}
-	}
 
 		clusters.Deployments = append(clusters.Deployments, selectedCluster)
 
@@ -130,21 +123,12 @@ func (clusters *Clusters) ReserveDeployment(
 	} else {
 		selectedCluster.state = RESERVED
 		selectedCluster.runId = runId
+		reserveResult <- ReserveResult{
+			DeploymentId: selectedCluster.deploymentId,
+		}
 	}
 
-	return cluster, nil
-}
-
-func (clusters *Clusters) appendDeployments(deployment *cluster) error {
-	if len(clusters.Deployments) == clusters.MaxClusters {
-		deployment.state = WAITTING
-		// TODO: waitting cluster queue, call UnreserveDeployment retry relase
-		return errors.New("Unable to append deployment to the cluster, because the limit is exceeded")
-	} else {
-		clusters.Deployments = append(clusters.Deployments, deployment)
-	}
-
-	log.Infof("reserveResult is %v", reserveResult)
+	clusters.mutex.Unlock()
 
 	return reserveResult
 }
@@ -216,19 +200,14 @@ func (clusters *Clusters) convertBsonType(bson interface{}, convert interface{})
 	return nil
 }
 
-func SetClusterState(deployments []cluster, runId string, state clusterState) error {
-	findCluster := false
-	for _, deployment := range deployments {
+func (clusters *Clusters) SetState(runId string, state clusterState) {
+	clusters.mutex.Lock()
+	defer clusters.mutex.Unlock()
+
+	for _, deployment := range clusters.Deployments {
 		if deployment.runId == runId {
 			deployment.state = state
-			findCluster = true
 			break
 		}
 	}
-
-	if !findCluster {
-		return fmt.Errorf("Unable to set %s cluster state", runId)
-	}
-
-	return nil
 }
