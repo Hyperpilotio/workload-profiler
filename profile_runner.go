@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/hyperpilotio/deployer/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/nu7hatch/gouuid"
@@ -171,6 +172,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *Benc
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
+	log := run.ProfileRun.DeploymentLog
 	startTime := time.Now()
 	results, err := run.BenchmarkControllerClient.RunCalibration(url, runId, controller, run.ApplicationConfig.SLO, run.ProfileRun.Log)
 	if err != nil {
