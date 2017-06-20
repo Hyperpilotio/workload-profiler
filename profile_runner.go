@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/nu7hatch/gouuid"
 	"github.com/spf13/viper"
 )
 
@@ -323,7 +324,7 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark Benchmark, appIntensity f
 		} else {
 			for _, runResult := range response.Results {
 				qosResults := runResult.Results
-				qosMetric := qosResults[run.ApplicationConfig.SLO.Metric]
+				qosMetric := fmt.Sprintf("%v", qosResults[run.ApplicationConfig.SLO.Metric])
 				qosValue, parseErr := strconv.ParseFloat(qosMetric, 64)
 				if parseErr != nil {
 					return nil, fmt.Errorf("Unable to parse qos value %s to float: %s", qosMetric, parseErr.Error())
