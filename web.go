@@ -71,6 +71,7 @@ func (server *Server) getDeploymentLogs(c *gin.Context) (DeploymentLogs, error) 
 		deploymentLog := &DeploymentLog{
 			Name:   cluster.runId,
 			Status: GetStateString(cluster.state),
+			Create: cluster.created,
 		}
 		deploymentLogs = append(deploymentLogs, deploymentLog)
 	}
