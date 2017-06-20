@@ -198,11 +198,25 @@ a:hover {
     text-shadow: 0 -1px #845913;
 }
 
+.badge.badge-Deploying {
+    color: white;
+    background-color: #F5A623;
+    box-shadow: -1px -1px 0 #845913;
+    text-shadow: 0 -1px #845913;
+}
+
 .badge.badge-Updating {
     color: white;
     background-color: #F5A623;
     box-shadow: -1px -1px 0 #845913;
     text-shadow: 0 -1px #845913;
+}
+
+.badge.badge-Reserved {
+    color: white;
+    background-color: #286090;
+    box-shadow: -1px -1px 0 #286090;
+    text-shadow: 0 -1px #286090;
 }
 
 .deployment-btn {
