@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"fmt"
+
 	deployer "github.com/hyperpilotio/deployer/apis"
 	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
@@ -26,6 +28,11 @@ const (
 type ReserveResult struct {
 	DeploymentId string
 	Err          string
+}
+
+type UnreserveResult struct {
+	RunId string
+	Err   string
 }
 
 type cluster struct {
@@ -79,9 +86,11 @@ func (clusters *Clusters) ReserveDeployment(
 	// If not, launch a new one up to the configured limit.
 	var selectedCluster *cluster
 	for _, deployment := range clusters.Deployments {
-		if deployment.deploymentTemplate == applicationConfig.DeploymentTemplate && deployment.state == AVAILABLE {
-			selectedCluster = deployment
-			break
+		if deployment.deploymentTemplate == applicationConfig.DeploymentTemplate {
+			if deployment.state == AVAILABLE || deployment.state == RESERVED {
+				selectedCluster = deployment
+				break
+			}
 		}
 	}
 
@@ -133,8 +142,37 @@ func (clusters *Clusters) ReserveDeployment(
 	return reserveResult
 }
 
-func (clusters *Clusters) UnreserveDeployment(runId string) error {
+func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger) error {
 	// TODO: Unreserve a deployment. After certain time also try to delete deployments.
+	clusters.mutex.Lock()
+
+	var selectedCluster *cluster
+	for _, deployment := range clusters.Deployments {
+		if deployment.runId == runId {
+			selectedCluster = deployment
+			break
+		}
+	}
+
+	unreserveResult := make(chan UnreserveResult, 1)
+
+	if selectedCluster == nil {
+		return fmt.Errorf("Unable to find %s cluster", runId)
+	} else {
+		go func() {
+			if err := clusters.deleteDeployment(selectedCluster.deploymentId, log); err != nil {
+				unreserveResult <- UnreserveResult{
+					Err: err.Error(),
+				}
+			} else {
+				unreserveResult <- UnreserveResult{
+					RunId: runId,
+				}
+			}
+		}()
+	}
+	clusters.mutex.Unlock()
+
 	return nil
 }
 
@@ -186,6 +224,14 @@ func (clusters *Clusters) createDeployment(
 	return deploymentId, nil
 }
 
+func (clusters *Clusters) deleteDeployment(deploymentId string, log *logging.Logger) error {
+	if err := clusters.DeployerClient.DeleteDeployment(deploymentId, log); err != nil {
+		return errors.New("Unable to delete deployment: " + err.Error())
+	}
+
+	return nil
+}
+
 func (clusters *Clusters) convertBsonType(bson interface{}, convert interface{}) error {
 	b, marshalErr := json.Marshal(bson)
 	if marshalErr != nil {
@@ -210,4 +256,18 @@ func (clusters *Clusters) SetState(runId string, state clusterState) {
 			break
 		}
 	}
+}
+
+func (clusters *Clusters) DeleteCluster(runId string) {
+	clusters.mutex.Lock()
+	defer clusters.mutex.Unlock()
+
+	newDeployments := []*cluster{}
+	for _, deployment := range clusters.Deployments {
+		if deployment.runId == runId {
+			continue
+		}
+		newDeployments = append(newDeployments, deployment)
+	}
+	clusters.Deployments = newDeployments
 }

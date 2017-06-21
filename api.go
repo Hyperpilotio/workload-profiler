@@ -30,8 +30,9 @@ type Server struct {
 	Config   *viper.Viper
 	ConfigDB *ConfigDB
 
-	Clusters *Clusters
-	JobQueue chan Job
+	Clusters       *Clusters
+	JobQueue       chan Job
+	UnreserveQueue <-chan UnreserveResult
 }
 
 // NewServer return an instance of Server struct.
@@ -90,6 +91,8 @@ func (server *Server) StartServer() error {
 	}
 
 	server.Clusters = NewClusters(deployerClient)
+	server.RunJobLoop()
+	server.RunRemoveClusterJob()
 
 	return router.Run(":" + server.Config.GetString("port"))
 }
@@ -127,6 +130,19 @@ func (server *Server) RunJobLoop() {
 					log.Logger.Errorf("Unable to run %s job: %s", runId, err)
 
 					server.Clusters.SetState(runId, FAILED)
+				}
+			}
+		}
+	}()
+}
+
+func (server *Server) RunRemoveClusterJob() {
+	go func() {
+		for {
+			select {
+			case result := <-server.UnreserveQueue:
+				if result.RunId != "" {
+					server.Clusters.DeleteCluster(result.RunId)
 				}
 			}
 		}

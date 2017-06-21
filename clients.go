@@ -133,6 +133,46 @@ func (client *DeployerClient) CreateDeployment(
 	return &deploymentId, nil
 }
 
+func (client *DeployerClient) DeleteDeployment(deploymentId string, log *logging.Logger) error {
+	requestUrl := urlBasePath(client.Url) + path.Join(
+		client.Url.Path, "v1", "deployments", deploymentId)
+
+	response, err := resty.R().Delete(requestUrl)
+	if err != nil {
+		return errors.New("Unable to send delete deployment request to deployer: " + err.Error())
+	}
+
+	if response.StatusCode() != 202 {
+		return fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+	}
+
+	err = funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
+		deploymentStateUrl := urlBasePath(client.Url) +
+			path.Join(client.Url.Path, "v1", "deployments", deploymentId, "state")
+
+		response, err := resty.R().Get(deploymentStateUrl)
+		if err != nil {
+			return false, errors.New("Unable to send deployment state request to deployer: " + err.Error())
+		}
+
+		switch response.StatusCode() {
+		case 404:
+			log.Infof("Delete %s deployment successfully, deployment state is not found", deploymentId)
+			return true, nil
+		case 200:
+			return false, nil
+		}
+
+		return false, nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("Unable to waiting for %s deployment to be delete: %s", deploymentId, err.Error())
+	}
+
+	return nil
+}
+
 func (client *DeployerClient) GetServiceUrl(deployment string, service string) (string, error) {
 	if url, ok := client.ServiceUrls[service]; ok {
 		return url, nil
