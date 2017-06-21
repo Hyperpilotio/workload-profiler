@@ -22,11 +22,6 @@
     <!-- sidebar -->
     <aside>
         <ul class="deployment-list">
-            <li id="deploymentTemplate" class="deployment" style="display: none;" data-name data-type data-status>
-                <div class="logName"></div>
-                <span class="timeLabel">Create:</span><span class="createTime"></span><br/>
-                <span class="badge"></span>
-            </li>
             {{range $k,$v := .logs}}
             <li class="deployment" data-name="{{$v.Name}}" data-status="{{$v.Status}}">
                 <div class="logName">{{$v.Name}}</div>
@@ -48,34 +43,53 @@
     </main>
 </body>
 <link rel="import" href="/static/common/linkJs.html">
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+    crossorigin="anonymous"></script>
 <script>
-    $(function() {
-        $('.deployment-list').on('click', 'li', function() {
+    $(function () {
+        $('.deployment-list').on('click', 'li', function () {
             $('.deployment-list li').removeClass('active');
             $(this).addClass('active');
             $('main h1').remove();
             $('.deployment-detail').show();
-            getDeploymentLogContent($(this).data('name'));
-        }); 
+            getDeploymentLogContent($(this));
+        });
     });
 
-    function getDeploymentLogContent(logFileName) {
-        $.ajax({
-            url: '/ui/logs/' + logFileName,
-            type: 'GET',
-            dataType: 'json',
-            success: function(json) {
-                if (json.error == false) {
-                    $('.deployment-log').html('');
-                    $.each(json.data, function(i, line) {
-                        $('.deployment-log').append('<p class="line">' + line.replace(/ /g, '&nbsp;') + '</p>');
-                    });
-                    $('.deployment-log').show();
+    function getDeploymentLogContent(deployment) {
+        if (typeof deployment != 'undefined') {
+            $.ajax({
+                url: '/ui/logs/' + deployment.data('name'),
+                type: 'GET',
+                dataType: 'json',
+                success: function (json) {
+                    if (json.error == false) {
+                        $('.deployment-log').html('');
+                        $.each(json.data, function (i, line) {
+                            $('.deployment-log').append('<p class="line">' + line.replace(/ /g,
+                                '&nbsp;') + '</p>');
+                        });
+                        $('.deployment-log').show();
+
+                        if (json.state == "") {
+                            deployment.remove();
+                            $('.deployment-detail').hide();
+                        } else {
+                            if (deployment.data('status') != json.state) {
+                                deployment.find('.badge').text(json.state);
+                                deployment.find('.badge').removeClass('badge-' + deployment.data('status'));
+                                deployment.find('.badge').addClass('badge-' + json.state);
+                            }
+                        }
+                    }
                 }
-            }
-        });
-        setTimeout(getDeploymentLogContent, 5000, logFileName);
+            });
+        }
+
+        if ($('.deployment-list li.active').length == 1) {
+            setTimeout(getDeploymentLogContent, 5000, $('.deployment-list li.active'));
+        }
     }
 </script>
+
 </html>

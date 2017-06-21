@@ -58,6 +58,7 @@ func (server *Server) getDeploymentLogContent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"error": false,
 		"data":  lines,
+		"state": GetStateString(server.Clusters.GetState(logFile)),
 	})
 }
 
