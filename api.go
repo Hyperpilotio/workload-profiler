@@ -32,15 +32,16 @@ type Server struct {
 
 	Clusters       *Clusters
 	JobQueue       chan Job
-	UnreserveQueue <-chan UnreserveResult
+	UnreserveQueue chan UnreserveResult
 }
 
 // NewServer return an instance of Server struct.
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
-		Config:   config,
-		JobQueue: make(chan Job, 100),
-		ConfigDB: NewConfigDB(config),
+		Config:         config,
+		JobQueue:       make(chan Job, 100),
+		UnreserveQueue: make(chan UnreserveResult, 100),
+		ConfigDB:       NewConfigDB(config),
 	}
 }
 
@@ -92,7 +93,6 @@ func (server *Server) StartServer() error {
 
 	server.Clusters = NewClusters(deployerClient)
 	server.RunJobLoop()
-	server.RunRemoveClusterJob()
 
 	return router.Run(":" + server.Config.GetString("port"))
 }
@@ -128,21 +128,23 @@ func (server *Server) RunJobLoop() {
 				if err := job.Run(deploymentId); err != nil {
 					// TODO: Store the error state in a map and display/return job status
 					log.Logger.Errorf("Unable to run %s job: %s", runId, err)
-
 					server.Clusters.SetState(runId, FAILED)
+				} else {
+					server.Clusters.SetState(runId, AVAILABLE)
 				}
-			}
-		}
-	}()
-}
 
-func (server *Server) RunRemoveClusterJob() {
-	go func() {
-		for {
-			select {
-			case result := <-server.UnreserveQueue:
-				if result.RunId != "" {
-					server.Clusters.DeleteCluster(result.RunId)
+				switch server.Clusters.GetState(runId) {
+				case AVAILABLE:
+					unreserveResult := <-server.Clusters.UnreserveDeployment(runId, log.Logger)
+					if unreserveResult.Err != "" {
+						log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
+					} else {
+						server.UnreserveQueue <- unreserveResult
+					}
+				}
+			case unreserveResult := <-server.UnreserveQueue:
+				if unreserveResult.RunId != "" {
+					server.Clusters.DeleteCluster(unreserveResult.RunId)
 				}
 			}
 		}

@@ -86,11 +86,9 @@ func (clusters *Clusters) ReserveDeployment(
 	// If not, launch a new one up to the configured limit.
 	var selectedCluster *cluster
 	for _, deployment := range clusters.Deployments {
-		if deployment.deploymentTemplate == applicationConfig.DeploymentTemplate {
-			if deployment.state == AVAILABLE || deployment.state == RESERVED {
-				selectedCluster = deployment
-				break
-			}
+		if deployment.deploymentTemplate == applicationConfig.DeploymentTemplate && deployment.state == AVAILABLE {
+			selectedCluster = deployment
+			break
 		}
 	}
 
@@ -142,7 +140,7 @@ func (clusters *Clusters) ReserveDeployment(
 	return reserveResult
 }
 
-func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger) error {
+func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger) <-chan UnreserveResult {
 	// TODO: Unreserve a deployment. After certain time also try to delete deployments.
 	clusters.mutex.Lock()
 
@@ -154,10 +152,12 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 		}
 	}
 
-	unreserveResult := make(chan UnreserveResult, 1)
+	unreserveResult := make(chan UnreserveResult)
 
 	if selectedCluster == nil {
-		return fmt.Errorf("Unable to find %s cluster", runId)
+		unreserveResult <- UnreserveResult{
+			Err: fmt.Sprintf("Unable to find %s cluster", runId),
+		}
 	} else {
 		go func() {
 			if err := clusters.deleteDeployment(selectedCluster.deploymentId, log); err != nil {
@@ -171,9 +171,10 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 			}
 		}()
 	}
+
 	clusters.mutex.Unlock()
 
-	return nil
+	return unreserveResult
 }
 
 func (clusters *Clusters) createDeployment(
@@ -246,18 +247,6 @@ func (clusters *Clusters) convertBsonType(bson interface{}, convert interface{})
 	return nil
 }
 
-func (clusters *Clusters) SetState(runId string, state clusterState) {
-	clusters.mutex.Lock()
-	defer clusters.mutex.Unlock()
-
-	for _, deployment := range clusters.Deployments {
-		if deployment.runId == runId {
-			deployment.state = state
-			break
-		}
-	}
-}
-
 func (clusters *Clusters) DeleteCluster(runId string) {
 	clusters.mutex.Lock()
 	defer clusters.mutex.Unlock()
@@ -270,4 +259,29 @@ func (clusters *Clusters) DeleteCluster(runId string) {
 		newDeployments = append(newDeployments, deployment)
 	}
 	clusters.Deployments = newDeployments
+}
+
+func (clusters *Clusters) SetState(runId string, state clusterState) {
+	clusters.mutex.Lock()
+	defer clusters.mutex.Unlock()
+
+	for _, deployment := range clusters.Deployments {
+		if deployment.runId == runId {
+			deployment.state = state
+			break
+		}
+	}
+}
+
+func (clusters *Clusters) GetState(runId string) clusterState {
+	clusters.mutex.Lock()
+	defer clusters.mutex.Unlock()
+
+	for _, deployment := range clusters.Deployments {
+		if deployment.runId == runId {
+			return deployment.state
+		}
+	}
+
+	return -1
 }
