@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Building deployer..."
+echo "Building profiler..."
 go build
 
 echo "Building image and pushing to AWS ECR"
