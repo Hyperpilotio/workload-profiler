@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 
@@ -106,6 +107,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	}
 
 	if err = run.Run(); err != nil {
+		glog.Warningf("Failed to run benchmarks for app %s: %s", appName, err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
 			"data":  "Unable to run benchmarks: " + err.Error(),

@@ -227,7 +227,7 @@ func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId 
 
 	results := &RunCalibrationResponse{}
 
-	err = funcs.LoopUntil(time.Minute*30, time.Second*10, func() (bool, error) {
+	err = funcs.LoopUntil(time.Minute*60, time.Second*15, func() (bool, error) {
 		response, err := resty.R().Get(u.String() + "/" + stageId)
 		if err != nil {
 			return false, errors.New("Unable to send calibrate results request to controller: " + err.Error())
@@ -307,7 +307,7 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 
 	results := &RunBenchmarkResponse{}
 
-	err = funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
+	err = funcs.LoopUntil(time.Minute*90, time.Second*30, func() (bool, error) {
 		response, err := resty.R().Get(u.String() + "/" + stageId)
 		if err != nil {
 			return false, errors.New("Unable to send benchmark results request to controller: " + err.Error())
