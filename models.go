@@ -1,7 +1,5 @@
 package main
 
-//"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
-
 type BenchmarkController struct {
 	Initialize *Command          `bson:"initialize" json:"initialize"`
 	Command    LoadTesterCommand `bson:"command" json:"command"`
@@ -54,15 +52,23 @@ type LoadTesterCommand struct {
 }
 
 type LoadTester struct {
-	Name                 string               `bson:"name" json:"name"`
-	BenchmarkController  *BenchmarkController `bson:"benchmarkController" json:"benchmarkController"`
-	LocustController     *LocustController    `bson:"locustController" json:"locustController"`
+	Name                 string                `bson:"name" json:"name"`
+	BenchmarkController  *BenchmarkController  `bson:"benchmarkController" json:"benchmarkController"`
+	LocustController     *LocustController     `bson:"locustController" json:"locustController"`
 	SlowCookerController *SlowCookerController `bson:"slowCookerController" json:"slowCookerController"`
+}
+
+type BenchmarkMapping struct {
+	Name         string `bson:"name" json:"name"`
+	AgentMapping []struct {
+		BenchmarkName string `bson:"benchmarkName" json:"benchmarkName"`
+		AgentId       string `bson:"agentId" json:"agentId"`
+	} `bson:"agentMapping" json:"agentMapping"`
 }
 
 type CalibrationTestResult struct {
 	LoadIntensity float64 `bson:"loadIntensity" json:"loadIntensity"`
-	QosMetric     float64 `bson:"qosMetric" json:"qosMetric"`
+	QosValue      float64 `bson:"qosValue" json:"qosValue"`
 }
 
 type CalibrationResults struct {
@@ -71,43 +77,33 @@ type CalibrationResults struct {
 	LoadTester     string                  `bson:"loadTester" json:"loadTester"`
 	QosMetrics     []string                `bson:"qosMetrics" json:"qosMetrics"`
 	TestDuration   string                  `bson:"testDuration" json:"testDuration"`
-	TestResult     []CalibrationTestResult `bson:"testResult" json:"testResult"`
-	FinalIntensity float64                     `bson:"finalIntensity" json:"finalIntensity"`
+	TestResults    []CalibrationTestResult `bson:"testResult" json:"testResult"`
+	FinalResult    *CalibrationTestResult  `bson:"finalResult" json:"finalResult"`
+	FinalIntensity float64                 `bson:"finalIntensity" json:"finalIntensity"`
 }
 
 type BenchmarkResult struct {
-	Benchmark             string  `bson:"benchmark" json:"benchmark"`
-	Intensity             int     `bson:"intensity" json:"intensity"`
-	Qos                   float64 `bson:"qos" json:"qos"`
-	ToleratedInterference float64 `bson:"toleratedInterference" json:"toleratedInterference"`
+	Benchmark string  `bson:"benchmark" json:"benchmark"`
+	Intensity int     `bson:"intensity" json:"intensity"`
+	QosValue  float64 `bson:"qosValue" json:"qosValue"`
 }
 
 type BenchmarkRunResults struct {
-	TestId        string             `bson:"testId" json:"testId"`
-	AppName       string             `bson:"appName" json:"appName"`
-	NumServices   int                `bson:"numServices" json:"numServices"`
-	Services      []string           `bson:"services" json:"services"`
-	ServiceInTest string             `bson:"serviceInTest" json:"serviceInTest"`
-	ServiceNode   string             `bson:"serviceNode" json:"serviceNode"`
-	LoadTester    string             `bson:"loadTester" json:"loadTester"`
-	AppCapacity   float64                `bson:"appCapacity" json:"appCapacity"`
-	SloMetric     string             `bson:"sloMetric" json:"sloMetric"`
-	SloTolerance  float64            `bson:"sloTolerance" json:"sloTolerance"`
-	TestDuration  string             `bson:"testDuration" json:"testDuration"`
-	Benchmarks    []string           `bson:"benchmarks" json:"benchmarks"`
-	TestResult    []*BenchmarkResult `bson:"testResult" json:"testResult"`
-}
-
-type CgroupConfig struct {
-	SetCpuQuota bool `bson:"setCpuQuota" json:"setCpuQuota"`
-}
-
-type Benchmark struct {
-	Name         string        `bson:"name" json:"name"`
-	ResourceType string        `bson:"resourceType" json:"resourceType"`
-	Image        string        `bson:"image" json:"image"`
-	Intensity    int           `bson:"intensity" json:"intensity"`
-	Command      Command       `bson:"command" json:"command"`
-	Count        int           `bson:"count" json:"count"`
-	CgroupConfig *CgroupConfig `bson:"cgroupConfig" json:"cgroupConfig"`
+	TestId                string             `bson:"testId" json:"testId"`
+	AppName               string             `bson:"appName" json:"appName"`
+	NumServices           int                `bson:"numServices" json:"numServices"`
+	Services              []string           `bson:"services" json:"services"`
+	ServiceInTest         string             `bson:"serviceInTest" json:"serviceInTest"`
+	ServiceNode           string             `bson:"serviceNode" json:"serviceNode"`
+	LoadTester            string             `bson:"loadTester" json:"loadTester"`
+	AppCapacity           float64            `bson:"appCapacity" json:"appCapacity"`
+	SloMetric             string             `bson:"sloMetric" json:"sloMetric"`
+	SloTolerance          float64            `bson:"sloTolerance" json:"sloTolerance"`
+	TestDuration          string             `bson:"testDuration" json:"testDuration"`
+	Benchmarks            []string           `bson:"benchmarks" json:"benchmarks"`
+	TestResult            []*BenchmarkResult `bson:"testResult" json:"testResult"`
+	ToleratedInterference []struct {
+		Benchmark string `bson:"benchmark" json:"benchmark"`
+		Intensity int    `bson:"intensity" json:"intensity"`
+	} `bson:"toleratedInterference" json: "toleratedInterference"`
 }

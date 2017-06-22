@@ -1,1 +1,1 @@
-./workload-profiler --config documents/template.config -v 1 -logtostderr
+./workload-profiler --config documents/deployed.config -v 1 -logtostderr

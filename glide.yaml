@@ -9,3 +9,4 @@ import:
 - package: github.com/spf13/viper
 - package: gopkg.in/mgo.v2
 - package: github.com/hyperpilotio/go-utils
+- package: github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis

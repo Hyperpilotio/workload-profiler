@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
+	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	"github.com/spf13/viper"
 )
 
@@ -24,7 +25,13 @@ func NewServer(config *viper.Viper) *Server {
 	}
 }
 
-// StartServer start a web server
+type BenchmarkSet struct {
+	Name       string
+	Benchmarks []apis.Benchmark
+	AgentMap   map[string]string
+}
+
+// StartServer starts a web server
 func (server *Server) StartServer() error {
 	//gin.SetMode("release")
 	router := gin.New()
@@ -50,15 +57,16 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	appName := c.Param("appName")
 
 	var request struct {
-		DeploymentId      string `json:"deploymentId" binding:"required"`
-		StartingIntensity int    `json:"startingIntensity" binding:"required"`
-		Step              int    `json:"step" binding:"required"`
+		DeploymentId      string  `json:"deploymentId" binding:"required"`
+		StartingIntensity int     `json:"startingIntensity" binding:"required"`
+		Step              int     `json:"step" binding:"required"`
+		SloTolerance      float64 `json:"sloTolerance" binding:"required"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  "Unable to parse calibration request: " + err.Error(),
+			"data":  "Unable to parse benchmark request: " + err.Error(),
 		})
 		return
 	}
@@ -66,7 +74,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	if request.DeploymentId == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  "Empty request id found",
+			"data":  "Empty deployment id found",
 		})
 		return
 	}
@@ -75,7 +83,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  "Unable to get application config: " + err.Error(),
+			"data":  "Unable to get application config for app " + appName + ": " + err.Error(),
 		})
 		return
 	}
@@ -85,20 +93,55 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
-			"data":  "Unable to get benchmarks: " + err.Error(),
+			"data":  "Unable to get the collection of benchmarks: " + err.Error(),
 		})
 		return
 	}
 
-	run, runErr := NewBenchmarkRun(
+	benchmarkMappings, err := server.ConfigDB.GetBenchmarkMappings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"data":  "Unable to get benchmark-to-agent mappings: " + err.Error(),
+		})
+		return
+	}
+
+	// Construct BenchmarkSets from benchmarks and benchmarkMappings
+	var benchmarkSets []BenchmarkSet
+	for _, benchmarkMapping := range benchmarkMappings {
+		benchmarkSet := BenchmarkSet{
+			Name:       benchmarkMapping.Name,
+			AgentMap:   make(map[string]string),
+			Benchmarks: []apis.Benchmark{},
+		}
+
+		for _, agentMapping := range benchmarkMapping.AgentMapping {
+			benchmarkSet.AgentMap[agentMapping.BenchmarkName] = agentMapping.AgentId
+			for _, benchmark := range benchmarks {
+				if benchmark.Name == agentMapping.BenchmarkName {
+					if benchmark.HostConfig != nil {
+						benchmark.HostConfig.TargetHost = server.Config.GetString("benchmarkTargetHost")
+						glog.V(1).Infof("Replaced target host for benchmark %s with %s",
+							benchmark.Name, benchmark.HostConfig.TargetHost)
+					}
+					benchmarkSet.Benchmarks = append(benchmarkSet.Benchmarks, benchmark)
+				}
+			}
+		}
+		benchmarkSets = append(benchmarkSets, benchmarkSet)
+	}
+
+	run, err := NewBenchmarkRun(
 		applicationConfig,
-		benchmarks,
+		benchmarkSets,
 		request.DeploymentId,
 		request.StartingIntensity,
 		request.Step,
+		request.SloTolerance,
 		server.Config)
 
-	if runErr != nil {
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
 			"data":  "Unable to create benchmarks run: " + err.Error(),
@@ -117,6 +160,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
+		"data":  "",
 	})
 }
 
@@ -171,5 +215,6 @@ func (server *Server) runCalibration(c *gin.Context) {
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
+		"data":  "",
 	})
 }

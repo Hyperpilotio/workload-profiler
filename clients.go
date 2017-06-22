@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-resty/resty"
 	"github.com/golang/glog"
+	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/spf13/viper"
 )
@@ -89,19 +90,19 @@ type BenchmarkAgentClient struct {
 
 func NewBenchmarkAgentClient(urlString string) (*BenchmarkAgentClient, error) {
 	if u, err := url.Parse(urlString); err != nil {
-		return nil, errors.New("Unable to parse deployer url: " + err.Error())
+		return nil, errors.New("Unable to parse benchmark agent url: " + err.Error())
 	} else {
 		return &BenchmarkAgentClient{Url: u}, nil
 	}
 }
 
-func (client *BenchmarkAgentClient) CreateBenchmark(benchmark *Benchmark) error {
+func (client *BenchmarkAgentClient) CreateBenchmark(benchmark *apis.Benchmark) error {
 	benchmarkJson, marshalErr := json.Marshal(benchmark)
 	if marshalErr != nil {
 		return errors.New("Unable to marshal benchmark to JSON: " + marshalErr.Error())
 	}
 
-	glog.V(1).Infof("Sending benchmark %s to benchmark agent", benchmark.Name)
+	glog.V(1).Infof("Sending benchmark %s to benchmark agent %s", benchmark.Name, client.Url)
 	url := urlBasePath(client.Url) + path.Join(client.Url.Path, "benchmarks")
 	response, err := resty.R().
 		SetBody(string(benchmarkJson)).
@@ -220,13 +221,13 @@ func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId 
 	if err != nil {
 		return nil, errors.New("Unable to send calibrate request to controller: " + err.Error())
 	}
-
 	if response.StatusCode() >= 300 {
 		return nil, fmt.Errorf("Unexpected response code: %d, body: %s", response.StatusCode(), response.String())
 	}
 
 	results := &RunCalibrationResponse{}
 
+	//TOGO: The time duration for looping should be parameterized later
 	err = funcs.LoopUntil(time.Minute*60, time.Second*15, func() (bool, error) {
 		response, err := resty.R().Get(u.String() + "/" + stageId)
 		if err != nil {

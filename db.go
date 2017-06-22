@@ -7,16 +7,18 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
+	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	"github.com/spf13/viper"
 )
 
 type ConfigDB struct {
-	Url                    string
-	User                   string
-	Password               string
-	Database               string
-	ApplicationsCollection string
-	BenchmarksCollection   string
+	Url                         string
+	User                        string
+	Password                    string
+	Database                    string
+	ApplicationsCollection      string
+	BenchmarksCollection        string
+	BenchmarkMappingsCollection string
 }
 
 type MetricsDB struct {
@@ -30,12 +32,13 @@ type MetricsDB struct {
 
 func NewConfigDB(config *viper.Viper) *ConfigDB {
 	return &ConfigDB{
-		Url:                    config.GetString("database.url"),
-		User:                   config.GetString("database.user"),
-		Password:               config.GetString("database.password"),
-		Database:               config.GetString("database.configDatabase"),
-		ApplicationsCollection: config.GetString("database.applicationCollection"),
-		BenchmarksCollection:   config.GetString("database.benchmarkCollection"),
+		Url:                         config.GetString("database.url"),
+		User:                        config.GetString("database.user"),
+		Password:                    config.GetString("database.password"),
+		Database:                    config.GetString("database.configDatabase"),
+		ApplicationsCollection:      config.GetString("database.applicationCollection"),
+		BenchmarksCollection:        config.GetString("database.benchmarkCollection"),
+		BenchmarkMappingsCollection: config.GetString("database.benchmarkMappingCollection"),
 	}
 }
 
@@ -70,20 +73,36 @@ func (configDb *ConfigDB) GetApplicationConfig(name string) (*ApplicationConfig,
 	return &appConfig, nil
 }
 
-func (configDb *ConfigDB) GetBenchmarks() ([]Benchmark, error) {
+func (configDb *ConfigDB) GetBenchmarks() ([]apis.Benchmark, error) {
 	session, sessionErr := connectMongo(configDb.Url, configDb.Database, configDb.User, configDb.Password)
 	if sessionErr != nil {
 		return nil, errors.New("Unable to create mongo session: " + sessionErr.Error())
 	}
 	defer session.Close()
 
-	var benchmarks []Benchmark
+	var benchmarks []apis.Benchmark
 	collection := session.DB(configDb.Database).C(configDb.BenchmarksCollection)
 	if err := collection.Find(nil).All(&benchmarks); err != nil {
 		return nil, errors.New("Unable to read benchmarks from config db: " + err.Error())
 	}
 
 	return benchmarks, nil
+}
+
+func (configDb *ConfigDB) GetBenchmarkMappings() ([]BenchmarkMapping, error) {
+	session, sessionErr := connectMongo(configDb.Url, configDb.Database, configDb.User, configDb.Password)
+	if sessionErr != nil {
+		return nil, errors.New("Unable to create mongo session: " + sessionErr.Error())
+	}
+	defer session.Close()
+
+	var benchmarkMappings []BenchmarkMapping
+	collection := session.DB(configDb.Database).C(configDb.BenchmarkMappingsCollection)
+	if err := collection.Find(nil).All(&benchmarkMappings); err != nil {
+		return nil, errors.New("Unable to read benchmarkMappings from config db: " + err.Error())
+	}
+
+	return benchmarkMappings, nil
 }
 
 func NewMetricsDB(config *viper.Viper) *MetricsDB {

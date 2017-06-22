@@ -19,4 +19,4 @@ push:
 	sudo docker push hyperpilot/worload-profiler:latest
 
 dev-test: build
-	./workload-profiler --config ./documents/dev.config -logtostderr=true -v=2
+	./workload-profiler --config ./documents/deployed.config -logtostderr=true -v=2
