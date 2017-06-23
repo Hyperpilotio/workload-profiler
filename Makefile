@@ -16,7 +16,7 @@ build-docker:
 	sudo docker build . -t hyperpilot/workload-profiler
 
 push:
-	sudo docker push hyperpilot/worload-profiler:latest
+	sudo docker push hyperpilot/workload-profiler:latest
 
 dev-test: build
 	./workload-profiler --config ./documents/deployed.config -logtostderr=true -v=2
