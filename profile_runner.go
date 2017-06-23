@@ -514,6 +514,7 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appInte
 	currentIntensity := run.StartingIntensity
 	results := []*models.BenchmarkResult{}
 
+	log := run.ProfileRun.DeploymentLog
 	counts := 0
 	for {
 		glog.Infof("Running benchmark %s at intensity %d along with app load test intensity %d",
@@ -591,9 +592,14 @@ func (run *BenchmarkRun) Run(deploymentId string) error {
 		}
 	}
 
-	glog.V(1).Infof("Storing benchmark results for app %s: %+v", run.ApplicationConfig.Name, runResults.TestResult)
+	log := run.ProfileRun.DeploymentLog
+	log.Logger.Infof("Storing benchmark results for app " + run.ApplicationConfig.Name)
 	if err := run.MetricsDB.WriteMetrics("profiling", runResults); err != nil {
 		return errors.New("Unable to store benchmark results for app " + run.ApplicationConfig.Name + ": " + err.Error())
+	}
+
+	if b, err := json.MarshalIndent(runResults, "", "  "); err == nil {
+		log.Logger.Infof("Store benchmark results: %s", string(b))
 	}
 
 	return nil
