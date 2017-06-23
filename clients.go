@@ -111,7 +111,7 @@ func (client *DeployerClient) CreateDeployment(
 	if urlErr != nil {
 		log.Warningf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	} else {
-		err = funcs.LoopUntil(time.Minute*3, time.Second*10, func() (bool, error) {
+		err = funcs.LoopUntil(time.Minute*5, time.Second*10, func() (bool, error) {
 			response, err := resty.R().Get(url)
 			if err != nil {
 				return false, nil
