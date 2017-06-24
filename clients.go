@@ -227,7 +227,7 @@ func (client *BenchmarkControllerClient) RunCalibration(baseUrl string, stageId 
 
 	results := &RunCalibrationResponse{}
 
-	//TOGO: The time duration for looping should be parameterized later
+	//TODO: The time duration for looping should be parameterized later
 	err = funcs.LoopUntil(time.Minute*60, time.Second*15, func() (bool, error) {
 		response, err := resty.R().Get(u.String() + "/" + stageId)
 		if err != nil {
