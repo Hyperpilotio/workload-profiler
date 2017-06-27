@@ -1,5 +1,5 @@
-hash: 8a36a18e786aa27e3b740ab6738f68f0978622d5d966d8450a51997a7a6bd64e
-updated: 2017-06-17T01:53:00.411983017+08:00
+hash: a9c8ed5751c569764c118f500baf7d1b8feef30f35a16668d76558d4e914c117
+updated: 2017-06-27T18:04:55.477743287Z
 imports:
 - name: github.com/fsnotify/fsnotify
   version: fd9ec7deca8bf46ecd2a795baaacf2b3a9be1197
@@ -27,6 +27,10 @@ imports:
   - json/parser
   - json/scanner
   - json/token
+- name: github.com/hyperpilotio/container-benchmarks
+  version: c135d507d68cce17ae7c2a69368a3462fac4aef7
+  subpackages:
+  - benchmark-agent/apis
 - name: github.com/hyperpilotio/go-utils
   version: 0b96b21e832c53add479e813b982af939fefc538
   subpackages:
