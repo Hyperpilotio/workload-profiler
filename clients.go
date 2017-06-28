@@ -74,6 +74,10 @@ func (client *DeployerClient) CreateDeployment(
 		return nil, errors.New("Unable to parse failed create deployment response: " + err.Error())
 	}
 
+	if createResponse.Error {
+		return nil, errors.New("Unable to create deployment: " + createResponse.Data)
+	}
+
 	respDescs := strings.Split(createResponse.Data, "Creating deployment ")
 	deploymentId := strings.Replace(respDescs[1], ".", "", -1)
 
