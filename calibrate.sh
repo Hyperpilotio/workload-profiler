@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-curl -XPOST -H "Content-Type: application/json" localhost:7779/calibrate/redis -d "{\"deploymentId\":\"$1\"}"
+curl -XPOST -H "Content-Type: application/json" localhost:7779/calibrate/redis
