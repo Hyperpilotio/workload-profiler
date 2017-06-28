@@ -12,7 +12,6 @@ import (
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/nu7hatch/gouuid"
-	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
 
