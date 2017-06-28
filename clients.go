@@ -173,6 +173,67 @@ func (client *DeployerClient) DeleteDeployment(deploymentId string, log *logging
 	return nil
 }
 
+func (client *DeployerClient) DeleteKubernetesObjects(deploymentId string, log *logging.Logger) error {
+	requestUrl := urlBasePath(client.Url) + path.Join(
+		client.Url.Path, "v1", "deployments", deploymentId, "skipDeleteCluster")
+
+	response, err := resty.R().Delete(requestUrl)
+	if err != nil {
+		return errors.New("Unable to send delete kubernetes objects request to deployer: " + err.Error())
+	}
+
+	if response.StatusCode() != 202 {
+		return fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+	}
+
+	return nil
+}
+
+func (client *DeployerClient) DeployKubernetesObjects(
+	deploymentTemplate string,
+	deploymentId string,
+	deployment *deployer.Deployment,
+	loadTesterName string,
+	log *logging.Logger) error {
+	requestUrl := urlBasePath(client.Url) + path.Join(
+		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments", deploymentId, "skipDeployCluster")
+
+	response, err := resty.R().SetBody(deployment).Put(requestUrl)
+	if err != nil {
+		return errors.New("Unable to send delete kubernetes objects request to deployer: " + err.Error())
+	}
+
+	if response.StatusCode() != 202 {
+		return fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+	}
+
+	// Poll to wait for the elb dns is svailable
+	url, urlErr := client.GetServiceUrl(deploymentId, loadTesterName)
+	if urlErr != nil {
+		log.Warningf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	} else {
+		err = funcs.LoopUntil(time.Minute*5, time.Second*10, func() (bool, error) {
+			response, err := resty.R().Get(url)
+			if err != nil {
+				return false, nil
+			}
+
+			if response.StatusCode() != 200 {
+				return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+			}
+
+			log.Infof("%s url to be available", loadTesterName)
+			return true, nil
+		})
+
+		if err != nil {
+			log.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
+		}
+	}
+
+	return nil
+}
+
 func (client *DeployerClient) GetServiceUrl(deployment string, service string) (string, error) {
 	if url, ok := client.ServiceUrls[service]; ok {
 		return url, nil

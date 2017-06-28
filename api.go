@@ -130,11 +130,6 @@ func (server *Server) RunJobLoop() {
 					log.Logger.Errorf("Unable to run %s job: %s", runId, err)
 					server.Clusters.SetState(runId, FAILED)
 				} else {
-					server.Clusters.SetState(runId, AVAILABLE)
-				}
-
-				switch server.Clusters.GetState(runId) {
-				case AVAILABLE:
 					unreserveResult := <-server.Clusters.UnreserveDeployment(runId, log.Logger)
 					if unreserveResult.Err != "" {
 						log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
@@ -144,7 +139,7 @@ func (server *Server) RunJobLoop() {
 				}
 			case unreserveResult := <-server.UnreserveQueue:
 				if unreserveResult.RunId != "" {
-					server.Clusters.DeleteCluster(unreserveResult.RunId)
+					server.Clusters.SetState(unreserveResult.RunId, AVAILABLE)
 				}
 			}
 		}

@@ -128,11 +128,22 @@ func (clusters *Clusters) ReserveDeployment(
 			}
 		}()
 	} else {
-		selectedCluster.state = RESERVED
-		selectedCluster.runId = runId
-		reserveResult <- ReserveResult{
-			DeploymentId: selectedCluster.deploymentId,
-		}
+		go func() {
+			if err := clusters.deployKubernetesObjects(applicationConfig,
+				selectedCluster.deploymentId, userId, runId, log); err != nil {
+				selectedCluster.state = FAILED
+				selectedCluster.failure = err.Error()
+				reserveResult <- ReserveResult{
+					Err: err.Error(),
+				}
+			} else {
+				selectedCluster.state = RESERVED
+				selectedCluster.runId = runId
+				reserveResult <- ReserveResult{
+					DeploymentId: selectedCluster.deploymentId,
+				}
+			}
+		}()
 	}
 
 	clusters.mutex.Unlock()
@@ -160,7 +171,7 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 		}
 	} else {
 		go func() {
-			if err := clusters.deleteDeployment(selectedCluster.deploymentId, log); err != nil {
+			if err := clusters.deleteKubernetesObjects(selectedCluster.deploymentId, log); err != nil {
 				unreserveResult <- UnreserveResult{
 					Err: err.Error(),
 				}
@@ -228,6 +239,60 @@ func (clusters *Clusters) createDeployment(
 func (clusters *Clusters) deleteDeployment(deploymentId string, log *logging.Logger) error {
 	if err := clusters.DeployerClient.DeleteDeployment(deploymentId, log); err != nil {
 		return errors.New("Unable to delete deployment: " + err.Error())
+	}
+
+	return nil
+}
+
+func (clusters *Clusters) deleteKubernetesObjects(deploymentId string, log *logging.Logger) error {
+	if err := clusters.DeployerClient.DeleteKubernetesObjects(deploymentId, log); err != nil {
+		return errors.New("Unable to delete kubernetes objects: " + err.Error())
+	}
+
+	return nil
+}
+
+func (clusters *Clusters) deployKubernetesObjects(
+	applicationConfig *ApplicationConfig,
+	deploymentId string,
+	userId string,
+	runId string,
+	log *logging.Logger) error {
+	emptyNodesJSON := `{ "nodes": [] }`
+	clusterDefinition := &deployer.ClusterDefinition{}
+	if err := json.Unmarshal([]byte(emptyNodesJSON), clusterDefinition); err != nil {
+		return errors.New("Unable to deserializing empty clusterDefinition: " + err.Error())
+	}
+
+	deployment := &deployer.Deployment{
+		UserId:            userId,
+		Region:            "us-east-1",
+		Name:              "workload-profiler-" + applicationConfig.Name,
+		NodeMapping:       []deployer.NodeMapping{},
+		ClusterDefinition: *clusterDefinition,
+		KubernetesDeployment: &deployer.KubernetesDeployment{
+			Kubernetes: []deployer.KubernetesTask{},
+		},
+	}
+
+	for _, appTask := range applicationConfig.TaskDefinitions {
+		nodeMapping := &deployer.NodeMapping{}
+		if err := clusters.convertBsonType(appTask.NodeMapping, nodeMapping); err != nil {
+			return errors.New("Unable to convert to nodeMapping: " + err.Error())
+		}
+		kubernetesTask := &deployer.KubernetesTask{}
+		if err := clusters.convertBsonType(appTask.TaskDefinition, kubernetesTask); err != nil {
+			return errors.New("Unable to convert to nodeMapping: " + err.Error())
+		}
+
+		deployment.NodeMapping = append(deployment.NodeMapping, *nodeMapping)
+		deployment.KubernetesDeployment.Kubernetes =
+			append(deployment.KubernetesDeployment.Kubernetes, *kubernetesTask)
+	}
+
+	if err := clusters.DeployerClient.DeployKubernetesObjects(applicationConfig.DeploymentTemplate,
+		deploymentId, deployment, applicationConfig.LoadTester.Name, log); err != nil {
+		return errors.New("Unable to deploy kubernetes objects: " + err.Error())
 	}
 
 	return nil
