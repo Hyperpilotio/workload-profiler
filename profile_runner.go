@@ -24,7 +24,7 @@ type ProfileRun struct {
 	DeploymentId              string
 	MetricsDB                 *MetricsDB
 	ApplicationConfig         *models.ApplicationConfig
-	Log                       *logging.Logger
+	DeploymentLog             *log.DeploymentLog
 }
 
 type CalibrationRun struct {
@@ -63,7 +63,6 @@ func generateId(prefix string) (string, error) {
 func NewBenchmarkRun(
 	applicationConfig *models.ApplicationConfig,
 	benchmarks []models.Benchmark,
-	deploymentId string,
 	startingIntensity int,
 	step int,
 	sloTolerance float64,
@@ -80,6 +79,11 @@ func NewBenchmarkRun(
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
+	log, logErr := log.NewLogger(config, runId)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
+	}
+
 	run := &BenchmarkRun{
 		ProfileRun: ProfileRun{
 			Id:                        id,
@@ -88,6 +92,7 @@ func NewBenchmarkRun(
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			SlowCookerClient:          &clients.SlowCookerClient{},
 			MetricsDB:                 NewMetricsDB(config),
+			DeploymentLog:             log,
 		},
 		StartingIntensity:    startingIntensity,
 		Step:                 step,
@@ -110,6 +115,11 @@ func NewCalibrationRun(applicationConfig *ApplicationConfig, config *viper.Viper
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
+	log, logErr := log.NewLogger(config, runId)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
+	}
+
 	run := &CalibrationRun{
 		ProfileRun: ProfileRun{
 			Id:                        id,
@@ -117,7 +127,7 @@ func NewCalibrationRun(applicationConfig *ApplicationConfig, config *viper.Viper
 			DeployerClient:            deployerClient,
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			MetricsDB:                 NewMetricsDB(config),
-			Log:                       log,
+			DeploymentLog:             log,
 		},
 	}
 
@@ -174,7 +184,8 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *Benc
 
 	log := run.ProfileRun.DeploymentLog
 	startTime := time.Now()
-	results, err := run.BenchmarkControllerClient.RunCalibration(url, runId, controller, run.ApplicationConfig.SLO, run.ProfileRun.Log)
+	results, err := run.BenchmarkControllerClient.RunCalibration(url, runId, controller,
+		run.ApplicationConfig.SLO, log.Logger)
 	if err != nil {
 		return errors.New("Unable to run calibration: " + err.Error())
 	}
@@ -517,9 +528,8 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appInte
 	log := run.ProfileRun.DeploymentLog
 	counts := 0
 	for {
-		glog.Infof("Running benchmark %s at intensity %d along with app load test intensity %d",
-			benchmark.Name, currentIntensity, appIntensity)
-		stageId, err := generateId(benchmark.Name)
+		log.Logger.Infof("Running benchmark %s at intensity %d along with app load test", benchmarkSet.Name, currentIntensity)
+		stageId, err := generateId(benchmarkSet.Name)
 		if err != nil {
 			return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())
 		}

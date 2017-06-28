@@ -211,6 +211,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
+	run.ProfileRun.DeploymentLog.Logger.Infof("Running %s job...", runId)
 	server.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
