@@ -129,13 +129,13 @@ func (server *Server) RunJobLoop() {
 					// TODO: Store the error state in a map and display/return job status
 					log.Logger.Errorf("Unable to run %s job: %s", runId, err)
 					server.Clusters.SetState(runId, FAILED)
+				}
+
+				unreserveResult := <-server.Clusters.UnreserveDeployment(runId, log.Logger)
+				if unreserveResult.Err != "" {
+					log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
 				} else {
-					unreserveResult := <-server.Clusters.UnreserveDeployment(runId, log.Logger)
-					if unreserveResult.Err != "" {
-						log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
-					} else {
-						server.UnreserveQueue <- unreserveResult
-					}
+					server.UnreserveQueue <- unreserveResult
 				}
 			case unreserveResult := <-server.UnreserveQueue:
 				if unreserveResult.RunId != "" {
