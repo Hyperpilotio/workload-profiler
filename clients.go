@@ -28,7 +28,9 @@ type BenchmarkAgentResponse struct {
 type DeployerClient struct {
 	// Cached service urls
 	ServiceUrls map[string]string
-	Url         *url.URL
+	// Cached service host name
+	ServiceHosts map[string]string
+	Url          *url.URL
 }
 
 type BenchmarkControllerClient struct{}
@@ -259,6 +261,44 @@ func (client *DeployerClient) GetServiceUrl(deployment string, service string) (
 	client.ServiceUrls[service] = url
 
 	return url, nil
+}
+
+func (client *DeployerClient) GetServiceHost(deployment string, service string) (string, error) {
+	if hostName, ok := client.ServiceHosts[service]; ok {
+		return hostName, nil
+	}
+
+	requestUrl := urlBasePath(client.Url) +
+		path.Join(client.Url.Path, "v1", "deployments", deployment, "services")
+
+	response, err := resty.R().Get(requestUrl)
+	if err != nil {
+		return "", err
+	}
+
+	if response.StatusCode() != 200 {
+		return "", fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+	}
+
+	var serviceMappingResponse struct {
+		Error bool                   `json:"error"`
+		Data  map[string]interface{} `json:"data`
+	}
+
+	if err := json.Unmarshal(response.Body(), &serviceMappingResponse); err != nil {
+		return "", errors.New("Unable to parse failed service mapping response: " + err.Error())
+	}
+
+	serviceHostName := ""
+	if serviceInfo, ok := serviceMappingResponse.Data[service]; ok {
+		serviceHostName = serviceInfo.(map[string]interface{})["NodeName"].(string)
+	} else {
+		return "", fmt.Errorf("Unable to get %s service mapping: ", service)
+	}
+
+	client.ServiceHosts[service] = serviceHostName
+
+	return serviceHostName, nil
 }
 
 func (client *DeployerClient) IsDeploymentReady(deployment string) (bool, error) {
