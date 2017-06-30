@@ -58,7 +58,7 @@ func (client *DeployerClient) getServiceMappings(deployment string) (*ServiceMap
 	}
 
 	var mappingResponse ServiceMappingResponse
-	if err := json.Unmarshal(response.Body(), mappingResponse); err != nil {
+	if err := json.Unmarshal(response.Body(), &mappingResponse); err != nil {
 		return nil, errors.New("Unable to parse service mapping response: " + err.Error())
 	}
 
@@ -84,7 +84,7 @@ func (client *DeployerClient) GetColocatedServiceUrl(deployment string, colocate
 	nodeId := mapping.NodeId
 	for serviceName, mapping := range mappings.Data {
 		if strings.HasPrefix(serviceName, servicePrefix) && mapping.NodeId == nodeId {
-			return mapping.PublicUrl, nil
+			return "http://" + mapping.PublicUrl, nil
 		}
 	}
 
