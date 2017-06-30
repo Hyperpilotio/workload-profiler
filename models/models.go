@@ -8,7 +8,7 @@ type Command struct {
 	Path string   `bson:"path" json:"path"`
 	Args []string `bson:"args" json:"args"`
 }
-x
+
 type BenchmarkController struct {
 	Initialize *Command          `bson:"initialize" json:"initialize"`
 	Command    LoadTesterCommand `bson:"command" json:"command"`

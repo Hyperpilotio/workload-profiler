@@ -121,8 +121,14 @@ func NewCalibrationRun(deploymentId string, applicationConfig *models.Applicatio
 	return run, nil
 }
 
-func (run *BenchmarkRun) deleteBenchmark(agentUrl string, benchmark models.Benchmark) error {
+func (run *BenchmarkRun) deleteBenchmark(benchmark models.Benchmark) error {
 	for _, config := range benchmark.Configs {
+		agentUrl, err := run.getBenchmarkAgentUrl(config)
+		if err != nil {
+			return fmt.Errorf(
+				"Unable to get benchmark agent url: " + err.Error())
+		}
+
 		if err := run.BenchmarkAgentClient.DeleteBenchmark(agentUrl, benchmark.Name); err != nil {
 			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
 				benchmark.Name, err.Error())
@@ -410,7 +416,7 @@ func (run *BenchmarkRun) getBenchmarkAgentUrl(config models.BenchmarkConfig) (st
 		return "", errors.New("Unknown placement host for benchmark: " + config.PlacementHost)
 	}
 
-	serviceUrl, err := run.DeployerClient.GetColocatedServiceUrl(colocatedService, "benchmark-agent")
+	serviceUrl, err := run.DeployerClient.GetColocatedServiceUrl(colocatedService, "benchmark-agent", "benchmark-agent")
 	if err != nil {
 		return "", fmt.Errorf(
 			"Unable to get service %s url located next to %s: %s",
@@ -424,13 +430,13 @@ func (run *BenchmarkRun) getBenchmarkAgentUrl(config models.BenchmarkConfig) (st
 
 func (run *BenchmarkRun) runBenchmark(id string, benchmark models.Benchmark, intensity int) error {
 	for _, config := range benchmark.Configs {
-		agentUrl, err := run.GetBenchmarkAgentUrl(config)
+		agentUrl, err := run.getBenchmarkAgentUrl(config)
 		if err != nil {
 			return fmt.Errorf(
 				"Unable to get benchmark agent url: " + err.Error())
 		}
 
-		if err := run.BenchmarkAgentClient.CreateBenchmark(agentUrl, &benchmark, intensity); err != nil {
+		if err := run.BenchmarkAgentClient.CreateBenchmark(agentUrl, &benchmark, &config, intensity); err != nil {
 			return fmt.Errorf("Unable to run benchmark %s with intensity %d: %s",
 				benchmark.Name, intensity, err.Error())
 		}
@@ -520,7 +526,7 @@ func (run *BenchmarkRun) Run() error {
 	calibration := metric.(*models.CalibrationResults)
 	glog.V(1).Infof("Read calibration results for app %s", run.ApplicationConfig.Name)
 
-	runResults := &BenchmarkRunResults{
+	runResults := &models.BenchmarkRunResults{
 		TestId:        run.Id,
 		AppName:       run.ApplicationConfig.Name,
 		NumServices:   len(run.ApplicationConfig.ServiceNames),
