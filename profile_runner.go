@@ -416,7 +416,7 @@ func (run *BenchmarkRun) getBenchmarkAgentUrl(config models.BenchmarkConfig) (st
 		return "", errors.New("Unknown placement host for benchmark: " + config.PlacementHost)
 	}
 
-	serviceUrl, err := run.DeployerClient.GetColocatedServiceUrl(colocatedService, "benchmark-agent", "benchmark-agent")
+	serviceUrl, err := run.DeployerClient.GetColocatedServiceUrl(run.DeploymentId, colocatedService, "benchmark-agent")
 	if err != nil {
 		return "", fmt.Errorf(
 			"Unable to get service %s url located next to %s: %s",
