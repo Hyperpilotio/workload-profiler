@@ -188,6 +188,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 }
 
 func (run *CalibrationRun) runSlowCookerController(runId string, controller *models.SlowCookerController) error {
+	glog.V(1).Infof("Running slow cooker with controller: %+v", controller)
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
 	if urlErr != nil {

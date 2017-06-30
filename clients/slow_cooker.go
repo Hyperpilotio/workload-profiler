@@ -41,12 +41,12 @@ type SlowCookerCalibrateRequest struct {
 	Calibrate *models.SlowCookerCalibrate `json:"calibrate"`
 	SLO       *SlowCookerSLO              `json:"slo"`
 	AppLoad   *models.SlowCookerAppLoad   `json:"appLoad"`
-	RunId     string                      `json:"runId"`
+	LoadTime  string                      `json:"loadTime"`
 }
 
 func (client *SlowCookerClient) RunCalibration(
-	runId string,
 	baseUrl string,
+	runId string,
 	slo models.SLO,
 	controller *models.SlowCookerController) (*SlowCookerCalibrateResponse, error) {
 	u, err := url.Parse(baseUrl)
@@ -68,9 +68,11 @@ func (client *SlowCookerClient) RunCalibration(
 		},
 		Calibrate: controller.Calibrate,
 		AppLoad:   controller.AppLoad,
+		LoadTime:  controller.LoadTime,
 	}
 
 	glog.Infof("Sending calibration request to slow cooker for stage: " + runId)
+	glog.V(1).Infof("Sending calibration request to slow cooker: %+v", request)
 	response, err := resty.R().SetBody(request).Post(u.String())
 	if err != nil {
 		return nil, errors.New("Unable to send calibrate request to slow cooker: " + err.Error())

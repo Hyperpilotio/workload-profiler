@@ -15,22 +15,22 @@ type BenchmarkController struct {
 }
 
 type SlowCookerAppLoad struct {
-	Qps           int    `json:"qps"`
-	Url           string `json:"url"`
-	Method        string `json:"method"`
-	TotalRequests int    `json:"totalRequests"`
+	Qps           int    `bson:"qps" json:"qps"`
+	Url           string `bson:"url" json:"url"`
+	Method        string `bson:"method" json:"method"`
+	TotalRequests int    `bson:"totalRequests" json:"totalRequests"`
 }
 
 type SlowCookerCalibrate struct {
-	InitialConcurrency int `json:"initialConcurrency"`
-	Step               int `json:"step"`
-	RunsPerIntensity   int `json:"runsPerIntensity"`
+	InitialConcurrency int `bson:"initialConcurrency" json:"initialConcurrency"`
+	Step               int `bson:"step" json:"step"`
+	RunsPerIntensity   int `bson:"runsPerIntensity" json:"runsPerIntensity"`
 }
 
 type SlowCookerController struct {
-	AppLoad   *SlowCookerAppLoad   `json:"appLoad"`
-	Calibrate *SlowCookerCalibrate `json:"calibrate"`
-	LoadTime  string               `json:"loadTime"`
+	AppLoad   *SlowCookerAppLoad   `bson:"appLoad" json:"appLoad"`
+	Calibrate *SlowCookerCalibrate `bson:"calibrate" json:"calibrate"`
+	LoadTime  string               `bson:"loadTime" json:"loadTime"`
 }
 
 type LocustController struct {
@@ -57,11 +57,11 @@ type BenchmarkConfig struct {
 }
 
 type Benchmark struct {
-	Name         string            `bson:"name"`
-	ResourceType string            `bson:"resourceType"`
-	Image        string            `bson:"image"`
-	Intensity    int               `bson:"intensity"`
-	Configs      []BenchmarkConfig `bson:"configs"`
+	Name         string            `bson:"name" json:"name"`
+	ResourceType string            `bson:"resourceType" json:"resourceType"`
+	Image        string            `bson:"image" json:"image"`
+	Intensity    int               `bson:"intensity" json:"intensity"`
+	Configs      []BenchmarkConfig `bson:"configs" json:"configs"`
 }
 
 type ApplicationConfig struct {
