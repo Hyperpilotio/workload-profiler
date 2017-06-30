@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
-	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	"github.com/spf13/viper"
 )
 
@@ -23,12 +22,6 @@ func NewServer(config *viper.Viper) *Server {
 		Config:   config,
 		ConfigDB: NewConfigDB(config),
 	}
-}
-
-type BenchmarkSet struct {
-	Name       string
-	Benchmarks []apis.Benchmark
-	AgentMap   map[string]string
 }
 
 // StartServer starts a web server
@@ -98,43 +91,9 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
-	benchmarkMappings, err := server.ConfigDB.GetBenchmarkMappings()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": true,
-			"data":  "Unable to get benchmark-to-agent mappings: " + err.Error(),
-		})
-		return
-	}
-
-	// Construct BenchmarkSets from benchmarks and benchmarkMappings
-	var benchmarkSets []BenchmarkSet
-	for _, benchmarkMapping := range benchmarkMappings {
-		benchmarkSet := BenchmarkSet{
-			Name:       benchmarkMapping.Name,
-			AgentMap:   make(map[string]string),
-			Benchmarks: []apis.Benchmark{},
-		}
-
-		for _, agentMapping := range benchmarkMapping.AgentMapping {
-			benchmarkSet.AgentMap[agentMapping.BenchmarkName] = agentMapping.AgentId
-			for _, benchmark := range benchmarks {
-				if benchmark.Name == agentMapping.BenchmarkName {
-					if benchmark.HostConfig != nil {
-						benchmark.HostConfig.TargetHost = server.Config.GetString("benchmarkTargetHost")
-						glog.V(1).Infof("Replaced target host for benchmark %s with %s",
-							benchmark.Name, benchmark.HostConfig.TargetHost)
-					}
-					benchmarkSet.Benchmarks = append(benchmarkSet.Benchmarks, benchmark)
-				}
-			}
-		}
-		benchmarkSets = append(benchmarkSets, benchmarkSet)
-	}
-
 	run, err := NewBenchmarkRun(
 		applicationConfig,
-		benchmarkSets,
+		benchmarks,
 		request.DeploymentId,
 		request.StartingIntensity,
 		request.Step,

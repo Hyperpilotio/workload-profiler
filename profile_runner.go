@@ -7,17 +7,20 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/nu7hatch/gouuid"
 	"github.com/spf13/viper"
 )
 
 type ProfileRun struct {
 	Id                        string
-	DeployerClient            *DeployerClient
-	BenchmarkControllerClient *BenchmarkControllerClient
+	DeployerClient            *clients.DeployerClient
+	BenchmarkControllerClient *clients.BenchmarkControllerClient
+	SlowCookerClient          *clients.SlowCookerClient
 	DeploymentId              string
 	MetricsDB                 *MetricsDB
-	ApplicationConfig         *ApplicationConfig
+	ApplicationConfig         *models.ApplicationConfig
 }
 
 type CalibrationRun struct {
@@ -27,11 +30,11 @@ type CalibrationRun struct {
 type BenchmarkRun struct {
 	ProfileRun
 
-	StartingIntensity     int
-	Step                  int
-	SloTolerance          float64
-	BenchmarkAgentClients map[string]BenchmarkAgentClient
-	BenchmarkSets         []BenchmarkSet
+	StartingIntensity    int
+	Step                 int
+	SloTolerance         float64
+	BenchmarkAgentClient *clients.BenchmarkAgentClient
+	Benchmarks           []models.Benchmark
 }
 
 type ProfileResults struct {
@@ -54,8 +57,8 @@ func generateId(prefix string) (string, error) {
 }
 
 func NewBenchmarkRun(
-	applicationConfig *ApplicationConfig,
-	benchmarkSets []BenchmarkSet,
+	applicationConfig *models.ApplicationConfig,
+	benchmarks []models.Benchmark,
 	deploymentId string,
 	startingIntensity int,
 	step int,
@@ -68,26 +71,9 @@ func NewBenchmarkRun(
 	}
 	glog.V(1).Infof("New benchmark run with id: %s", id)
 
-	deployerClient, deployerErr := NewDeployerClient(config)
+	deployerClient, deployerErr := clients.NewDeployerClient(config)
 	if deployerErr != nil {
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
-	}
-
-	benchmarkAgentClients := make(map[string]BenchmarkAgentClient)
-	agentIds := []string{"benchmark-agent-2", "benchmark-agent"} //TODO: change benchmark-agent-2 to benchmark-agent-bench later
-	for _, agentId := range agentIds {
-		url, urlErr := deployerClient.GetServiceUrl(deploymentId, agentId)
-		if urlErr != nil {
-			return nil, errors.New("Unable to get url for " + agentId + ": " + urlErr.Error())
-		}
-
-		benchmarkAgentClient, benchmarkAgentErr := NewBenchmarkAgentClient(url)
-		if benchmarkAgentErr != nil {
-			return nil, errors.New("Unable to create new client for " + agentId + ": " + benchmarkAgentErr.Error())
-		}
-		glog.V(1).Infof("Created new benchmark agent client for %s:%+v", agentId, benchmarkAgentClient)
-
-		benchmarkAgentClients[agentId] = *benchmarkAgentClient
 	}
 
 	run := &BenchmarkRun{
@@ -95,27 +81,28 @@ func NewBenchmarkRun(
 			Id:                        id,
 			ApplicationConfig:         applicationConfig,
 			DeployerClient:            deployerClient,
-			BenchmarkControllerClient: &BenchmarkControllerClient{},
+			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
+			SlowCookerClient:          &clients.SlowCookerClient{},
 			MetricsDB:                 NewMetricsDB(config),
 			DeploymentId:              deploymentId,
 		},
-		StartingIntensity:     startingIntensity,
-		Step:                  step,
-		SloTolerance:          sloTolerance,
-		BenchmarkAgentClients: benchmarkAgentClients,
-		BenchmarkSets:         benchmarkSets,
+		StartingIntensity:    startingIntensity,
+		Step:                 step,
+		SloTolerance:         sloTolerance,
+		BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
+		Benchmarks:           benchmarks,
 	}
 
 	return run, nil
 }
 
-func NewCalibrationRun(deploymentId string, applicationConfig *ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
+func NewCalibrationRun(deploymentId string, applicationConfig *models.ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
 	id, err := generateId("calibrate")
 	if err != nil {
 		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
 	}
 
-	deployerClient, deployerErr := NewDeployerClient(config)
+	deployerClient, deployerErr := clients.NewDeployerClient(config)
 	if deployerErr != nil {
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
@@ -125,7 +112,7 @@ func NewCalibrationRun(deploymentId string, applicationConfig *ApplicationConfig
 			Id:                        id,
 			ApplicationConfig:         applicationConfig,
 			DeployerClient:            deployerClient,
-			BenchmarkControllerClient: &BenchmarkControllerClient{},
+			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			MetricsDB:                 NewMetricsDB(config),
 			DeploymentId:              deploymentId,
 		},
@@ -134,11 +121,9 @@ func NewCalibrationRun(deploymentId string, applicationConfig *ApplicationConfig
 	return run, nil
 }
 
-func (run *BenchmarkRun) deleteBenchmarkSet(benchmarkSet BenchmarkSet) error {
-	for _, benchmark := range benchmarkSet.Benchmarks {
-		agentId := benchmarkSet.AgentMap[benchmark.Name]
-		agentClient := run.BenchmarkAgentClients[agentId]
-		if err := agentClient.DeleteBenchmark(benchmark.Name); err != nil {
+func (run *BenchmarkRun) deleteBenchmark(agentUrl string, benchmark models.Benchmark) error {
+	for _, config := range benchmark.Configs {
+		if err := run.BenchmarkAgentClient.DeleteBenchmark(agentUrl, benchmark.Name); err != nil {
 			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
 				benchmark.Name, err.Error())
 		}
@@ -147,7 +132,7 @@ func (run *BenchmarkRun) deleteBenchmarkSet(benchmarkSet BenchmarkSet) error {
 	return nil
 }
 
-func (run *CalibrationRun) runBenchmarkController(runId string, controller *BenchmarkController) error {
+func (run *CalibrationRun) runBenchmarkController(runId string, controller *models.BenchmarkController) error {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
 	if urlErr != nil {
@@ -160,34 +145,79 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *Benc
 		return errors.New("Unable to run calibration: " + err.Error())
 	}
 
-	testResults := []CalibrationTestResult{}
+	testResults := []models.CalibrationTestResult{}
 	for _, runResult := range results.Results.RunResults {
 		qosValue := runResult.Results[run.ApplicationConfig.SLO.Metric].(float64)
 
 		// TODO: For now we assume just one intensity argument, but we can support multiple
 		// in the future.
 		loadIntensity := runResult.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
-		testResults = append(testResults, CalibrationTestResult{
+		testResults = append(testResults, models.CalibrationTestResult{
 			QosValue:      qosValue,
 			LoadIntensity: loadIntensity,
 		})
 	}
 
-	finalIntensity := results.Results.FinalIntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
+	finalIntensity := results.Results.FinalResults.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
 	// Translate benchmark controller results to expected results format for analyzer
-	finalResult := &CalibrationTestResult{
+	finalResult := &models.CalibrationTestResult{
 		LoadIntensity: finalIntensity,
-		QosValue:      20000, // TODO: remove fake data later
+		QosValue:      results.Results.FinalResults.Qos,
 	}
-	calibrationResults := &CalibrationResults{
-		TestId:         run.Id,
-		AppName:        run.ApplicationConfig.Name,
-		LoadTester:     loadTesterName,
-		QosMetrics:     []string{run.ApplicationConfig.SLO.Type},
-		TestDuration:   time.Since(startTime).String(),
-		TestResults:    testResults,
-		FinalResult:    finalResult,
-		FinalIntensity: finalIntensity,
+	calibrationResults := &models.CalibrationResults{
+		TestId:       run.Id,
+		AppName:      run.ApplicationConfig.Name,
+		LoadTester:   loadTesterName,
+		QosMetrics:   []string{run.ApplicationConfig.SLO.Type},
+		TestDuration: time.Since(startTime).String(),
+		TestResults:  testResults,
+		FinalResult:  finalResult,
+	}
+
+	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
+		return errors.New("Unable to store calibration results: " + err.Error())
+	}
+
+	return nil
+}
+
+func (run *CalibrationRun) runSlowCookerController(runId string, controller *models.SlowCookerController) error {
+	loadTesterName := run.ApplicationConfig.LoadTester.Name
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
+	if urlErr != nil {
+		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	}
+
+	startTime := time.Now()
+	results, err := run.SlowCookerClient.RunCalibration(url, runId, run.ApplicationConfig.SLO, controller)
+	if err != nil {
+		return errors.New("Unable to run calibration with slow cooker: " + err.Error())
+	}
+
+	testResults := []models.CalibrationTestResult{}
+	for _, runResult := range results.Results {
+		qosValue := runResult.LatencyMs
+		loadIntensity := runResult.Concurrency
+		testResults = append(testResults, models.CalibrationTestResult{
+			QosValue:      float64(qosValue),
+			LoadIntensity: float64(loadIntensity),
+		})
+	}
+
+	finalIntensity := results.FinalResult
+	// Translate benchmark controller results to expected results format for analyzer
+	finalResult := &models.CalibrationTestResult{
+		LoadIntensity: float64(finalIntensity.Concurrency),
+		QosValue:      float64(finalIntensity.LatencyMs),
+	}
+	calibrationResults := &models.CalibrationResults{
+		TestId:       run.Id,
+		AppName:      run.ApplicationConfig.Name,
+		LoadTester:   loadTesterName,
+		QosMetrics:   []string{run.ApplicationConfig.SLO.Type},
+		TestDuration: time.Since(startTime).String(),
+		TestResults:  testResults,
+		FinalResult:  finalResult,
 	}
 
 	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
@@ -200,7 +230,9 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *Benc
 func (run *BenchmarkRun) runBenchmarkController(
 	stageId string,
 	appIntensity float64,
-	controller *BenchmarkController) (*RunBenchmarkResponse, error) {
+	benchmarkIntensity int,
+	benchmarkName string,
+	controller *models.BenchmarkController) ([]*models.BenchmarkResult, error) {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
 	if urlErr != nil {
@@ -212,7 +244,24 @@ func (run *BenchmarkRun) runBenchmarkController(
 		return nil, errors.New("Unable to run benchmark: " + err.Error())
 	}
 
-	return response, nil
+	results := []*models.BenchmarkResult{}
+	for _, runResult := range response.Results {
+		qosResults := runResult.Results
+		qosMetric := fmt.Sprintf("%v", qosResults[run.ApplicationConfig.SLO.Metric])
+		qosValue, parseErr := strconv.ParseFloat(qosMetric, 64)
+		if parseErr != nil {
+			return nil, fmt.Errorf("Unable to parse QoS value %s to float: %s", qosMetric, parseErr.Error())
+		}
+
+		result := &models.BenchmarkResult{
+			Benchmark: benchmarkName,
+			Intensity: benchmarkIntensity,
+			QosValue:  qosValue,
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
 }
 
 func min(a int, b int) int {
@@ -223,11 +272,60 @@ func min(a int, b int) int {
 	}
 }
 
-func (run *BenchmarkRun) runLocustController(runId string, appIntensity float64, controller *LocustController) (*RunBenchmarkResponse, error) {
+func (run *BenchmarkRun) runLocustController(runId string, appIntensity float64, controller *models.LocustController) ([]*models.BenchmarkResult, error) {
 	return nil, errors.New("Unimplemented")
 }
 
-func (run *CalibrationRun) runLocustController(runId string, controller *LocustController) error {
+func getSlowcookerBenchmarkQos(result *clients.SlowCookerBenchmarkResult, metric string) (int64, error) {
+	switch metric {
+	case "50":
+		return result.Percentile50, nil
+	case "95":
+		return result.Percentile95, nil
+	case "99":
+		return result.Percentile99, nil
+	}
+
+	return 0, errors.New("Unsupported latency metric: " + metric)
+}
+
+func (run *BenchmarkRun) runSlowCookerController(
+	stageId string,
+	appIntensity float64,
+	benchmarkIntensity int,
+	benchmarkName string,
+	controller *models.SlowCookerController) ([]*models.BenchmarkResult, error) {
+	loadTesterName := run.ApplicationConfig.LoadTester.Name
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
+	if urlErr != nil {
+		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	}
+
+	response, err := run.SlowCookerClient.RunBenchmark(url, stageId, appIntensity, &run.ApplicationConfig.SLO, controller)
+	if err != nil {
+		return nil, errors.New("Unable to run benchmark: " + err.Error())
+	}
+
+	results := []*models.BenchmarkResult{}
+	for _, runResult := range response.Results {
+		qosValue, err := getSlowcookerBenchmarkQos(&runResult, run.ApplicationConfig.SLO.Metric)
+		if err != nil {
+			return nil, errors.New("Unable to get benchmark qos from slow cooker result: " + err.Error())
+		}
+
+		result := &models.BenchmarkResult{
+			Benchmark: benchmarkName,
+			Intensity: benchmarkIntensity,
+			QosValue:  float64(qosValue),
+			Failures:  runResult.Failures,
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+func (run *CalibrationRun) runLocustController(runId string, controller *models.LocustController) error {
 	/*
 		waitTime, err := time.ParseDuration(controller.StepDuration)
 		if err != nil {
@@ -293,79 +391,115 @@ func (run *CalibrationRun) Run() error {
 		return run.runBenchmarkController(run.Id, loadTester.BenchmarkController)
 	} else if loadTester.LocustController != nil {
 		return run.runLocustController(run.Id, loadTester.LocustController)
+	} else if loadTester.SlowCookerController != nil {
+		return run.runSlowCookerController(run.Id, loadTester.SlowCookerController)
 	}
 
 	return errors.New("No controller found in calibration request")
 }
 
-func (run *BenchmarkRun) runBenchmarkSet(id string, benchmarkSet BenchmarkSet, intensity int) error {
-	for _, benchmark := range benchmarkSet.Benchmarks {
-		benchmark.Intensity = intensity
-		agentId := benchmarkSet.AgentMap[benchmark.Name]
-		agentClient := run.BenchmarkAgentClients[agentId]
-		if err := agentClient.CreateBenchmark(&benchmark); err != nil {
-			return fmt.Errorf("Unable to run benchmark %s with %s: %s",
-				benchmark.Name, agentId, err.Error())
+func (run *BenchmarkRun) getBenchmarkAgentUrl(config models.BenchmarkConfig) (string, error) {
+	var colocatedService string
+	switch config.PlacementHost {
+	case "loadtester":
+		colocatedService = run.ApplicationConfig.LoadTester.Name
+	case "service":
+		// TODO: We will have multiple services in the future
+		colocatedService = run.ApplicationConfig.ServiceNames[0]
+	default:
+		return "", errors.New("Unknown placement host for benchmark: " + config.PlacementHost)
+	}
+
+	serviceUrl, err := run.DeployerClient.GetColocatedServiceUrl(colocatedService, "benchmark-agent")
+	if err != nil {
+		return "", fmt.Errorf(
+			"Unable to get service %s url located next to %s: %s",
+			"benchmark-agent",
+			colocatedService,
+			err.Error())
+	}
+
+	return serviceUrl, nil
+}
+
+func (run *BenchmarkRun) runBenchmark(id string, benchmark models.Benchmark, intensity int) error {
+	for _, config := range benchmark.Configs {
+		agentUrl, err := run.GetBenchmarkAgentUrl(config)
+		if err != nil {
+			return fmt.Errorf(
+				"Unable to get benchmark agent url: " + err.Error())
+		}
+
+		if err := run.BenchmarkAgentClient.CreateBenchmark(agentUrl, &benchmark, intensity); err != nil {
+			return fmt.Errorf("Unable to run benchmark %s with intensity %d: %s",
+				benchmark.Name, intensity, err.Error())
 		}
 	}
 
 	return nil
 }
 
-func (run *BenchmarkRun) runApplicationLoadTest(stageId string, appIntensity float64) (*RunBenchmarkResponse, error) {
+func (run *BenchmarkRun) runApplicationLoadTest(
+	stageId string,
+	appIntensity float64,
+	benchmarkIntensity int,
+	benchmarkName string) ([]*models.BenchmarkResult, error) {
 	loadTester := run.ApplicationConfig.LoadTester
 	if loadTester.BenchmarkController != nil {
-		return run.runBenchmarkController(stageId, appIntensity, loadTester.BenchmarkController)
+		return run.runBenchmarkController(
+			stageId,
+			appIntensity,
+			benchmarkIntensity,
+			benchmarkName,
+			loadTester.BenchmarkController)
 	} else if loadTester.LocustController != nil {
-		return run.runLocustController(stageId, appIntensity, loadTester.LocustController)
-	} else {
-		return nil, errors.New("No controller found in calibration request")
+		return run.runLocustController(
+			stageId,
+			appIntensity,
+			loadTester.LocustController)
+	} else if loadTester.SlowCookerController != nil {
+		return run.runSlowCookerController(
+			stageId,
+			appIntensity,
+			benchmarkIntensity,
+			benchmarkName,
+			loadTester.SlowCookerController)
 	}
 
+	return nil, errors.New("No controller found in calibration request")
 }
 
-func (run *BenchmarkRun) runAppWithBenchmark(benchmarkSet BenchmarkSet, appIntensity float64) ([]*BenchmarkResult, error) {
+func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appIntensity float64) ([]*models.BenchmarkResult, error) {
 	currentIntensity := run.StartingIntensity
-	results := []*BenchmarkResult{}
+	results := []*models.BenchmarkResult{}
 
 	counts := 0
 	for {
-		glog.Infof("Running benchmark %s at intensity %d along with app load test", benchmarkSet.Name, currentIntensity)
-		stageId, err := generateId(benchmarkSet.Name)
+		glog.Infof("Running benchmark %s at intensity %d along with app load test", benchmark.Name, currentIntensity)
+		stageId, err := generateId(benchmark.Name)
 		if err != nil {
-			return nil, errors.New("Unable to generate stage id for benchmark " + benchmarkSet.Name + ": " + err.Error())
+			return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())
 		}
 
-		if err = run.runBenchmarkSet(stageId, benchmarkSet, currentIntensity); err != nil {
-			run.deleteBenchmarkSet(benchmarkSet)
-			return nil, errors.New("Unable to run benchmark " + benchmarkSet.Name + ": " + err.Error())
+		if err = run.runBenchmark(stageId, benchmark, currentIntensity); err != nil {
+			run.deleteBenchmark(benchmark)
+			return nil, errors.New("Unable to run benchmark " + benchmark.Name + ": " + err.Error())
 		}
 
-		response, resultErr := run.runApplicationLoadTest(stageId, appIntensity)
+		runResults, resultErr := run.runApplicationLoadTest(stageId, appIntensity, currentIntensity, benchmark.Name)
 		if resultErr != nil {
 			// Run through all benchmarks even if one failed
-			glog.Warningf("Unable to run app load test with benchmark %s: %s", benchmarkSet.Name, resultErr.Error())
+			glog.Warningf("Unable to run app load test with benchmark %s: %s", benchmark.Name, resultErr.Error())
 		} else {
-			for _, runResult := range response.Results {
-				qosResults := runResult.Results
-				qosMetric := fmt.Sprintf("%v", qosResults[run.ApplicationConfig.SLO.Metric])
-				qosValue, parseErr := strconv.ParseFloat(qosMetric, 64)
-				if parseErr != nil {
-					return nil, fmt.Errorf("Unable to parse QoS value %s to float: %s", qosMetric, parseErr.Error())
-				}
-
-				result := &BenchmarkResult{
-					Intensity: currentIntensity,
-					QosValue:  qosValue,
-					Benchmark: benchmarkSet.Name,
-				}
+			for _, result := range runResults {
 				results = append(results, result)
 			}
+
 			counts += 1
 		}
 
-		if err := run.deleteBenchmarkSet(benchmarkSet); err != nil {
-			return nil, errors.New("Unable to delete benchmark " + benchmarkSet.Name + ": " + err.Error())
+		if err := run.deleteBenchmark(benchmark); err != nil {
+			return nil, errors.New("Unable to delete benchmark " + benchmark.Name + ": " + err.Error())
 		}
 
 		if currentIntensity >= 100 {
@@ -378,12 +512,12 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmarkSet BenchmarkSet, appInten
 }
 
 func (run *BenchmarkRun) Run() error {
-	metric, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name, &CalibrationResults{})
+	metric, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name, &models.CalibrationResults{})
 	if err != nil {
 		return errors.New("Unable to get calibration results for app " + run.ApplicationConfig.Name + ": " + err.Error())
 	}
 
-	calibration := metric.(*CalibrationResults)
+	calibration := metric.(*models.CalibrationResults)
 	glog.V(1).Infof("Read calibration results for app %s", run.ApplicationConfig.Name)
 
 	runResults := &BenchmarkRunResults{
@@ -393,21 +527,21 @@ func (run *BenchmarkRun) Run() error {
 		Services:      run.ApplicationConfig.ServiceNames,
 		ServiceInTest: run.ApplicationConfig.Name, // TODO: We assume only one service for now
 		LoadTester:    calibration.LoadTester,
-		AppCapacity:   calibration.FinalIntensity,
+		AppCapacity:   calibration.FinalResult.LoadIntensity,
 		SloMetric:     run.ApplicationConfig.SLO.Metric,
 		SloTolerance:  run.SloTolerance,
 		Benchmarks:    []string{},
-		TestResult:    []*BenchmarkResult{},
+		TestResult:    []*models.BenchmarkResult{},
 	}
 
-	for _, benchmarkSet := range run.BenchmarkSets {
-		glog.V(1).Infof("Starting benchmark runs with benchmark set: %+v", benchmarkSet)
-		results, err := run.runAppWithBenchmark(benchmarkSet, calibration.FinalIntensity)
+	for _, benchmark := range run.Benchmarks {
+		glog.V(1).Infof("Starting benchmark runs with benchmark: %+v", benchmark)
+		results, err := run.runAppWithBenchmark(benchmark, calibration.FinalResult.LoadIntensity)
 		if err != nil {
-			return errors.New("Unable to run benchmark set " + benchmarkSet.Name + ": " + err.Error())
+			return errors.New("Unable to run benchmark " + benchmark.Name + ": " + err.Error())
 		}
-		glog.V(1).Infof("Finished running app along with benchmark set %s", benchmarkSet.Name)
-		runResults.Benchmarks = append(runResults.Benchmarks, benchmarkSet.Name)
+		glog.V(1).Infof("Finished running app along with benchmark %s", benchmark.Name)
+		runResults.Benchmarks = append(runResults.Benchmarks, benchmark.Name)
 		for _, result := range results {
 			runResults.TestResult = append(runResults.TestResult, result)
 		}

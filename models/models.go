@@ -1,15 +1,36 @@
-package main
+package models
 
+import (
+	benchmarkagent "github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
+)
+
+type Command struct {
+	Path string   `bson:"path" json:"path"`
+	Args []string `bson:"args" json:"args"`
+}
+x
 type BenchmarkController struct {
 	Initialize *Command          `bson:"initialize" json:"initialize"`
 	Command    LoadTesterCommand `bson:"command" json:"command"`
 }
 
+type SlowCookerAppLoad struct {
+	Qps           int    `json:"qps"`
+	Url           string `json:"url"`
+	Method        string `json:"method"`
+	TotalRequests int    `json:"totalRequests"`
+}
+
+type SlowCookerCalibrate struct {
+	InitialConcurrency int `json:"initialConcurrency"`
+	Step               int `json:"step"`
+	RunsPerIntensity   int `json:"runsPerIntensity"`
+}
+
 type SlowCookerController struct {
-	StartCount   int    `bson:"startCount" json:"startCount"`
-	EndCount     int    `bson:"endCount" json:"endCount"`
-	StepCount    int    `bson:"stepCount" json:"stepCount"`
-	StepDuration string `bson:"stepDuration" json:"stepDuration"`
+	AppLoad   *SlowCookerAppLoad   `json:"appLoad"`
+	Calibrate *SlowCookerCalibrate `json:"calibrate"`
+	LoadTime  string               `json:"loadTime"`
 }
 
 type LocustController struct {
@@ -19,15 +40,28 @@ type LocustController struct {
 	StepDuration string `bson:"stepDuration" json:"stepDuration"`
 }
 
-type Command struct {
-	Path string   `json:"path"`
-	Args []string `json:"args"`
-}
-
 type SLO struct {
 	Metric string  `bson:"metric" json:"metric"`
 	Value  float32 `bson:"value" json:"value"`
 	Type   string  `bson:"type" json:"type"`
+}
+
+type BenchmarkConfig struct {
+	Name           string                         `bson:"name"`
+	DurationConfig *benchmarkagent.DurationConfig `bson:"durationConfig" json:"durationConfig" binding:"required`
+	CgroupConfig   *benchmarkagent.CgroupConfig   `bson:"cgroupConfig" json:"cgroupConfig"`
+	HostConfig     *benchmarkagent.HostConfig     `bson:"hostConfig" json:"hostConfig"`
+	NetConfig      *benchmarkagent.NetConfig      `bson:"netConfig" json:"netConfig"`
+	Command        Command                        `bson:"command" json:"command" binding:"required"`
+	PlacementHost  string                         `bson:"placementHost" json:"placementHost"`
+}
+
+type Benchmark struct {
+	Name         string            `bson:"name"`
+	ResourceType string            `bson:"resourceType"`
+	Image        string            `bson:"image"`
+	Intensity    int               `bson:"intensity"`
+	Configs      []BenchmarkConfig `bson:"configs"`
 }
 
 type ApplicationConfig struct {
@@ -58,34 +92,27 @@ type LoadTester struct {
 	SlowCookerController *SlowCookerController `bson:"slowCookerController" json:"slowCookerController"`
 }
 
-type BenchmarkMapping struct {
-	Name         string `bson:"name" json:"name"`
-	AgentMapping []struct {
-		BenchmarkName string `bson:"benchmarkName" json:"benchmarkName"`
-		AgentId       string `bson:"agentId" json:"agentId"`
-	} `bson:"agentMapping" json:"agentMapping"`
-}
-
 type CalibrationTestResult struct {
 	LoadIntensity float64 `bson:"loadIntensity" json:"loadIntensity"`
 	QosValue      float64 `bson:"qosValue" json:"qosValue"`
+	Failures      uint64  `bson:"failures" json:"failures"`
 }
 
 type CalibrationResults struct {
-	TestId         string                  `bson:"testId" json:"testId"`
-	AppName        string                  `bson:"appName" json:"appName"`
-	LoadTester     string                  `bson:"loadTester" json:"loadTester"`
-	QosMetrics     []string                `bson:"qosMetrics" json:"qosMetrics"`
-	TestDuration   string                  `bson:"testDuration" json:"testDuration"`
-	TestResults    []CalibrationTestResult `bson:"testResult" json:"testResult"`
-	FinalResult    *CalibrationTestResult  `bson:"finalResult" json:"finalResult"`
-	FinalIntensity float64                 `bson:"finalIntensity" json:"finalIntensity"`
+	TestId       string                  `bson:"testId" json:"testId"`
+	AppName      string                  `bson:"appName" json:"appName"`
+	LoadTester   string                  `bson:"loadTester" json:"loadTester"`
+	QosMetrics   []string                `bson:"qosMetrics" json:"qosMetrics"`
+	TestDuration string                  `bson:"testDuration" json:"testDuration"`
+	TestResults  []CalibrationTestResult `bson:"testResult" json:"testResult"`
+	FinalResult  *CalibrationTestResult  `bson:"finalResult" json:"finalResult"`
 }
 
 type BenchmarkResult struct {
 	Benchmark string  `bson:"benchmark" json:"benchmark"`
 	Intensity int     `bson:"intensity" json:"intensity"`
 	QosValue  float64 `bson:"qosValue" json:"qosValue"`
+	Failures  uint64  `bson:"failures" json:"failures"`
 }
 
 type BenchmarkRunResults struct {
