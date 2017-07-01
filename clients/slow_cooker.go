@@ -44,6 +44,16 @@ type SlowCookerCalibrateRequest struct {
 	LoadTime  string                      `json:"loadTime"`
 }
 
+func (request SlowCookerCalibrateRequest) PrintVerbose() {
+	if glog.V(1) {
+		message := fmt.Sprintf("Calibration: {%+v} ", request.Calibrate)
+		message += fmt.Sprintf("SLO: {%+v} ", request.SLO)
+		message += fmt.Sprintf("AppLoad: {%+v} ", request.AppLoad)
+		message += fmt.Sprint("LoadTime: %s", request.LoadTime)
+		glog.V(1).Infof("Slow cooker calibration request: %s", message)
+	}
+}
+
 func (client *SlowCookerClient) RunCalibration(
 	baseUrl string,
 	runId string,
@@ -72,7 +82,7 @@ func (client *SlowCookerClient) RunCalibration(
 	}
 
 	glog.Infof("Sending calibration request to slow cooker for stage: " + runId)
-	glog.V(1).Infof("Sending calibration request to slow cooker: %+v", request)
+	request.PrintVerbose()
 	response, err := resty.R().SetBody(request).Post(u.String())
 	if err != nil {
 		return nil, errors.New("Unable to send calibrate request to slow cooker: " + err.Error())
@@ -140,7 +150,15 @@ type SlowCookerBenchmarkRequest struct {
 	LoadTime         string                    `json:"loadTime"`
 	RunsPerIntensity int                       `json:"runsPerIntensity"`
 	AppLoad          *models.SlowCookerAppLoad `json:"appLoad"`
-	RunId            string                    `json:"runId"`
+}
+
+func (request SlowCookerBenchmarkRequest) PrintVerbose() {
+	if glog.V(1) {
+		message := fmt.Sprintf("AppLoad: {%+v} ", request.AppLoad)
+		message += fmt.Sprintf("RunsPerIntensity: %d ", request.RunsPerIntensity)
+		message += fmt.Sprintf("LoadTime: %s ", request.LoadTime)
+		glog.V(1).Infof("Slow cooker benchmark request: %s", message)
+	}
 }
 
 func (client *SlowCookerClient) RunBenchmark(
@@ -156,16 +174,16 @@ func (client *SlowCookerClient) RunBenchmark(
 
 	u.Path = path.Join(u.Path, "/slowcooker/benchmark/"+runId)
 
-	controller.AppLoad.Qps = int(slo.Value)
+	controller.AppLoad.Concurrency = int(appIntensity)
 
 	request := &SlowCookerBenchmarkRequest{
-		RunId:            runId,
 		AppLoad:          controller.AppLoad,
 		RunsPerIntensity: controller.Calibrate.RunsPerIntensity,
 		LoadTime:         controller.LoadTime,
 	}
 
 	glog.Infof("Sending benchmark request to slow cooker for stage: " + runId)
+	request.PrintVerbose()
 	response, err := resty.R().SetBody(request).Post(u.String())
 	if err != nil {
 		return nil, errors.New("Unable to send benchmark request to slow cooker: " + err.Error())

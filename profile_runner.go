@@ -310,7 +310,7 @@ func (run *BenchmarkRun) runSlowCookerController(
 
 	response, err := run.SlowCookerClient.RunBenchmark(url, stageId, appIntensity, &run.ApplicationConfig.SLO, controller)
 	if err != nil {
-		return nil, errors.New("Unable to run benchmark: " + err.Error())
+		return nil, errors.New("Unable to run benchmark with slow cooker: " + err.Error())
 	}
 
 	results := []*models.BenchmarkResult{}
@@ -482,7 +482,8 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appInte
 
 	counts := 0
 	for {
-		glog.Infof("Running benchmark %s at intensity %d along with app load test", benchmark.Name, currentIntensity)
+		glog.Infof("Running benchmark %s at intensity %d along with app load test intensity %d",
+			benchmark.Name, currentIntensity, appIntensity)
 		stageId, err := generateId(benchmark.Name)
 		if err != nil {
 			return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())

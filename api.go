@@ -50,10 +50,9 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	appName := c.Param("appName")
 
 	var request struct {
-		DeploymentId      string  `json:"deploymentId" binding:"required"`
-		StartingIntensity int     `json:"startingIntensity" binding:"required"`
-		Step              int     `json:"step" binding:"required"`
-		SloTolerance      float64 `json:"sloTolerance" binding:"required"`
+		DeploymentId      string `json:"deploymentId" binding:"required"`
+		StartingIntensity int    `json:"startingIntensity" binding:"required"`
+		Step              int    `json:"step" binding:"required"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -97,7 +96,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		request.DeploymentId,
 		request.StartingIntensity,
 		request.Step,
-		request.SloTolerance,
+		0, // TODO: Replace with some real value when needed
 		server.Config)
 
 	if err != nil {

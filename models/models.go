@@ -16,6 +16,7 @@ type BenchmarkController struct {
 
 type SlowCookerAppLoad struct {
 	Qps           int    `bson:"qps" json:"qps"`
+	Concurrency   int    `bson:"concurrency" json:"concurrency"`
 	Url           string `bson:"url" json:"url"`
 	Method        string `bson:"method" json:"method"`
 	TotalRequests int    `bson:"totalRequests" json:"totalRequests"`
@@ -47,7 +48,7 @@ type SLO struct {
 }
 
 type BenchmarkConfig struct {
-	Name           string                         `bson:"name"`
+	Name           string                         `bson:"name" json:"name"`
 	DurationConfig *benchmarkagent.DurationConfig `bson:"durationConfig" json:"durationConfig" binding:"required`
 	CgroupConfig   *benchmarkagent.CgroupConfig   `bson:"cgroupConfig" json:"cgroupConfig"`
 	HostConfig     *benchmarkagent.HostConfig     `bson:"hostConfig" json:"hostConfig"`
