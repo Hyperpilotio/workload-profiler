@@ -129,7 +129,7 @@ func (run *BenchmarkRun) deleteBenchmark(benchmark models.Benchmark) error {
 				"Unable to get benchmark agent url: " + err.Error())
 		}
 
-		if err := run.BenchmarkAgentClient.DeleteBenchmark(agentUrl, benchmark.Name); err != nil {
+		if err := run.BenchmarkAgentClient.DeleteBenchmark(agentUrl, config.Name); err != nil {
 			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
 				benchmark.Name, err.Error())
 		}
