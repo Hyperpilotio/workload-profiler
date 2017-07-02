@@ -13,6 +13,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/hyperpilotio/workload-profiler/models"
+	"github.com/op/go-logging"
 )
 
 type BenchmarkControllerClient struct{}
@@ -45,7 +46,8 @@ func (client *BenchmarkControllerClient) RunCalibration(
 	baseUrl string,
 	stageId string,
 	controller *models.BenchmarkController,
-	slo models.SLO) (*BenchmarkControllerCalibrationResponse, error) {
+	slo models.SLO,
+	logger *logging.Logger) (*BenchmarkControllerCalibrationResponse, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, errors.New("Unable to parse url: " + err.Error())

@@ -5,9 +5,14 @@ import (
 	deployer "github.com/hyperpilotio/deployer/apis"
 )
 
+type Command struct {
+	Path string   `bson:"path" json:"path"`
+	Args []string `bson:"args" json:"args"`
+}
+
 type BenchmarkController struct {
-	Initialize *Command          `bson:"initialize" json:"initialize"`
-	Command    LoadTesterCommand `bson:"command" json:"command"`
+	Initialize *benchmarkagent.Command `bson:"initialize" json:"initialize"`
+	Command    LoadTesterCommand       `bson:"command" json:"command"`
 }
 
 type SlowCookerAppLoad struct {
@@ -49,8 +54,8 @@ type ApplicationTask struct {
 }
 
 type TaskDefinitions struct {
-	LoadTests    []KubernetesTask `bson:"loadTests" json:"loadTests"`
-	Applications []KubernetesTask `bson:"applications" json:"applications"`
+	LoadTests    []deployer.KubernetesTask `bson:"loadTests" json:"loadTests"`
+	Applications []deployer.KubernetesTask `bson:"applications" json:"applications"`
 }
 
 type BenchmarkConfig struct {
@@ -59,7 +64,7 @@ type BenchmarkConfig struct {
 	CgroupConfig   *benchmarkagent.CgroupConfig   `bson:"cgroupConfig" json:"cgroupConfig"`
 	HostConfig     *benchmarkagent.HostConfig     `bson:"hostConfig" json:"hostConfig"`
 	NetConfig      *benchmarkagent.NetConfig      `bson:"netConfig" json:"netConfig"`
-	Command        Command                        `bson:"command" json:"command" binding:"required"`
+	Command        benchmarkagent.Command         `bson:"command" json:"command" binding:"required"`
 	PlacementHost  string                         `bson:"placementHost" json:"placementHost"`
 }
 

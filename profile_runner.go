@@ -78,7 +78,7 @@ func NewBenchmarkRun(
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
-	log, logErr := log.NewLogger(config, runId)
+	log, logErr := log.NewLogger(config, id)
 	if logErr != nil {
 		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
 	}
@@ -103,18 +103,18 @@ func NewBenchmarkRun(
 	return run, nil
 }
 
-func NewCalibrationRun(applicationConfig *ApplicationConfig, config *viper.Viper, log *logging.Logger) (*CalibrationRun, error) {
+func NewCalibrationRun(applicationConfig *models.ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
 	id, err := generateId("calibrate")
 	if err != nil {
 		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
 	}
 
-	deployerClient, deployerErr := NewDeployerClient(config)
+	deployerClient, deployerErr := clients.NewDeployerClient(config)
 	if deployerErr != nil {
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
-	log, logErr := log.NewLogger(config, runId)
+	log, logErr := log.NewLogger(config, id)
 	if logErr != nil {
 		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
 	}
@@ -151,10 +151,10 @@ func (run *BenchmarkRun) deleteBenchmark(benchmark models.Benchmark) error {
 }
 
 func (run *BenchmarkRun) GetId() string {
-	return run.RunId
+	return run.Id
 }
 
-func (run *BenchmarkRun) GetApplicationConfig() *ApplicationConfig {
+func (run *BenchmarkRun) GetApplicationConfig() *models.ApplicationConfig {
 	return run.ApplicationConfig
 }
 
@@ -163,10 +163,10 @@ func (run *BenchmarkRun) GetLog() *log.DeploymentLog {
 }
 
 func (run *CalibrationRun) GetId() string {
-	return run.RunId
+	return run.Id
 }
 
-func (run *CalibrationRun) GetApplicationConfig() *ApplicationConfig {
+func (run *CalibrationRun) GetApplicationConfig() *models.ApplicationConfig {
 	return run.ApplicationConfig
 }
 
@@ -174,7 +174,7 @@ func (run *CalibrationRun) GetLog() *log.DeploymentLog {
 	return run.ProfileRun.DeploymentLog
 }
 
-func (run *CalibrationRun) runBenchmarkController(runId string, controller *BenchmarkController) error {
+func (run *CalibrationRun) runBenchmarkController(runId string, controller *models.BenchmarkController) error {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
 	if urlErr != nil {
@@ -270,7 +270,7 @@ func (run *CalibrationRun) runSlowCookerController(runId string, controller *mod
 	}
 
 	if b, err := json.MarshalIndent(calibrationResults, "", "  "); err == nil {
-		log.Logger.Infof("Store calibration results: %s", string(b))
+		run.GetLog().Logger.Infof("Store calibration results: %s", string(b))
 	}
 
 	return nil
@@ -527,8 +527,8 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appInte
 	log := run.ProfileRun.DeploymentLog
 	counts := 0
 	for {
-		log.Logger.Infof("Running benchmark %s at intensity %d along with app load test", benchmarkSet.Name, currentIntensity)
-		stageId, err := generateId(benchmarkSet.Name)
+		log.Logger.Infof("Running benchmark %s at intensity %d along with app load test", benchmark.Name, currentIntensity)
+		stageId, err := generateId(benchmark.Name)
 		if err != nil {
 			return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())
 		}

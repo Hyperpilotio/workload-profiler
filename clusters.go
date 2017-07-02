@@ -9,6 +9,8 @@ import (
 	"fmt"
 
 	deployer "github.com/hyperpilotio/deployer/apis"
+	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/models"
 	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
@@ -45,7 +47,7 @@ type cluster struct {
 }
 
 type Clusters struct {
-	DeployerClient *DeployerClient
+	DeployerClient *clients.DeployerClient
 	mutex          sync.Mutex
 	MaxClusters    int
 	Deployments    []*cluster
@@ -66,7 +68,7 @@ func GetStateString(state clusterState) string {
 	return ""
 }
 
-func NewClusters(deployerClient *DeployerClient) *Clusters {
+func NewClusters(deployerClient *clients.DeployerClient) *Clusters {
 	return &Clusters{
 		DeployerClient: deployerClient,
 		Deployments:    []*cluster{},
@@ -76,7 +78,7 @@ func NewClusters(deployerClient *DeployerClient) *Clusters {
 
 func (clusters *Clusters) ReserveDeployment(
 	config *viper.Viper,
-	applicationConfig *ApplicationConfig,
+	applicationConfig *models.ApplicationConfig,
 	runId string,
 	userId string,
 	log *logging.Logger) <-chan ReserveResult {
@@ -189,7 +191,7 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 }
 
 func (clusters *Clusters) createDeployment(
-	applicationConfig *ApplicationConfig,
+	applicationConfig *models.ApplicationConfig,
 	userId string,
 	runId string,
 	log *logging.Logger) (*string, error) {
@@ -253,7 +255,7 @@ func (clusters *Clusters) deleteKubernetesObjects(deploymentId string, log *logg
 }
 
 func (clusters *Clusters) deployKubernetesObjects(
-	applicationConfig *ApplicationConfig,
+	applicationConfig *models.ApplicationConfig,
 	deploymentId string,
 	userId string,
 	runId string,

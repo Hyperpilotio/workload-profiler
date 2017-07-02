@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang/glog"
-	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	"github.com/hyperpilotio/deployer/log"
+	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/spf13/viper"
 )
 
 type Job interface {
 	GetId() string
-	GetApplicationConfig() *ApplicationConfig
+	GetApplicationConfig() *models.ApplicationConfig
 	GetLog() *log.DeploymentLog
 	Run(deploymentId string) error
 }
@@ -86,7 +86,7 @@ func (server *Server) StartServer() error {
 		benchmarkGroup.POST("/:appName", server.runBenchmarks)
 	}
 
-	deployerClient, deployerErr := NewDeployerClient(server.Config)
+	deployerClient, deployerErr := clients.NewDeployerClient(server.Config)
 	if deployerErr != nil {
 		return errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
@@ -227,16 +227,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	runId, err := generateId(appName)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to generate run Id: " + err.Error(),
-		})
-		return
-	}
-
-	run, runErr := NewCalibrationRun(runId, applicationConfig, server.Config)
+	run, runErr := NewCalibrationRun(applicationConfig, server.Config)
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
@@ -245,7 +236,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	run.ProfileRun.DeploymentLog.Logger.Infof("Running %s job...", runId)
+	run.ProfileRun.DeploymentLog.Logger.Infof("Running %s job...", run.Id)
 	server.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
