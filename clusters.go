@@ -131,7 +131,7 @@ func (clusters *Clusters) ReserveDeployment(
 		}()
 	} else {
 		go func() {
-			if err := clusters.deployKubernetesObjects(applicationConfig,
+			if err := clusters.deployDeployment(applicationConfig,
 				selectedCluster.deploymentId, userId, runId, log); err != nil {
 				selectedCluster.state = FAILED
 				selectedCluster.failure = err.Error()
@@ -173,7 +173,7 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 		}
 	} else {
 		go func() {
-			if err := clusters.deleteKubernetesObjects(selectedCluster.deploymentId, log); err != nil {
+			if err := clusters.resetDeployment(selectedCluster.deploymentId, log); err != nil {
 				unreserveResult <- UnreserveResult{
 					Err: err.Error(),
 				}
@@ -246,15 +246,15 @@ func (clusters *Clusters) deleteDeployment(deploymentId string, log *logging.Log
 	return nil
 }
 
-func (clusters *Clusters) deleteKubernetesObjects(deploymentId string, log *logging.Logger) error {
-	if err := clusters.DeployerClient.DeleteKubernetesObjects(deploymentId, log); err != nil {
+func (clusters *Clusters) resetDeployment(deploymentId string, log *logging.Logger) error {
+	if err := clusters.DeployerClient.ResetDeployment(deploymentId, log); err != nil {
 		return errors.New("Unable to delete kubernetes objects: " + err.Error())
 	}
 
 	return nil
 }
 
-func (clusters *Clusters) deployKubernetesObjects(
+func (clusters *Clusters) deployDeployment(
 	applicationConfig *models.ApplicationConfig,
 	deploymentId string,
 	userId string,
@@ -292,7 +292,7 @@ func (clusters *Clusters) deployKubernetesObjects(
 			append(deployment.KubernetesDeployment.Kubernetes, *kubernetesTask)
 	}
 
-	if err := clusters.DeployerClient.DeployKubernetesObjects(applicationConfig.DeploymentTemplate,
+	if err := clusters.DeployerClient.DeployDeployment(applicationConfig.DeploymentTemplate,
 		deploymentId, deployment, applicationConfig.LoadTester.Name, log); err != nil {
 		return errors.New("Unable to deploy kubernetes objects: " + err.Error())
 	}

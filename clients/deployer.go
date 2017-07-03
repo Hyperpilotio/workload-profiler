@@ -264,9 +264,9 @@ func (client *DeployerClient) DeleteDeployment(deploymentId string, log *logging
 	return nil
 }
 
-func (client *DeployerClient) DeleteKubernetesObjects(deploymentId string, log *logging.Logger) error {
+func (client *DeployerClient) ResetDeployment(deploymentId string, log *logging.Logger) error {
 	requestUrl := UrlBasePath(client.Url) + path.Join(
-		client.Url.Path, "v1", "deployments", deploymentId, "skipDeleteCluster")
+		client.Url.Path, "v1", "deployments", deploymentId, "reset")
 
 	response, err := resty.R().Delete(requestUrl)
 	if err != nil {
@@ -280,18 +280,18 @@ func (client *DeployerClient) DeleteKubernetesObjects(deploymentId string, log *
 	return nil
 }
 
-func (client *DeployerClient) DeployKubernetesObjects(
+func (client *DeployerClient) DeployDeployment(
 	deploymentTemplate string,
 	deploymentId string,
 	deployment *deployer.Deployment,
 	loadTesterName string,
 	log *logging.Logger) error {
 	requestUrl := UrlBasePath(client.Url) + path.Join(
-		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments", deploymentId, "skipDeployCluster")
+		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments", deploymentId, "deploy")
 
 	response, err := resty.R().SetBody(deployment).Put(requestUrl)
 	if err != nil {
-		return errors.New("Unable to send delete kubernetes objects request to deployer: " + err.Error())
+		return errors.New("Unable to send deploy kubernetes objects request to deployer: " + err.Error())
 	}
 
 	if response.StatusCode() != 202 {
