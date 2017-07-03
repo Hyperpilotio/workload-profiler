@@ -153,8 +153,9 @@ func (client *DeployerClient) CreateDeployment(
 	}
 
 	var createResponse struct {
-		Error bool   `json:"error"`
-		Data  string `json:"data`
+		Error        bool   `json:"error"`
+		Data         string `json:"data`
+		DeploymentId string `json:"deploymentId`
 	}
 
 	if err := json.Unmarshal(response.Body(), &createResponse); err != nil {
@@ -165,8 +166,10 @@ func (client *DeployerClient) CreateDeployment(
 		return nil, errors.New("Unable to create deployment: " + createResponse.Data)
 	}
 
-	respDescs := strings.Split(createResponse.Data, "Creating deployment ")
-	deploymentId := strings.Replace(respDescs[1], ".", "", -1)
+	deploymentId := createResponse.DeploymentId
+	if deploymentId == "" {
+		return nil, errors.New("Unable to get deployment id")
+	}
 
 	err = funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
 		deploymentStateUrl := UrlBasePath(client.Url) +
