@@ -171,57 +171,12 @@ func (client *DeployerClient) CreateDeployment(
 		return nil, errors.New("Unable to get deployment id")
 	}
 
-	err = funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
-		deploymentStateUrl := UrlBasePath(client.Url) +
-			path.Join(client.Url.Path, "v1", "deployments", deploymentId, "state")
-
-		response, err := resty.R().Get(deploymentStateUrl)
-		if err != nil {
-			return false, errors.New("Unable to send deployment state request to deployer: " + err.Error())
-		}
-
-		if response.StatusCode() != 200 {
-			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
-		}
-
-		deploymentState := string(response.Body())
-		switch deploymentState {
-		case "Available":
-			log.Infof("%s state is available", deploymentId)
-			return true, nil
-		case "Failed":
-			return false, fmt.Errorf("%s state is Failed", deploymentId)
-		}
-
-		return false, nil
-	})
-
-	if err != nil {
+	if err := client.waitUntilDeploymentStateAvailable(deploymentId, log); err != nil {
 		return nil, errors.New("Unable to waiting for deployment state to be available: " + err.Error())
 	}
 
-	// Poll to wait for the elb dns is svailable
-	url, urlErr := client.GetServiceUrl(deploymentId, loadTesterName)
-	if urlErr != nil {
-		log.Warningf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
-	} else {
-		err = funcs.LoopUntil(time.Minute*5, time.Second*10, func() (bool, error) {
-			response, err := resty.R().Get(url)
-			if err != nil {
-				return false, nil
-			}
-
-			if response.StatusCode() != 200 {
-				return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
-			}
-
-			log.Infof("%s url to be available", loadTesterName)
-			return true, nil
-		})
-
-		if err != nil {
-			log.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
-		}
+	if err := client.waitUntilServiceUrlAvailable(deploymentId, loadTesterName, log); err != nil {
+		log.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
 	}
 
 	return &deploymentId, nil
@@ -267,23 +222,28 @@ func (client *DeployerClient) DeleteDeployment(deploymentId string, log *logging
 	return nil
 }
 
-func (client *DeployerClient) ResetDeployment(deploymentId string, log *logging.Logger) error {
+func (client *DeployerClient) ResetTemplateDeployment(
+	deploymentTemplate string, deploymentId string, log *logging.Logger) error {
 	requestUrl := UrlBasePath(client.Url) + path.Join(
-		client.Url.Path, "v1", "deployments", deploymentId, "reset")
+		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments", deploymentId, "reset")
 
-	response, err := resty.R().Delete(requestUrl)
+	response, err := resty.R().Put(requestUrl)
 	if err != nil {
-		return errors.New("Unable to send delete kubernetes objects request to deployer: " + err.Error())
+		return errors.New("Unable to send reset template deployment request to deployer: " + err.Error())
 	}
 
-	if response.StatusCode() != 202 {
-		return fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+	if response.StatusCode() != 200 {
+		return errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+	}
+
+	if err := client.waitUntilDeploymentStateAvailable(deploymentId, log); err != nil {
+		return errors.New("Unable to waiting for deployment state to be available: " + err.Error())
 	}
 
 	return nil
 }
 
-func (client *DeployerClient) DeployDeployment(
+func (client *DeployerClient) DeployExtensions(
 	deploymentTemplate string,
 	deploymentId string,
 	deployment *deployer.Deployment,
@@ -297,33 +257,66 @@ func (client *DeployerClient) DeployDeployment(
 		return errors.New("Unable to send deploy kubernetes objects request to deployer: " + err.Error())
 	}
 
-	if response.StatusCode() != 202 {
-		return fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+	if response.StatusCode() != 200 {
+		return errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 	}
 
-	// Poll to wait for the elb dns is svailable
-	url, urlErr := client.GetServiceUrl(deploymentId, loadTesterName)
-	if urlErr != nil {
-		log.Warningf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
-	} else {
-		err = funcs.LoopUntil(time.Minute*5, time.Second*10, func() (bool, error) {
-			response, err := resty.R().Get(url)
-			if err != nil {
-				return false, nil
-			}
+	if err := client.waitUntilDeploymentStateAvailable(deploymentId, log); err != nil {
+		return errors.New("Unable to waiting for deployment state to be available: " + err.Error())
+	}
 
-			if response.StatusCode() != 200 {
-				return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
-			}
-
-			log.Infof("%s url to be available", loadTesterName)
-			return true, nil
-		})
-
-		if err != nil {
-			log.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
-		}
+	if err := client.waitUntilServiceUrlAvailable(deploymentId, loadTesterName, log); err != nil {
+		log.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
 	}
 
 	return nil
+}
+
+func (client *DeployerClient) waitUntilDeploymentStateAvailable(deploymentId string, log *logging.Logger) error {
+	return funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
+		deploymentStateUrl := UrlBasePath(client.Url) +
+			path.Join(client.Url.Path, "v1", "deployments", deploymentId, "state")
+
+		response, err := resty.R().Get(deploymentStateUrl)
+		if err != nil {
+			return false, errors.New("Unable to send deployment state request to deployer: " + err.Error())
+		}
+
+		if response.StatusCode() != 200 {
+			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+		}
+
+		deploymentState := string(response.Body())
+		switch deploymentState {
+		case "Available":
+			log.Infof("%s state is available", deploymentId)
+			return true, nil
+		case "Failed":
+			return false, fmt.Errorf("%s state is Failed", deploymentId)
+		}
+
+		return false, nil
+	})
+}
+
+func (client *DeployerClient) waitUntilServiceUrlAvailable(
+	deploymentId string, serviceName string, log *logging.Logger) error {
+	url, err := client.GetServiceUrl(deploymentId, serviceName)
+	if err != nil {
+		return fmt.Errorf("Unable to retrieve service url [%s]: %s", serviceName, err.Error())
+	}
+
+	return funcs.LoopUntil(time.Minute*5, time.Second*10, func() (bool, error) {
+		response, err := resty.R().Get(url)
+		if err != nil {
+			return false, nil
+		}
+
+		if response.StatusCode() != 200 {
+			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+		}
+
+		log.Infof("%s url to be available", serviceName)
+		return true, nil
+	})
 }

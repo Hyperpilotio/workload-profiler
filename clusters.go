@@ -29,6 +29,7 @@ const (
 
 type ReserveResult struct {
 	DeploymentId string
+	OriginRunId  string
 	Err          string
 }
 
@@ -68,12 +69,62 @@ func GetStateString(state clusterState) string {
 	return ""
 }
 
+func ParseStateString(state string) clusterState {
+	switch state {
+	case "Deploying":
+		return DEPLOYING
+	case "Reserved":
+		return RESERVED
+	case "Available":
+		return AVAILABLE
+	case "Failed":
+		return FAILED
+	}
+
+	return -1
+}
+
+type StoreCluster struct {
+	DeploymentTemplate string
+	DeploymentId       string
+	RunId              string
+	State              string
+	Created            string
+}
+
 func NewClusters(deployerClient *clients.DeployerClient) *Clusters {
 	return &Clusters{
 		DeployerClient: deployerClient,
 		Deployments:    []*cluster{},
 		MaxClusters:    5,
 	}
+}
+
+func (clusters *Clusters) NewStoreCluster(runId string) (*StoreCluster, error) {
+	clusters.mutex.Lock()
+	defer clusters.mutex.Unlock()
+
+	var selectedCluster *cluster
+	for _, deployment := range clusters.Deployments {
+		if deployment.runId == runId {
+			selectedCluster = deployment
+			break
+		}
+	}
+
+	if selectedCluster == nil {
+		return nil, fmt.Errorf("Unable to find %s cluster", runId)
+	}
+
+	cluster := &StoreCluster{
+		DeploymentTemplate: selectedCluster.deploymentTemplate,
+		DeploymentId:       selectedCluster.deploymentId,
+		RunId:              runId,
+		State:              GetStateString(selectedCluster.state),
+		Created:            selectedCluster.created.Format(time.RFC822),
+	}
+
+	return cluster, nil
 }
 
 func (clusters *Clusters) ReserveDeployment(
@@ -131,7 +182,7 @@ func (clusters *Clusters) ReserveDeployment(
 		}()
 	} else {
 		go func() {
-			if err := clusters.deployDeployment(applicationConfig,
+			if err := clusters.deployExtensions(applicationConfig,
 				selectedCluster.deploymentId, userId, runId, log); err != nil {
 				selectedCluster.state = FAILED
 				selectedCluster.failure = err.Error()
@@ -139,10 +190,12 @@ func (clusters *Clusters) ReserveDeployment(
 					Err: err.Error(),
 				}
 			} else {
+				originRunId := selectedCluster.runId
 				selectedCluster.state = RESERVED
 				selectedCluster.runId = runId
 				reserveResult <- ReserveResult{
 					DeploymentId: selectedCluster.deploymentId,
+					OriginRunId:  originRunId,
 				}
 			}
 		}()
@@ -173,7 +226,10 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 		}
 	} else {
 		go func() {
-			if err := clusters.resetDeployment(selectedCluster.deploymentId, log); err != nil {
+			if err := clusters.resetTemplateDeployment(
+				selectedCluster.deploymentTemplate,
+				selectedCluster.deploymentId,
+				log); err != nil {
 				unreserveResult <- UnreserveResult{
 					Err: err.Error(),
 				}
@@ -246,15 +302,16 @@ func (clusters *Clusters) deleteDeployment(deploymentId string, log *logging.Log
 	return nil
 }
 
-func (clusters *Clusters) resetDeployment(deploymentId string, log *logging.Logger) error {
-	if err := clusters.DeployerClient.ResetDeployment(deploymentId, log); err != nil {
-		return errors.New("Unable to delete kubernetes objects: " + err.Error())
+func (clusters *Clusters) resetTemplateDeployment(
+	deploymentTemplate string, deploymentId string, log *logging.Logger) error {
+	if err := clusters.DeployerClient.ResetTemplateDeployment(deploymentTemplate, deploymentId, log); err != nil {
+		return errors.New("Unable to reset template deployment: " + err.Error())
 	}
 
 	return nil
 }
 
-func (clusters *Clusters) deployDeployment(
+func (clusters *Clusters) deployExtensions(
 	applicationConfig *models.ApplicationConfig,
 	deploymentId string,
 	userId string,
@@ -292,7 +349,7 @@ func (clusters *Clusters) deployDeployment(
 			append(deployment.KubernetesDeployment.Kubernetes, *kubernetesTask)
 	}
 
-	if err := clusters.DeployerClient.DeployDeployment(applicationConfig.DeploymentTemplate,
+	if err := clusters.DeployerClient.DeployExtensions(applicationConfig.DeploymentTemplate,
 		deploymentId, deployment, applicationConfig.LoadTester.Name, log); err != nil {
 		return errors.New("Unable to deploy kubernetes objects: " + err.Error())
 	}

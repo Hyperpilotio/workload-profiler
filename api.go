@@ -2,15 +2,18 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/hyperpilotio/blobstore"
 	"github.com/hyperpilotio/deployer/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
+
+	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 )
 
@@ -27,8 +30,9 @@ func (server *Server) AddJob(job Job) {
 
 // Server store the stats / data of every deployment
 type Server struct {
-	Config   *viper.Viper
-	ConfigDB *ConfigDB
+	Config       *viper.Viper
+	ConfigDB     *ConfigDB
+	ClusterStore blobstore.BlobStore
 
 	Clusters       *Clusters
 	JobQueue       chan Job
@@ -55,6 +59,16 @@ func (server *Server) StartServer() error {
 		if !os.IsExist(err) {
 			return errors.New("Unable to create filesPath directory: " + err.Error())
 		}
+	}
+
+	if clusterStore, err := blobstore.NewBlobStore("Clusters", server.Config); err != nil {
+		return errors.New("Unable to create deployments store: " + err.Error())
+	} else {
+		server.ClusterStore = clusterStore
+	}
+
+	if err := server.reloadClusterState(); err != nil {
+		return errors.New("Unable to reload cluster state: " + err.Error())
 	}
 
 	//gin.SetMode("release")
@@ -119,7 +133,22 @@ func (server *Server) RunJobLoop() {
 					} else {
 						deploymentId = result.DeploymentId
 						log.Logger.Infof("Deploying job %s with deploymentId is %s", runId, deploymentId)
+
+						if result.OriginRunId != "" && result.OriginRunId != runId {
+							if err := server.ClusterStore.Delete(result.OriginRunId); err != nil {
+								log.Logger.Errorf("Unable to delete profiler cluster: %s", err.Error())
+							}
+						}
 						break
+					}
+				}
+
+				storeCluster, err := server.Clusters.NewStoreCluster(runId)
+				if err != nil {
+					log.Logger.Errorf("Unable to new %s store cluster: %s", runId, err)
+				} else {
+					if err := server.ClusterStore.Store(storeCluster.RunId, storeCluster); err != nil {
+						log.Logger.Errorf("Unable to store %s cluster: %s", runId, err.Error())
 					}
 				}
 
@@ -243,4 +272,31 @@ func (server *Server) runCalibration(c *gin.Context) {
 		"error": false,
 		"data":  "",
 	})
+}
+
+// reloadClusterState reload cluster state when deployer restart
+func (server *Server) reloadClusterState() error {
+	clusters, err := server.ClusterStore.LoadAll(func() interface{} {
+		return &StoreCluster{}
+	})
+	if err != nil {
+		return fmt.Errorf("Unable to load profiler clusters: %s", err.Error())
+	}
+
+	for _, deployment := range clusters.([]interface{}) {
+		storeCluster := deployment.(*StoreCluster)
+		reloadCluster := &cluster{
+			deploymentTemplate: storeCluster.DeploymentTemplate,
+			runId:              storeCluster.RunId,
+			state:              ParseStateString(storeCluster.State),
+		}
+
+		if createdTime, err := time.Parse(time.RFC822, storeCluster.Created); err == nil {
+			reloadCluster.created = createdTime
+		}
+
+		server.Clusters.Deployments = append(server.Clusters.Deployments, reloadCluster)
+	}
+
+	return nil
 }

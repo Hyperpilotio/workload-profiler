@@ -11,3 +11,4 @@ import:
 - package: github.com/hyperpilotio/deployer
 - package: github.com/hyperpilotio/go-utils
 - package: github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis
+- package: github.com/hyperpilotio/blobstore
