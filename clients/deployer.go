@@ -149,6 +149,10 @@ func (client *DeployerClient) CreateDeployment(
 	deployment *deployer.Deployment,
 	loadTesterName string,
 	log *logging.Logger) (*string, error) {
+	if deploymentTemplate == "" {
+		return nil, errors.New("Empty deployment template found")
+	}
+
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments")
 
@@ -171,6 +175,8 @@ func (client *DeployerClient) CreateDeployment(
 		return nil, errors.New("Unable to parse failed create deployment response: " + err.Error())
 	}
 
+	log.Debugf("Received deployer response: %+v", createResponse)
+
 	if createResponse.Error {
 		return nil, errors.New("Unable to create deployment: " + createResponse.Data)
 	}
@@ -180,10 +186,12 @@ func (client *DeployerClient) CreateDeployment(
 		return nil, errors.New("Unable to get deployment id")
 	}
 
+	log.Infof("Waiting for deployment to be available...")
 	if err := client.waitUntilDeploymentStateAvailable(deploymentId, log); err != nil {
 		return nil, errors.New("Unable to waiting for deployment state to be available: " + err.Error())
 	}
 
+	log.Infof("Waiting for service urls to be available...")
 	if err := client.waitUntilServiceUrlAvailable(deploymentId, loadTesterName, log); err != nil {
 		log.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
 	}

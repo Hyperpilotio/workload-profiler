@@ -6,6 +6,7 @@ PACKAGES=$(glide novendor)
 init:
 	glide install
 	rm -rf "vendor/k8s.io/client-go/vendor/github.com/golang/glog"
+	rm -rf "vendor/k8s.io/client-go/vendor/github.com/hyperpilotio/deployer/vendor/github.com/golang/glog"
 
 test:
 	${GO_EXECUTABLE} test ${PACKAGES}
