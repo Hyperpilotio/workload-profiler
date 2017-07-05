@@ -127,7 +127,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 		storeCluster := deployment.(*storeCluster)
 		deploymentReady, err := clusters.DeployerClient.IsDeploymentReady(storeCluster.DeploymentId)
 		if err != nil {
-			glog.Warningf("Skip loading deployment %s: Unable to get deployment state")
+			glog.Warningf("Skip loading deployment %s: Unable to get deployment state", err.Error())
 			continue
 		}
 
