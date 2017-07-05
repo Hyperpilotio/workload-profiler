@@ -282,15 +282,8 @@ func (server *Server) storeCluster(runId string) error {
 		return fmt.Errorf("Unable to new %s store cluster: %s", runId, err)
 	}
 
-	switch storeCluster.State {
-	case "Failed":
-		if err := server.ClusterStore.Delete(storeCluster.RunId); err != nil {
-			return fmt.Errorf("Unable to delete profiler cluster: %s", err.Error())
-		}
-	default:
-		if err := server.ClusterStore.Store(storeCluster.RunId, storeCluster); err != nil {
-			return fmt.Errorf("Unable to store %s cluster: %s", runId, err.Error())
-		}
+	if err := server.ClusterStore.Store(storeCluster.RunId, storeCluster); err != nil {
+		return fmt.Errorf("Unable to store %s cluster: %s", runId, err.Error())
 	}
 
 	return nil
@@ -308,25 +301,35 @@ func (server *Server) reloadClusterState() error {
 	storeClusters := []*cluster{}
 	for _, deployment := range clusters.([]interface{}) {
 		storeCluster := deployment.(*StoreCluster)
-		reloadCluster := &cluster{
-			deploymentTemplate: storeCluster.DeploymentTemplate,
-			deploymentId:       storeCluster.DeploymentId,
-			runId:              storeCluster.RunId,
-			state:              ParseStateString(storeCluster.State),
+		deploymentReady, err := server.Clusters.DeployerClient.IsDeploymentReady(storeCluster.DeploymentId)
+		if err != nil {
+			glog.Warningf("Skip loading deployment %s: Unable to get deployment state")
+			continue
 		}
 
-		if createdTime, err := time.Parse(time.RFC822, storeCluster.Created); err == nil {
-			reloadCluster.created = createdTime
-		}
+		if deploymentReady {
+			reloadCluster := &cluster{
+				deploymentTemplate: storeCluster.DeploymentTemplate,
+				deploymentId:       storeCluster.DeploymentId,
+				runId:              storeCluster.RunId,
+				state:              ParseStateString(storeCluster.State),
+			}
 
-		storeClusters = append(storeClusters, reloadCluster)
+			if createdTime, err := time.Parse(time.RFC822, storeCluster.Created); err == nil {
+				reloadCluster.created = createdTime
+			}
+
+			storeClusters = append(storeClusters, reloadCluster)
+		} else {
+			if err := server.ClusterStore.Delete(storeCluster.RunId); err != nil {
+				glog.Errorf("Unable to delete profiler cluster: %s", err.Error())
+			}
+		}
 	}
 
 	for _, deployment := range storeClusters {
 		switch deployment.state {
-		case RESERVED:
-			server.Clusters.Deployments = append(server.Clusters.Deployments, deployment)
-
+		case RESERVED, FAILED:
 			log, logErr := log.NewLogger(server.Config, deployment.runId)
 			if logErr != nil {
 				return errors.New("Error creating deployment logger: " + logErr.Error())
@@ -340,11 +343,9 @@ func (server *Server) reloadClusterState() error {
 					server.UnreserveQueue <- unreserveResult
 				}
 			}()
-		case FAILED:
-			if err := server.ClusterStore.Delete(deployment.runId); err != nil {
-				glog.Warningf("Unable to delete profiler cluster: %s", err.Error())
-			}
 		}
+
+		server.Clusters.Deployments = append(server.Clusters.Deployments, deployment)
 	}
 
 	return nil
