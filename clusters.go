@@ -274,8 +274,6 @@ func (clusters *Clusters) ReserveDeployment(
 		}()
 	}
 
-	clusters.mutex.Unlock()
-
 	return reserveResult
 }
 
