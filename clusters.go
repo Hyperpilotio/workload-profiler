@@ -127,7 +127,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 		storeCluster := deployment.(*storeCluster)
 		deploymentReady, err := clusters.DeployerClient.IsDeploymentReady(storeCluster.DeploymentId)
 		if err != nil {
-			glog.Warningf("Skip loading deployment %s: Unable to get deployment state", err.Error())
+			glog.Warningf("Skip loading deployment, unable to get deployment state: %s", err.Error())
 			continue
 		}
 
@@ -141,6 +141,8 @@ func (clusters *Clusters) ReloadClusterState() error {
 
 			if createdTime, err := time.Parse(time.RFC822, storeCluster.Created); err == nil {
 				reloadCluster.created = createdTime
+			} else {
+				glog.Warningf("Unable to parse created time %s: %s", storeCluster.Created, err.Error())
 			}
 
 			storeClusters = append(storeClusters, reloadCluster)
@@ -407,7 +409,9 @@ func (clusters *Clusters) deleteDeployment(deploymentId string, log *logging.Log
 }
 
 func (clusters *Clusters) resetTemplateDeployment(
-	deploymentTemplate string, deploymentId string, log *logging.Logger) error {
+	deploymentTemplate string,
+	deploymentId string,
+	log *logging.Logger) error {
 	if err := clusters.DeployerClient.ResetTemplateDeployment(deploymentTemplate, deploymentId, log); err != nil {
 		return errors.New("Unable to reset template deployment: " + err.Error())
 	}
