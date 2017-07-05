@@ -2,6 +2,7 @@ package models
 
 import (
 	benchmarkagent "github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
+	deployer "github.com/hyperpilotio/deployer/apis"
 )
 
 type Command struct {
@@ -10,8 +11,8 @@ type Command struct {
 }
 
 type BenchmarkController struct {
-	Initialize *Command          `bson:"initialize" json:"initialize"`
-	Command    LoadTesterCommand `bson:"command" json:"command"`
+	Initialize *benchmarkagent.Command `bson:"initialize" json:"initialize"`
+	Command    LoadTesterCommand       `bson:"command" json:"command"`
 }
 
 type SlowCookerAppLoad struct {
@@ -47,13 +48,23 @@ type SLO struct {
 	Type   string  `bson:"type" json:"type"`
 }
 
+type ApplicationTask struct {
+	NodeMapping    interface{} `bson:"nodeMapping" json:"nodeMapping"`
+	TaskDefinition interface{} `bson:"taskDefinition" json:"taskDefinition"`
+}
+
+type TaskDefinitions struct {
+	LoadTests    []deployer.KubernetesTask `bson:"loadTests" json:"loadTests"`
+	Applications []deployer.KubernetesTask `bson:"applications" json:"applications"`
+}
+
 type BenchmarkConfig struct {
 	Name           string                         `bson:"name" json:"name"`
 	DurationConfig *benchmarkagent.DurationConfig `bson:"durationConfig" json:"durationConfig" binding:"required`
 	CgroupConfig   *benchmarkagent.CgroupConfig   `bson:"cgroupConfig" json:"cgroupConfig"`
 	HostConfig     *benchmarkagent.HostConfig     `bson:"hostConfig" json:"hostConfig"`
 	NetConfig      *benchmarkagent.NetConfig      `bson:"netConfig" json:"netConfig"`
-	Command        Command                        `bson:"command" json:"command" binding:"required"`
+	Command        benchmarkagent.Command         `bson:"command" json:"command" binding:"required"`
 	PlacementHost  string                         `bson:"placementHost" json:"placementHost"`
 }
 
@@ -66,11 +77,13 @@ type Benchmark struct {
 }
 
 type ApplicationConfig struct {
-	Name         string     `bson:"name" json:"name"`
-	ServiceNames []string   `bson:"serviceNames" json:"serviceNames"`
-	LoadTester   LoadTester `bson:"loadTester" json:"loadTester"`
-	Type         string     `bson:"type" json:"type"`
-	SLO          SLO        `bson:"slo" json:"slo"`
+	Name               string            `bson:"name" json:"name"`
+	ServiceNames       []string          `bson:"serviceNames" json:"serviceNames"`
+	LoadTester         LoadTester        `bson:"loadTester" json:"loadTester"`
+	Type               string            `bson:"type" json:"type"`
+	SLO                SLO               `bson:"slo" json:"slo"`
+	DeploymentTemplate string            `bson:"deploymentTemplate" json:"deploymentTemplate"`
+	TaskDefinitions    []ApplicationTask `bson:"taskDefinitions" json:"taskDefinitions"`
 }
 
 type IntensityArgument struct {

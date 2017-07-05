@@ -1,37 +1,91 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
-	"sync"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/hyperpilotio/blobstore"
+	"github.com/hyperpilotio/deployer/log"
+	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 
+type Job interface {
+	GetId() string
+	GetApplicationConfig() *models.ApplicationConfig
+	GetLog() *log.DeploymentLog
+	Run(deploymentId string) error
+}
+
+func (server *Server) AddJob(job Job) {
+	server.JobQueue <- job
+}
+
 // Server store the stats / data of every deployment
 type Server struct {
-	Config   *viper.Viper
-	ConfigDB *ConfigDB
-	mutex    sync.Mutex
+	Config       *viper.Viper
+	ConfigDB     *ConfigDB
+	ClusterStore blobstore.BlobStore
+
+	Clusters       *Clusters
+	JobQueue       chan Job
+	UnreserveQueue chan UnreserveResult
 }
 
 // NewServer return an instance of Server struct.
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
-		Config:   config,
-		ConfigDB: NewConfigDB(config),
+		Config:         config,
+		JobQueue:       make(chan Job, 100),
+		UnreserveQueue: make(chan UnreserveResult, 100),
+		ConfigDB:       NewConfigDB(config),
 	}
 }
 
 // StartServer starts a web server
 func (server *Server) StartServer() error {
+	if server.Config.GetString("filesPath") == "" {
+		return errors.New("filesPath is not specified in the configuration file.")
+	}
+
+	if err := os.Mkdir(server.Config.GetString("filesPath"), 0755); err != nil {
+		if !os.IsExist(err) {
+			return errors.New("Unable to create filesPath directory: " + err.Error())
+		}
+	}
+
+	if clusterStore, err := blobstore.NewBlobStore("Clusters", server.Config); err != nil {
+		return errors.New("Unable to create deployments store: " + err.Error())
+	} else {
+		server.ClusterStore = clusterStore
+	}
+
 	//gin.SetMode("release")
 	router := gin.New()
 
 	// Global middleware
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+
+	router.LoadHTMLGlob(filepath.Join(os.Getenv("GOPATH"),
+		"src/github.com/hyperpilotio/workload-profiler/ui/*.html"))
+	router.Static("/static", filepath.Join(os.Getenv("GOPATH"),
+		"src/github.com/hyperpilotio/workload-profiler/ui/static"))
+
+	uiGroup := router.Group("/ui")
+	{
+		uiGroup.GET("", server.logUI)
+		uiGroup.GET("/logs/:logFile", server.getDeploymentLogContent)
+		// uiGroup.GET("/list/:status", server.refreshUI)
+	}
 
 	calibrateGroup := router.Group("/calibrate")
 	{
@@ -43,16 +97,92 @@ func (server *Server) StartServer() error {
 		benchmarkGroup.POST("/:appName", server.runBenchmarks)
 	}
 
+	deployerClient, deployerErr := clients.NewDeployerClient(server.Config)
+	if deployerErr != nil {
+		return errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	}
+
+	server.Clusters = NewClusters(deployerClient)
+	if err := server.reloadClusterState(); err != nil {
+		return errors.New("Unable to reload cluster state: " + err.Error())
+	}
+
+	server.RunJobLoop()
+
 	return router.Run(":" + server.Config.GetString("port"))
+}
+
+func (server *Server) RunJobLoop() {
+	userId := server.Config.GetString("userId")
+	go func() {
+		for {
+			select {
+			case job := <-server.JobQueue:
+				log := job.GetLog()
+				defer log.LogFile.Close()
+
+				deploymentId := ""
+				runId := job.GetId()
+				log.Logger.Infof("Waiting until %s job is completed...", runId)
+				for {
+					result := <-server.Clusters.ReserveDeployment(server.Config,
+						job.GetApplicationConfig(), runId, userId, log.Logger)
+					if result.Err != "" {
+						log.Logger.Warningf("Unable to reserve deployment for job: " + result.Err)
+						// Try reserving again after sleep
+						time.Sleep(60 * time.Second)
+					} else {
+						deploymentId = result.DeploymentId
+						log.Logger.Infof("Deploying job %s with deploymentId is %s", runId, deploymentId)
+
+						if result.OriginRunId != "" && result.OriginRunId != runId {
+							if err := server.ClusterStore.Delete(result.OriginRunId); err != nil {
+								log.Logger.Errorf("Unable to delete profiler cluster: %s", err.Error())
+							}
+						}
+						break
+					}
+				}
+
+				// Store cluster state before calibration or benchmark run
+				if err := server.storeCluster(runId); err != nil {
+					log.Logger.Errorf("Unable to store %s cluster during reserve deployment: %s", runId, err.Error())
+				}
+
+				// TODO: Allow multiple workers to process job
+				log.Logger.Infof("Running %s job", job.GetId())
+				if err := job.Run(deploymentId); err != nil {
+					// TODO: Store the error state in a map and display/return job status
+					log.Logger.Errorf("Unable to run %s job: %s", runId, err)
+					server.Clusters.SetState(runId, FAILED)
+				}
+
+				unreserveResult := <-server.Clusters.UnreserveDeployment(runId, log.Logger)
+				if unreserveResult.Err != "" {
+					log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
+				} else {
+					server.UnreserveQueue <- unreserveResult
+				}
+			case unreserveResult := <-server.UnreserveQueue:
+				if unreserveResult.RunId != "" {
+					server.Clusters.SetState(unreserveResult.RunId, AVAILABLE)
+				}
+
+				if err := server.storeCluster(unreserveResult.RunId); err != nil {
+					glog.Warningf("Unable to store %s cluster during unreserve deployment: %s",
+						unreserveResult.RunId, err.Error())
+				}
+			}
+		}
+	}()
 }
 
 func (server *Server) runBenchmarks(c *gin.Context) {
 	appName := c.Param("appName")
 
 	var request struct {
-		DeploymentId      string `json:"deploymentId" binding:"required"`
-		StartingIntensity int    `json:"startingIntensity" binding:"required"`
-		Step              int    `json:"step" binding:"required"`
+		StartingIntensity int `json:"startingIntensity" binding:"required"`
+		Step              int `json:"step" binding:"required"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -63,19 +193,20 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
-	if request.DeploymentId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Empty deployment id found",
-		})
-		return
-	}
-
 	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
 			"data":  "Unable to get application config for app " + appName + ": " + err.Error(),
+		})
+		return
+	}
+
+	runId, err := generateId(appName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to generate run Id: " + err.Error(),
 		})
 		return
 	}
@@ -93,7 +224,6 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	run, err := NewBenchmarkRun(
 		applicationConfig,
 		benchmarks,
-		request.DeploymentId,
 		request.StartingIntensity,
 		request.Step,
 		0, // TODO: Replace with some real value when needed
@@ -107,14 +237,8 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
-	if err = run.Run(); err != nil {
-		glog.Warningf("Failed to run benchmarks for app %s: %s", appName, err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": true,
-			"data":  "Unable to run benchmarks: " + err.Error(),
-		})
-		return
-	}
+	run.ProfileRun.DeploymentLog.Logger.Infof("Running %s job...", runId)
+	server.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
@@ -125,26 +249,6 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 func (server *Server) runCalibration(c *gin.Context) {
 	appName := c.Param("appName")
 
-	var request struct {
-		DeploymentId string `json:"deploymentId" binding:"required"`
-	}
-
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to parse calibration request: " + err.Error(),
-		})
-		return
-	}
-
-	if request.DeploymentId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Empty request id found",
-		})
-		return
-	}
-
 	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -154,7 +258,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	run, runErr := NewCalibrationRun(request.DeploymentId, applicationConfig, server.Config)
+	run, runErr := NewCalibrationRun(applicationConfig, server.Config)
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
@@ -163,16 +267,86 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	if err = run.Run(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": true,
-			"data":  "Unable to run calibration: " + err.Error(),
-		})
-		return
-	}
+	run.ProfileRun.DeploymentLog.Logger.Infof("Running %s job...", run.Id)
+	server.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
 		"data":  "",
 	})
+}
+
+func (server *Server) storeCluster(runId string) error {
+	storeCluster, err := server.Clusters.NewStoreCluster(runId)
+	if err != nil {
+		return fmt.Errorf("Unable to new %s store cluster: %s", runId, err)
+	}
+
+	if err := server.ClusterStore.Store(storeCluster.RunId, storeCluster); err != nil {
+		return fmt.Errorf("Unable to store %s cluster: %s", runId, err.Error())
+	}
+
+	return nil
+}
+
+// reloadClusterState reload cluster state when deployer restart
+func (server *Server) reloadClusterState() error {
+	clusters, err := server.ClusterStore.LoadAll(func() interface{} {
+		return &StoreCluster{}
+	})
+	if err != nil {
+		return fmt.Errorf("Unable to load profiler clusters: %s", err.Error())
+	}
+
+	storeClusters := []*cluster{}
+	for _, deployment := range clusters.([]interface{}) {
+		storeCluster := deployment.(*StoreCluster)
+		deploymentReady, err := server.Clusters.DeployerClient.IsDeploymentReady(storeCluster.DeploymentId)
+		if err != nil {
+			glog.Warningf("Skip loading deployment %s: Unable to get deployment state")
+			continue
+		}
+
+		if deploymentReady {
+			reloadCluster := &cluster{
+				deploymentTemplate: storeCluster.DeploymentTemplate,
+				deploymentId:       storeCluster.DeploymentId,
+				runId:              storeCluster.RunId,
+				state:              ParseStateString(storeCluster.State),
+			}
+
+			if createdTime, err := time.Parse(time.RFC822, storeCluster.Created); err == nil {
+				reloadCluster.created = createdTime
+			}
+
+			storeClusters = append(storeClusters, reloadCluster)
+		} else {
+			if err := server.ClusterStore.Delete(storeCluster.RunId); err != nil {
+				glog.Errorf("Unable to delete profiler cluster: %s", err.Error())
+			}
+		}
+	}
+
+	for _, deployment := range storeClusters {
+		switch deployment.state {
+		case RESERVED, FAILED:
+			log, logErr := log.NewLogger(server.Config, deployment.runId)
+			if logErr != nil {
+				return errors.New("Error creating deployment logger: " + logErr.Error())
+			}
+
+			go func() {
+				unreserveResult := <-server.Clusters.UnreserveDeployment(deployment.runId, log.Logger)
+				if unreserveResult.Err != "" {
+					glog.Warningf("Unable to unreserve %s deployment: %s", deployment.runId, unreserveResult.Err)
+				} else {
+					server.UnreserveQueue <- unreserveResult
+				}
+			}()
+		}
+
+		server.Clusters.Deployments = append(server.Clusters.Deployments, deployment)
+	}
+
+	return nil
 }
