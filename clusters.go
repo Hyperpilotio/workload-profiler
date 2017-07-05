@@ -145,7 +145,7 @@ func (clusters *Clusters) ReserveDeployment(
 		}
 	}
 
-	reserveResult := make(chan ReserveResult)
+	reserveResult := make(chan ReserveResult, 2)
 
 	if selectedCluster == nil {
 		if len(clusters.Deployments) == clusters.MaxClusters {
@@ -218,7 +218,7 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 		}
 	}
 
-	unreserveResult := make(chan UnreserveResult)
+	unreserveResult := make(chan UnreserveResult, 2)
 
 	if selectedCluster == nil {
 		unreserveResult <- UnreserveResult{
