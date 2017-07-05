@@ -8,9 +8,13 @@ import (
 
 	"fmt"
 
+	"github.com/golang/glog"
+	"github.com/hyperpilotio/blobstore"
 	deployer "github.com/hyperpilotio/deployer/apis"
+	"github.com/hyperpilotio/deployer/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
+
 	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
@@ -19,17 +23,17 @@ type clusterState int
 
 // Possible deployment states
 const (
-	DEPLOYING = 0
-	AVAILABLE = 1
-	RESERVED  = 2
-	FAILED    = 3
+	DEPLOYING   = 0
+	AVAILABLE   = 1
+	RESERVED    = 2
+	UNRESERVING = 3
+	FAILED      = 4
 
 	ErrMaxClusters = "Max clusters reached"
 )
 
 type ReserveResult struct {
 	DeploymentId string
-	OriginRunId  string
 	Err          string
 }
 
@@ -48,6 +52,8 @@ type cluster struct {
 }
 
 type Clusters struct {
+	Store          blobstore.BlobStore
+	Config         *viper.Viper
 	DeployerClient *clients.DeployerClient
 	mutex          sync.Mutex
 	MaxClusters    int
@@ -84,7 +90,7 @@ func ParseStateString(state string) clusterState {
 	return -1
 }
 
-type StoreCluster struct {
+type storeCluster struct {
 	DeploymentTemplate string
 	DeploymentId       string
 	RunId              string
@@ -92,34 +98,86 @@ type StoreCluster struct {
 	Created            string
 }
 
-func NewClusters(deployerClient *clients.DeployerClient) *Clusters {
+func NewClusters(deployerClient *clients.DeployerClient, config *viper.Viper) (*Clusters, error) {
+	clusterStore, err := blobstore.NewBlobStore("WorkloadProfilerClusters", config)
+	if err != nil {
+		return nil, errors.New("Unable to create deployments store: " + err.Error())
+	}
+
 	return &Clusters{
+		Store:          clusterStore,
+		Config:         config,
 		DeployerClient: deployerClient,
 		Deployments:    []*cluster{},
 		MaxClusters:    5,
-	}
+	}, nil
 }
 
-func (clusters *Clusters) NewStoreCluster(runId string) (*StoreCluster, error) {
-	clusters.mutex.Lock()
-	defer clusters.mutex.Unlock()
+func (clusters *Clusters) ReloadClusterState() error {
+	existingClusters, err := clusters.Store.LoadAll(func() interface{} {
+		return &storeCluster{}
+	})
 
-	var selectedCluster *cluster
-	for _, deployment := range clusters.Deployments {
-		if deployment.runId == runId {
-			selectedCluster = deployment
-			break
+	if err != nil {
+		return fmt.Errorf("Unable to load profiler clusters: %s", err.Error())
+	}
+
+	storeClusters := []*cluster{}
+	for _, deployment := range existingClusters.([]interface{}) {
+		storeCluster := deployment.(*storeCluster)
+		deploymentReady, err := clusters.DeployerClient.IsDeploymentReady(storeCluster.DeploymentId)
+		if err != nil {
+			glog.Warningf("Skip loading deployment %s: Unable to get deployment state")
+			continue
+		}
+
+		if deploymentReady {
+			reloadCluster := &cluster{
+				deploymentTemplate: storeCluster.DeploymentTemplate,
+				deploymentId:       storeCluster.DeploymentId,
+				runId:              storeCluster.RunId,
+				state:              ParseStateString(storeCluster.State),
+			}
+
+			if createdTime, err := time.Parse(time.RFC822, storeCluster.Created); err == nil {
+				reloadCluster.created = createdTime
+			}
+
+			storeClusters = append(storeClusters, reloadCluster)
+		} else {
+			if err := clusters.Store.Delete(storeCluster.RunId); err != nil {
+				glog.Errorf("Unable to delete profiler cluster: %s", err.Error())
+			}
 		}
 	}
 
-	if selectedCluster == nil {
-		return nil, fmt.Errorf("Unable to find %s cluster", runId)
+	for _, deployment := range storeClusters {
+		switch deployment.state {
+		case RESERVED, FAILED:
+			log, logErr := log.NewLogger(clusters.Config, deployment.runId)
+			if logErr != nil {
+				return errors.New("Error creating deployment logger: " + logErr.Error())
+			}
+
+			go func() {
+				unreserveResult := <-clusters.UnreserveDeployment(deployment.runId, log.Logger)
+				if unreserveResult.Err != "" {
+					glog.Warningf("Unable to unreserve %s deployment: %s", deployment.runId, unreserveResult.Err)
+				}
+			}()
+		}
+
+		clusters.Deployments = append(clusters.Deployments, deployment)
 	}
 
-	cluster := &StoreCluster{
+	return nil
+}
+
+func (clusters *Clusters) newStoreCluster(selectedCluster *cluster) (*storeCluster, error) {
+	cluster := &storeCluster{
 		DeploymentTemplate: selectedCluster.deploymentTemplate,
 		DeploymentId:       selectedCluster.deploymentId,
-		RunId:              runId,
+		RunId:              selectedCluster.runId,
 		State:              GetStateString(selectedCluster.state),
 		Created:            selectedCluster.created.Format(time.RFC822),
 	}
@@ -134,6 +192,7 @@ func (clusters *Clusters) ReserveDeployment(
 	userId string,
 	log *logging.Logger) <-chan ReserveResult {
 	clusters.mutex.Lock()
+	defer clusters.mutex.Unlock()
 
 	// TODO: Find a cluster that has the same deployment template base, and reserve it.
 	// If not, launch a new one up to the configured limit.
@@ -149,7 +208,6 @@ func (clusters *Clusters) ReserveDeployment(
 
 	if selectedCluster == nil {
 		if len(clusters.Deployments) == clusters.MaxClusters {
-			clusters.mutex.Unlock()
 			reserveResult <- ReserveResult{
 				Err: ErrMaxClusters,
 			}
@@ -175,6 +233,11 @@ func (clusters *Clusters) ReserveDeployment(
 			} else {
 				selectedCluster.deploymentId = *deploymentId
 				selectedCluster.state = RESERVED
+
+				if err := clusters.storeCluster(selectedCluster); err != nil {
+					log.Errorf("Unable to store %s cluster during reserve deployment: %s", runId, err.Error())
+				}
+
 				reserveResult <- ReserveResult{
 					DeploymentId: *deploymentId,
 				}
@@ -193,9 +256,19 @@ func (clusters *Clusters) ReserveDeployment(
 				originRunId := selectedCluster.runId
 				selectedCluster.state = RESERVED
 				selectedCluster.runId = runId
+
+				if originRunId != "" {
+					if err := clusters.Store.Delete(originRunId); err != nil {
+						log.Errorf("Unable to delete profiler cluster: %s", err.Error())
+					}
+				}
+
+				if err := clusters.storeCluster(selectedCluster); err != nil {
+					log.Errorf("Unable to store %s cluster during reserve deployment: %s", runId, err.Error())
+				}
+
 				reserveResult <- ReserveResult{
 					DeploymentId: selectedCluster.deploymentId,
-					OriginRunId:  originRunId,
 				}
 			}
 		}()
@@ -209,6 +282,7 @@ func (clusters *Clusters) ReserveDeployment(
 func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger) <-chan UnreserveResult {
 	// TODO: Unreserve a deployment. After certain time also try to delete deployments.
 	clusters.mutex.Lock()
+	defer clusters.mutex.Unlock()
 
 	var selectedCluster *cluster
 	for _, deployment := range clusters.Deployments {
@@ -224,26 +298,58 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 		unreserveResult <- UnreserveResult{
 			Err: fmt.Sprintf("Unable to find %s cluster", runId),
 		}
-	} else {
-		go func() {
-			if err := clusters.resetTemplateDeployment(
-				selectedCluster.deploymentTemplate,
-				selectedCluster.deploymentId,
-				log); err != nil {
-				unreserveResult <- UnreserveResult{
-					Err: err.Error(),
-				}
-			} else {
-				unreserveResult <- UnreserveResult{
-					RunId: runId,
-				}
-			}
-		}()
+		return unreserveResult
+	} else if selectedCluster.state == UNRESERVING {
+		unreserveResult <- UnreserveResult{
+			Err: fmt.Sprintf("Cluster %s is already unreserved"),
+		}
+		return unreserveResult
 	}
+
+	selectedCluster.state = UNRESERVING
+
+	go func() {
+		err := clusters.resetTemplateDeployment(
+			selectedCluster.deploymentTemplate,
+			selectedCluster.deploymentId,
+			log)
+		selectedCluster.state = AVAILABLE
+
+		if err != nil {
+			unreserveResult <- UnreserveResult{
+				Err: err.Error(),
+			}
+		} else {
+			if err := clusters.storeCluster(selectedCluster); err != nil {
+				glog.Warningf(
+					"Unable to store %s cluster during unreserve deployment: %s",
+					runId,
+					err.Error())
+			}
+
+			unreserveResult <- UnreserveResult{
+				RunId: runId,
+			}
+		}
+
+	}()
 
 	clusters.mutex.Unlock()
 
 	return unreserveResult
+}
+
+func (clusters *Clusters) storeCluster(cluster *cluster) error {
+	storeCluster, err := clusters.newStoreCluster(cluster)
+	if err != nil {
+		return fmt.Errorf("Unable to create store cluster for run %s: %s", cluster.runId, err)
+	}
+
+	if err := clusters.Store.Store(storeCluster.RunId, storeCluster); err != nil {
+		return fmt.Errorf("Unable to store %s cluster: %s", cluster.runId, err.Error())
+	}
+
+	return nil
 }
 
 func (clusters *Clusters) createDeployment(
