@@ -34,6 +34,11 @@ type DeployerClient struct {
 	Url            *url.URL
 }
 
+type DeployerResponse struct {
+	Error bool   `json:"error"`
+	Data  string `json:"data`
+}
+
 func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 	if u, err := url.Parse(config.GetString("deployerUrl")); err != nil {
 		return nil, errors.New("Unable to parse deployer url: " + err.Error())
@@ -124,12 +129,16 @@ func (client *DeployerClient) IsDeploymentReady(deployment string) (bool, error)
 
 	response, err := resty.R().Get(requestUrl)
 	if err != nil {
-		return false, err
+		return false, errors.New("Unable to send deployment is reday request to deployer: " + err.Error())
 	}
 
 	if response.StatusCode() != 200 {
 		// TODO: Log response code here
-		return false, nil
+		errorResponse := &DeployerResponse{}
+		if err := json.Unmarshal(response.Body(), &errorResponse); err != nil {
+			return false, errors.New("Unable to parse failed deployment response: " + err.Error())
+		}
+		return false, errors.New(errorResponse.Data)
 	}
 
 	return true, nil
@@ -233,6 +242,11 @@ func (client *DeployerClient) ResetTemplateDeployment(
 	}
 
 	if response.StatusCode() != 200 {
+		errorResponse := &DeployerResponse{}
+		if err := json.Unmarshal(response.Body(), &errorResponse); err != nil {
+			return errors.New("Unable to parse failed deployment response: " + err.Error())
+		}
+		log.Errorf("Unable to reset template deployment: %s", errorResponse.Data)
 		return errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 	}
 
@@ -254,10 +268,15 @@ func (client *DeployerClient) DeployExtensions(
 
 	response, err := resty.R().SetBody(deployment).Put(requestUrl)
 	if err != nil {
-		return errors.New("Unable to send deploy kubernetes objects request to deployer: " + err.Error())
+		return errors.New("Unable to send deploy extensions kubernetes objects request to deployer: " + err.Error())
 	}
 
 	if response.StatusCode() != 200 {
+		errorResponse := &DeployerResponse{}
+		if err := json.Unmarshal(response.Body(), &errorResponse); err != nil {
+			return errors.New("Unable to parse failed deployment response: " + err.Error())
+		}
+		log.Errorf("Unable to deploy extensions kubernetes objects: %s", errorResponse.Data)
 		return errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 	}
 
