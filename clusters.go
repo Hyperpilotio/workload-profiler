@@ -147,6 +147,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 
 			storeClusters = append(storeClusters, reloadCluster)
 		} else {
+			glog.V(1).Infof("Found recovered cluster %s to be not available, deleting from store", storeCluster.DeploymentId)
 			if err := clusters.Store.Delete(storeCluster.RunId); err != nil {
 				glog.Errorf("Unable to delete profiler cluster: %s", err.Error())
 			}
@@ -156,6 +157,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 	for _, deployment := range storeClusters {
 		switch deployment.state {
 		case RESERVED, FAILED:
+			glog.V(1).Infof("Unreserving deployment for cluster %+v", deployment)
 			log, logErr := log.NewLogger(clusters.Config, deployment.runId)
 			if logErr != nil {
 				return errors.New("Error creating deployment logger: " + logErr.Error())
@@ -169,6 +171,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 			}()
 		}
 
+		glog.V(1).Infof("Recovered cluster from store: %+v...", deployment)
 		clusters.Deployments = append(clusters.Deployments, deployment)
 	}
 
@@ -333,8 +336,6 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 		}
 
 	}()
-
-	clusters.mutex.Unlock()
 
 	return unreserveResult
 }
