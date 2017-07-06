@@ -446,12 +446,9 @@ func (clusters *Clusters) deployExtensions(
 	userId string,
 	runId string,
 	log *logging.Logger) error {
-	emptyNodesJSON := `{ "nodes": [] }`
-	clusterDefinition := &deployer.ClusterDefinition{}
-	if err := json.Unmarshal([]byte(emptyNodesJSON), clusterDefinition); err != nil {
-		return errors.New("Unable to deserializing empty clusterDefinition: " + err.Error())
+	clusterDefinition := &deployer.ClusterDefinition{
+		Nodes: []deployer.ClusterNode{},
 	}
-
 	deployment := &deployer.Deployment{
 		UserId:            userId,
 		Region:            "us-east-1",
