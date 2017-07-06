@@ -164,7 +164,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 			}
 
 			go func() {
-				unreserveResult := <-clusters.UnreserveDeployment(deployment.runId, log.Logger)
+				unreserveResult := <-clusters.unreserveCluster(deployment, log.Logger)
 				if unreserveResult.Err != "" {
 					glog.Warningf("Unable to unreserve %s deployment: %s", deployment.runId, unreserveResult.Err)
 				}
@@ -203,7 +203,8 @@ func (clusters *Clusters) ReserveDeployment(
 	// If not, launch a new one up to the configured limit.
 	var selectedCluster *cluster
 	for _, deployment := range clusters.Deployments {
-		if deployment.deploymentTemplate == applicationConfig.DeploymentTemplate && deployment.state == AVAILABLE {
+		if deployment.deploymentTemplate == applicationConfig.DeploymentTemplate &&
+			(deployment.state == AVAILABLE || deployment.state == UNRESERVING) {
 			selectedCluster = deployment
 			break
 		}
@@ -250,6 +251,27 @@ func (clusters *Clusters) ReserveDeployment(
 		}()
 	} else {
 		go func() {
+			if selectedCluster.state == UNRESERVING {
+				glog.Infof("Waiting for deployment %s to be unreserved...")
+				for {
+					if selectedCluster.state != UNRESERVING {
+						break
+					}
+
+					time.Sleep(5 * time.Second)
+				}
+
+				if selectedCluster.state != AVAILABLE {
+					message := "Cluster after unreserving is not in available state, new state: " +
+						GetStateString(selectedCluster.state)
+					log.Errorf(message)
+					reserveResult <- ReserveResult{
+						Err: message,
+					}
+					return
+				}
+			}
+
 			if err := clusters.deployExtensions(applicationConfig,
 				selectedCluster.deploymentId, userId, runId, log); err != nil {
 				selectedCluster.state = FAILED
@@ -282,10 +304,55 @@ func (clusters *Clusters) ReserveDeployment(
 	return reserveResult
 }
 
+func (clusters *Clusters) unreserveCluster(cluster *cluster, log *logging.Logger) <-chan UnreserveResult {
+	unreserveResult := make(chan UnreserveResult, 2)
+
+	if cluster == nil {
+		unreserveResult <- UnreserveResult{
+			Err: fmt.Sprintf("Unable to find cluster"),
+		}
+		return unreserveResult
+	} else if cluster.state == UNRESERVING {
+		unreserveResult <- UnreserveResult{
+			Err: fmt.Sprintf("Cluster %s is already unreserved"),
+		}
+		return unreserveResult
+	}
+
+	cluster.state = UNRESERVING
+
+	go func() {
+		err := clusters.resetTemplateDeployment(
+			cluster.deploymentTemplate,
+			cluster.deploymentId,
+			log)
+		cluster.state = AVAILABLE
+
+		if err != nil {
+			unreserveResult <- UnreserveResult{
+				Err: err.Error(),
+			}
+		} else {
+			if err := clusters.storeCluster(cluster); err != nil {
+				log.Warningf(
+					"Unable to store %s cluster during unreserve deployment: %s",
+					cluster.runId,
+					err.Error())
+			}
+
+			unreserveResult <- UnreserveResult{
+				RunId: cluster.runId,
+			}
+		}
+
+	}()
+
+	return unreserveResult
+}
+
 func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger) <-chan UnreserveResult {
 	// TODO: Unreserve a deployment. After certain time also try to delete deployments.
 	clusters.mutex.Lock()
-	defer clusters.mutex.Unlock()
 
 	var selectedCluster *cluster
 	for _, deployment := range clusters.Deployments {
@@ -294,50 +361,9 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 			break
 		}
 	}
+	clusters.mutex.Unlock()
 
-	unreserveResult := make(chan UnreserveResult, 2)
-
-	if selectedCluster == nil {
-		unreserveResult <- UnreserveResult{
-			Err: fmt.Sprintf("Unable to find %s cluster", runId),
-		}
-		return unreserveResult
-	} else if selectedCluster.state == UNRESERVING {
-		unreserveResult <- UnreserveResult{
-			Err: fmt.Sprintf("Cluster %s is already unreserved"),
-		}
-		return unreserveResult
-	}
-
-	selectedCluster.state = UNRESERVING
-
-	go func() {
-		err := clusters.resetTemplateDeployment(
-			selectedCluster.deploymentTemplate,
-			selectedCluster.deploymentId,
-			log)
-		selectedCluster.state = AVAILABLE
-
-		if err != nil {
-			unreserveResult <- UnreserveResult{
-				Err: err.Error(),
-			}
-		} else {
-			if err := clusters.storeCluster(selectedCluster); err != nil {
-				glog.Warningf(
-					"Unable to store %s cluster during unreserve deployment: %s",
-					runId,
-					err.Error())
-			}
-
-			unreserveResult <- UnreserveResult{
-				RunId: runId,
-			}
-		}
-
-	}()
-
-	return unreserveResult
+	return clusters.unreserveCluster(selectedCluster, log)
 }
 
 func (clusters *Clusters) storeCluster(cluster *cluster) error {
@@ -358,12 +384,9 @@ func (clusters *Clusters) createDeployment(
 	userId string,
 	runId string,
 	log *logging.Logger) (*string, error) {
-	// TODO: We assume there is one service per app and in one region
-	// Also we assume Kubernetes only.
-	emptyNodesJSON := `{ "nodes": [] }`
-	clusterDefinition := &deployer.ClusterDefinition{}
-	if err := json.Unmarshal([]byte(emptyNodesJSON), clusterDefinition); err != nil {
-		return nil, errors.New("Unable to deserializing empty clusterDefinition: " + err.Error())
+	// TODO: We assume region is us-east-1 and we assume Kubernetes only.
+	clusterDefinition := &deployer.ClusterDefinition{
+		Nodes: []deployer.ClusterNode{},
 	}
 
 	deployment := &deployer.Deployment{

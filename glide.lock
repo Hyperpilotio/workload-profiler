@@ -89,7 +89,7 @@ imports:
   subpackages:
   - benchmark-agent/apis
 - name: github.com/hyperpilotio/deployer
-  version: 58c8d9fd0ce30eefe760bd7f411534cd6614dab3
+  version: 2b6a2c25525991071a1722fa059f7156a7738334
   subpackages:
   - apis
   - log
