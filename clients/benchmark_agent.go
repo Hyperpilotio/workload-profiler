@@ -51,6 +51,7 @@ func (client *BenchmarkAgentClient) CreateBenchmark(
 		CgroupConfig:   config.CgroupConfig,
 		HostConfig:     config.HostConfig,
 		NetConfig:      config.NetConfig,
+		IOConfig:       config.IOConfig,
 		Count:          1,
 	}
 

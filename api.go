@@ -50,9 +50,10 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	appName := c.Param("appName")
 
 	var request struct {
-		DeploymentId      string `json:"deploymentId" binding:"required"`
-		StartingIntensity int    `json:"startingIntensity" binding:"required"`
-		Step              int    `json:"step" binding:"required"`
+		DeploymentId      string  `json:"deploymentId" binding:"required"`
+		StartingIntensity int     `json:"startingIntensity" binding:"required"`
+		Step              int     `json:"step" binding:"required"`
+		SloTolerance      float64 `json:"sloTolerance"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -71,6 +72,8 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
+	glog.V(1).Infof("Target app: %s, deployment Id: %s", appName, request.DeploymentId)
+
 	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -79,6 +82,8 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		})
 		return
 	}
+
+	glog.V(1).Infof("Obtained the app config: %+v", applicationConfig)
 
 	// TODO: Cache this
 	benchmarks, err := server.ConfigDB.GetBenchmarks()
@@ -96,7 +101,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		request.DeploymentId,
 		request.StartingIntensity,
 		request.Step,
-		0, // TODO: Replace with some real value when needed
+		request.SloTolerance,
 		server.Config)
 
 	if err != nil {
@@ -108,10 +113,10 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	}
 
 	if err = run.Run(); err != nil {
-		glog.Warningf("Failed to run benchmarks for app %s: %s", appName, err.Error())
+		glog.Errorf("Failed to run profiling benchmarks for app %s: %s", appName, err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
-			"data":  "Unable to run benchmarks: " + err.Error(),
+			"data":  "Unable to run profiling benchmarks: " + err.Error(),
 		})
 		return
 	}

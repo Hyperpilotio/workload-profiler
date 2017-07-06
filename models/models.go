@@ -53,6 +53,7 @@ type BenchmarkConfig struct {
 	CgroupConfig   *benchmarkagent.CgroupConfig   `bson:"cgroupConfig" json:"cgroupConfig"`
 	HostConfig     *benchmarkagent.HostConfig     `bson:"hostConfig" json:"hostConfig"`
 	NetConfig      *benchmarkagent.NetConfig      `bson:"netConfig" json:"netConfig"`
+	IOConfig       *benchmarkagent.IOConfig       `bson:"ioConfig" json:"ioConfig"`
 	Command        Command                        `bson:"command" json:"command" binding:"required"`
 	PlacementHost  string                         `bson:"placementHost" json:"placementHost"`
 }

@@ -1,0 +1,6 @@
+{
+    "deploymentId": "YOUR DEPLOYMENT ID",
+    "startingIntensity": 10,
+    "step": 10,
+    "sloTolerance": 0.1
+}

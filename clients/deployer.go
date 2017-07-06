@@ -67,13 +67,13 @@ func (client *DeployerClient) getServiceMappings(deployment string) (*ServiceMap
 }
 
 // GetColocatedServiceUrl finds the service's url that's running on the same node where
-// colocatedService is running. We assume there is only one service with the passed in prefix.
+// colocatedService is running. We assume there is only one such service with the passed in prefix.
 // We don't specify exact service names because services that has multiple copies will be named differently
 // but sharing the same prefix (e.g: benchmark-agent, benchmark-agent-2, etc.).
 func (client *DeployerClient) GetColocatedServiceUrl(deployment string, colocatedService string, servicePrefix string) (string, error) {
 	mappings, err := client.getServiceMappings(deployment)
 	if err != nil {
-		return "", errors.New("Unable to get service mappings: " + err.Error())
+		return "", errors.New("Unable to get service mappings for deployment " + deployment + ": " + err.Error())
 	}
 
 	mapping, ok := mappings.Data[colocatedService]

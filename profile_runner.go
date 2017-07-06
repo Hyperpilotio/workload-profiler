@@ -69,7 +69,7 @@ func NewBenchmarkRun(
 	if err != nil {
 		return nil, errors.New("Unable to generate Id for benchmark run: " + err.Error())
 	}
-	glog.V(1).Infof("New benchmark run with id: %s", id)
+	glog.V(1).Infof("Created new benchmark run with id: %s", id)
 
 	deployerClient, deployerErr := clients.NewDeployerClient(config)
 	if deployerErr != nil {
@@ -414,9 +414,10 @@ func (run *BenchmarkRun) getBenchmarkAgentUrl(config models.BenchmarkConfig) (st
 		// TODO: We will have multiple services in the future
 		colocatedService = run.ApplicationConfig.ServiceNames[0]
 	default:
-		return "", errors.New("Unknown placement host for benchmark: " + config.PlacementHost)
+		return "", errors.New("Unknown placement host for benchmark agent: " + config.PlacementHost)
 	}
 
+	glog.V(1).Infof("Getting benchmark agent url for colocated service %s from deployer client %+v", colocatedService, *run.DeployerClient)
 	serviceUrl, err := run.DeployerClient.GetColocatedServiceUrl(run.DeploymentId, colocatedService, "benchmark-agent")
 	if err != nil {
 		return "", fmt.Errorf(
@@ -431,6 +432,8 @@ func (run *BenchmarkRun) getBenchmarkAgentUrl(config models.BenchmarkConfig) (st
 
 func (run *BenchmarkRun) runBenchmark(id string, benchmark models.Benchmark, intensity int) error {
 	for _, config := range benchmark.Configs {
+		glog.V(1).Infof("Current benchmark config: %+v", config)
+
 		agentUrl, err := run.getBenchmarkAgentUrl(config)
 		if err != nil {
 			return fmt.Errorf(
@@ -452,6 +455,9 @@ func (run *BenchmarkRun) runApplicationLoadTest(
 	benchmarkIntensity int,
 	benchmarkName string) ([]*models.BenchmarkResult, error) {
 	loadTester := run.ApplicationConfig.LoadTester
+
+	glog.V(1).Infof("Starting app load test at intensity %.2f along with benchmark %s", appIntensity, benchmarkName)
+
 	if loadTester.BenchmarkController != nil {
 		return run.runBenchmarkController(
 			stageId,
@@ -473,7 +479,7 @@ func (run *BenchmarkRun) runApplicationLoadTest(
 			loadTester.SlowCookerController)
 	}
 
-	return nil, errors.New("No controller found in calibration request")
+	return nil, errors.New("No controller found in app load test request")
 }
 
 func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appIntensity float64) ([]*models.BenchmarkResult, error) {
@@ -482,8 +488,9 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appInte
 
 	counts := 0
 	for {
-		glog.Infof("Running benchmark %s at intensity %d along with app load test intensity %d",
+		glog.V(1).Infof("Running benchmark %s at intensity %d along with app load test at intensity %.2f",
 			benchmark.Name, currentIntensity, appIntensity)
+
 		stageId, err := generateId(benchmark.Name)
 		if err != nil {
 			return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())
@@ -520,20 +527,20 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appInte
 }
 
 func (run *BenchmarkRun) Run() error {
+	appName := run.ApplicationConfig.Name
+	glog.V(1).Infof("Reading calibration results for app %s", appName)
 	metric, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name, &models.CalibrationResults{})
 	if err != nil {
 		return errors.New("Unable to get calibration results for app " + run.ApplicationConfig.Name + ": " + err.Error())
 	}
-
 	calibration := metric.(*models.CalibrationResults)
-	glog.V(1).Infof("Read calibration results for app %s", run.ApplicationConfig.Name)
 
 	runResults := &models.BenchmarkRunResults{
 		TestId:        run.Id,
-		AppName:       run.ApplicationConfig.Name,
+		AppName:       appName,
 		NumServices:   len(run.ApplicationConfig.ServiceNames),
 		Services:      run.ApplicationConfig.ServiceNames,
-		ServiceInTest: run.ApplicationConfig.Name, // TODO: We assume only one service for now
+		ServiceInTest: run.ApplicationConfig.ServiceNames[0], // TODO: We assume only one service for now
 		LoadTester:    calibration.LoadTester,
 		AppCapacity:   calibration.FinalResult.LoadIntensity,
 		SloMetric:     run.ApplicationConfig.SLO.Metric,
@@ -543,12 +550,12 @@ func (run *BenchmarkRun) Run() error {
 	}
 
 	for _, benchmark := range run.Benchmarks {
-		glog.V(1).Infof("Starting benchmark runs with benchmark: %+v", benchmark)
+		glog.V(1).Infof("Starting benchmark runs for app %s with benchmark: %+v", appName, benchmark)
 		results, err := run.runAppWithBenchmark(benchmark, calibration.FinalResult.LoadIntensity)
 		if err != nil {
-			return errors.New("Unable to run benchmark " + benchmark.Name + ": " + err.Error())
+			return errors.New("Unable to run app " + appName + " along with benchmark " + benchmark.Name + ": " + err.Error())
 		}
-		glog.V(1).Infof("Finished running app along with benchmark %s", benchmark.Name)
+		glog.V(1).Infof("Finished running app %s along with benchmark %s", appName, benchmark.Name)
 		runResults.Benchmarks = append(runResults.Benchmarks, benchmark.Name)
 		for _, result := range results {
 			runResults.TestResult = append(runResults.TestResult, result)

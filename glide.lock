@@ -28,7 +28,7 @@ imports:
   - json/scanner
   - json/token
 - name: github.com/hyperpilotio/container-benchmarks
-  version: c135d507d68cce17ae7c2a69368a3462fac4aef7
+  version: 48941bd34193dba242f27d4eb6ac0efd657a9d10
   subpackages:
   - benchmark-agent/apis
 - name: github.com/hyperpilotio/go-utils

@@ -7,6 +7,7 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
+	"github.com/golang/glog"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/spf13/viper"
 )
@@ -60,6 +61,7 @@ func (configDb *ConfigDB) GetApplicationConfig(name string) (*models.Application
 	if sessionErr != nil {
 		return nil, errors.New("Unable to create mongo session: " + sessionErr.Error())
 	}
+	glog.V(1).Infof("Successfully connected to the config DB for app %s", name)
 	defer session.Close()
 
 	collection := session.DB(configDb.Database).C(configDb.ApplicationsCollection)
@@ -130,6 +132,7 @@ func (metricsDb *MetricsDB) WriteMetrics(dataType string, obj interface{}) error
 	return nil
 }
 
+// TODO: Need to support use of filter when one collection contains multiple documents
 func (metricsDb *MetricsDB) GetMetric(dataType string, appName string, metric interface{}) (interface{}, error) {
 	collectionName, collectionErr := metricsDb.getCollection(dataType)
 	if collectionErr != nil {
