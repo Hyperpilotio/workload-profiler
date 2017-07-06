@@ -32,6 +32,14 @@ const (
 	ErrMaxClusters = "Max clusters reached"
 )
 
+var clusterStates = map[clusterState]string{
+	DEPLOYING:   "Deploying",
+	AVAILABLE:   "Available",
+	RESERVED:    "Reserved",
+	UNRESERVING: "Unreserving",
+	FAILED:      "Failed",
+}
+
 type ReserveResult struct {
 	DeploymentId string
 	Err          string
@@ -61,30 +69,18 @@ type Clusters struct {
 }
 
 func GetStateString(state clusterState) string {
-	switch state {
-	case DEPLOYING:
-		return "Deploying"
-	case RESERVED:
-		return "Reserved"
-	case AVAILABLE:
-		return "Available"
-	case FAILED:
-		return "Failed"
+	if stateString, ok := clusterStates[state]; ok {
+		return stateString
 	}
 
 	return ""
 }
 
 func ParseStateString(state string) clusterState {
-	switch state {
-	case "Deploying":
-		return DEPLOYING
-	case "Reserved":
-		return RESERVED
-	case "Available":
-		return AVAILABLE
-	case "Failed":
-		return FAILED
+	for clusterState, stateString := range clusterStates {
+		if stateString == state {
+			return clusterState
+		}
 	}
 
 	return -1
@@ -168,6 +164,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 				if unreserveResult.Err != "" {
 					glog.Warningf("Unable to unreserve %s deployment: %s", deployment.runId, unreserveResult.Err)
 				}
+				log.Logger.Infof("Cluster %s unreserved.", deployment.deploymentId)
 			}()
 		}
 
