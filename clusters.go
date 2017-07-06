@@ -11,7 +11,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/blobstore"
 	deployer "github.com/hyperpilotio/deployer/apis"
-	"github.com/hyperpilotio/deployer/log"
+	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
 
