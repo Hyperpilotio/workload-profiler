@@ -154,7 +154,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 		switch deployment.state {
 		case RESERVED, FAILED:
 			glog.V(1).Infof("Unreserving deployment for cluster %+v", deployment)
-			log, logErr := log.NewLogger(clusters.Config, deployment.runId)
+			log, logErr := log.NewLogger(clusters.Config.GetString("filesPath"), deployment.runId)
 			if logErr != nil {
 				return errors.New("Error creating deployment logger: " + logErr.Error())
 			}

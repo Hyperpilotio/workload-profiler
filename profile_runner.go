@@ -23,7 +23,7 @@ type ProfileRun struct {
 	DeploymentId              string
 	MetricsDB                 *MetricsDB
 	ApplicationConfig         *models.ApplicationConfig
-	DeploymentLog             *log.DeploymentLog
+	DeploymentLog             *log.FileLog
 }
 
 type CalibrationRun struct {
@@ -78,7 +78,7 @@ func NewBenchmarkRun(
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
-	log, logErr := log.NewLogger(config, id)
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
 	if logErr != nil {
 		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
 	}
@@ -114,7 +114,7 @@ func NewCalibrationRun(applicationConfig *models.ApplicationConfig, config *vipe
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
-	log, logErr := log.NewLogger(config, id)
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
 	if logErr != nil {
 		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
 	}
@@ -158,7 +158,7 @@ func (run *BenchmarkRun) GetApplicationConfig() *models.ApplicationConfig {
 	return run.ApplicationConfig
 }
 
-func (run *BenchmarkRun) GetLog() *log.DeploymentLog {
+func (run *BenchmarkRun) GetLog() *log.FileLog {
 	return run.ProfileRun.DeploymentLog
 }
 
@@ -170,7 +170,7 @@ func (run *CalibrationRun) GetApplicationConfig() *models.ApplicationConfig {
 	return run.ApplicationConfig
 }
 
-func (run *CalibrationRun) GetLog() *log.DeploymentLog {
+func (run *CalibrationRun) GetLog() *log.FileLog {
 	return run.ProfileRun.DeploymentLog
 }
 

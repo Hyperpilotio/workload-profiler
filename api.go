@@ -18,7 +18,7 @@ import (
 type Job interface {
 	GetId() string
 	GetApplicationConfig() *models.ApplicationConfig
-	GetLog() *log.DeploymentLog
+	GetLog() *log.FileLog
 	Run(deploymentId string) error
 }
 
