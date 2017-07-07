@@ -42,6 +42,7 @@ type BenchmarkControllerBenchmarkResponse struct {
 }
 
 func (client *BenchmarkControllerClient) RunCalibration(
+	loadTesterName string,
 	baseUrl string,
 	stageId string,
 	controller *models.BenchmarkController,
@@ -73,7 +74,7 @@ func (client *BenchmarkControllerClient) RunCalibration(
 	results := &BenchmarkControllerCalibrationResponse{}
 
 	//TODO: The time duration for looping should be parameterized later
-	err = funcs.LoopUntil(time.Minute*60, time.Second*15, func() (bool, error) {
+	err = funcs.LoopUntil(time.Minute*240, time.Second*60, func() (bool, error) {
 		response, err := resty.R().Get(u.String() + "/" + stageId)
 		if err != nil {
 			return false, errors.New("Unable to send calibrate results request to controller: " + err.Error())
@@ -98,7 +99,7 @@ func (client *BenchmarkControllerClient) RunCalibration(
 			return true, nil
 		}
 
-		glog.Infof("Continue to wait for calibration results, last poll response: %v", response)
+		glog.Infof("Continue to wait for calibration results for %s, %s", loadTesterName, stageId)
 
 		return false, nil
 	})
@@ -111,6 +112,7 @@ func (client *BenchmarkControllerClient) RunCalibration(
 }
 
 func (client *BenchmarkControllerClient) RunBenchmark(
+	loadTesterName string,
 	baseUrl string,
 	stageId string,
 	intensity float64,
@@ -153,7 +155,7 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 
 	results := &BenchmarkControllerBenchmarkResponse{}
 
-	err = funcs.LoopUntil(time.Minute*90, time.Second*30, func() (bool, error) {
+	err = funcs.LoopUntil(time.Minute*360, time.Second*30, func() (bool, error) {
 		response, err := resty.R().Get(u.String() + "/" + stageId)
 		if err != nil {
 			return false, errors.New("Unable to send benchmark results request to controller: " + err.Error())
@@ -177,7 +179,7 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 			return true, nil
 		}
 
-		glog.V(1).Infof("Continue to wait for benchmark results, last poll response: %v", response)
+		glog.V(1).Infof("Continue to wait for benchmark results for %s, %s", loadTesterName, stageId)
 
 		return false, nil
 	})

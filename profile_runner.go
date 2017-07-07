@@ -121,9 +121,9 @@ func NewCalibrationRun(deploymentId string, applicationConfig *models.Applicatio
 	return run, nil
 }
 
-func (run *BenchmarkRun) deleteBenchmark(benchmark models.Benchmark) error {
+func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchmark) error {
 	for _, config := range benchmark.Configs {
-		agentUrl, err := run.getBenchmarkAgentUrl(config)
+		agentUrl, err := run.getBenchmarkAgentUrl(service, config)
 		if err != nil {
 			return fmt.Errorf(
 				"Unable to get benchmark agent url: " + err.Error())
@@ -146,7 +146,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 	}
 
 	startTime := time.Now()
-	results, err := run.BenchmarkControllerClient.RunCalibration(url, runId, controller, run.ApplicationConfig.SLO)
+	results, err := run.BenchmarkControllerClient.RunCalibration(loadTesterName, url, runId, controller, run.ApplicationConfig.SLO)
 	if err != nil {
 		return errors.New("Unable to run calibration: " + err.Error())
 	}
@@ -246,7 +246,7 @@ func (run *BenchmarkRun) runBenchmarkController(
 		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
-	response, err := run.BenchmarkControllerClient.RunBenchmark(url, stageId, appIntensity, controller)
+	response, err := run.BenchmarkControllerClient.RunBenchmark(loadTesterName, url, stageId, appIntensity, controller)
 	if err != nil {
 		return nil, errors.New("Unable to run benchmark: " + err.Error())
 	}
@@ -405,14 +405,13 @@ func (run *CalibrationRun) Run() error {
 	return errors.New("No controller found in calibration request")
 }
 
-func (run *BenchmarkRun) getBenchmarkAgentUrl(config models.BenchmarkConfig) (string, error) {
+func (run *BenchmarkRun) getBenchmarkAgentUrl(service string, config models.BenchmarkConfig) (string, error) {
 	var colocatedService string
 	switch config.PlacementHost {
 	case "loadtester":
 		colocatedService = run.ApplicationConfig.LoadTester.Name
 	case "service":
-		// TODO: We will have multiple services in the future
-		colocatedService = run.ApplicationConfig.ServiceNames[0]
+		colocatedService = service
 	default:
 		return "", errors.New("Unknown placement host for benchmark agent: " + config.PlacementHost)
 	}
@@ -430,11 +429,11 @@ func (run *BenchmarkRun) getBenchmarkAgentUrl(config models.BenchmarkConfig) (st
 	return serviceUrl, nil
 }
 
-func (run *BenchmarkRun) runBenchmark(id string, benchmark models.Benchmark, intensity int) error {
+func (run *BenchmarkRun) runBenchmark(id string, service string, benchmark models.Benchmark, intensity int) error {
 	for _, config := range benchmark.Configs {
 		glog.V(1).Infof("Current benchmark config: %+v", config)
 
-		agentUrl, err := run.getBenchmarkAgentUrl(config)
+		agentUrl, err := run.getBenchmarkAgentUrl(service, config)
 		if err != nil {
 			return fmt.Errorf(
 				"Unable to get benchmark agent url: " + err.Error())
@@ -487,40 +486,43 @@ func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appInte
 	results := []*models.BenchmarkResult{}
 
 	counts := 0
-	for {
-		glog.V(1).Infof("Running benchmark %s at intensity %d along with app load test at intensity %.2f",
-			benchmark.Name, currentIntensity, appIntensity)
 
-		stageId, err := generateId(benchmark.Name)
-		if err != nil {
-			return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())
-		}
+	for _, service := range run.ApplicationConfig.ServiceNames {
+		for {
+			glog.V(1).Infof("Running benchmark %s at intensity %d along with app load test at intensity %.2f with service",
+				benchmark.Name, currentIntensity, appIntensity, service)
 
-		if err = run.runBenchmark(stageId, benchmark, currentIntensity); err != nil {
-			run.deleteBenchmark(benchmark)
-			return nil, errors.New("Unable to run benchmark " + benchmark.Name + ": " + err.Error())
-		}
-
-		runResults, resultErr := run.runApplicationLoadTest(stageId, appIntensity, currentIntensity, benchmark.Name)
-		if resultErr != nil {
-			// Run through all benchmarks even if one failed
-			glog.Warningf("Unable to run app load test with benchmark %s: %s", benchmark.Name, resultErr.Error())
-		} else {
-			for _, result := range runResults {
-				results = append(results, result)
+			stageId, err := generateId(benchmark.Name)
+			if err != nil {
+				return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())
 			}
 
-			counts += 1
-		}
+			if err = run.runBenchmark(stageId, service, benchmark, currentIntensity); err != nil {
+				run.deleteBenchmark(service, benchmark)
+				return nil, errors.New("Unable to run benchmark " + benchmark.Name + ": " + err.Error())
+			}
 
-		if err := run.deleteBenchmark(benchmark); err != nil {
-			return nil, errors.New("Unable to delete benchmark " + benchmark.Name + ": " + err.Error())
-		}
+			runResults, resultErr := run.runApplicationLoadTest(stageId, appIntensity, currentIntensity, benchmark.Name)
+			if resultErr != nil {
+				// Run through all benchmarks even if one failed
+				glog.Warningf("Unable to run app load test with benchmark %s: %s", benchmark.Name, resultErr.Error())
+			} else {
+				for _, result := range runResults {
+					results = append(results, result)
+				}
 
-		if currentIntensity >= 100 {
-			break
+				counts += 1
+			}
+
+			if err := run.deleteBenchmark(service, benchmark); err != nil {
+				return nil, errors.New("Unable to delete benchmark " + benchmark.Name + ": " + err.Error())
+			}
+
+			if currentIntensity >= 100 {
+				break
+			}
+			currentIntensity += run.Step
 		}
-		currentIntensity += run.Step
 	}
 
 	return results, nil
