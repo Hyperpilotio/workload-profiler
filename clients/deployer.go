@@ -343,7 +343,7 @@ func (client *DeployerClient) waitUntilServiceUrlAvailable(
 			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 		}
 
-		log.Infof("%s url to be available", serviceName)
+		log.Infof("%s url is now available", serviceName)
 		return true, nil
 	})
 }

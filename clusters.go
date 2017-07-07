@@ -228,8 +228,17 @@ func (clusters *Clusters) ReserveDeployment(
 
 		go func() {
 			if deploymentId, err := clusters.createDeployment(applicationConfig, userId, runId, log); err != nil {
-				selectedCluster.state = FAILED
-				selectedCluster.failure = err.Error()
+				clusters.mutex.Lock()
+				for i, deployment := range clusters.Deployments {
+					if deployment.runId == runId {
+						// Remove cluster from list
+						clusters.Deployments[i] = clusters.Deployments[len(clusters.Deployments)-1]
+						clusters.Deployments[len(clusters.Deployments)-1] = nil
+						clusters.Deployments = clusters.Deployments[:len(clusters.Deployments)-1]
+						break
+					}
+				}
+				clusters.mutex.Unlock()
 				reserveResult <- ReserveResult{
 					Err: err.Error(),
 				}
