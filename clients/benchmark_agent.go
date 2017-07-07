@@ -117,17 +117,25 @@ func (client *BenchmarkAgentClient) DeleteBenchmark(baseUrl string, benchmarkNam
 	requestUrl := UrlBasePath(u) + path.Join(u.Path, "benchmarks", benchmarkName)
 
 	glog.V(1).Infof("Deleting benchmark %s from benchmark agent", benchmarkName)
-	response, err := resty.R().Delete(requestUrl)
-	if err != nil {
-		return err
-	}
+	for i := 0; i < 5; i++ {
+		response, err := resty.R().Delete(requestUrl)
+		if err != nil {
+			if i == 5 {
+				return err
+			}
 
-	if response.StatusCode() != 202 {
-		apiResponse := BenchmarkAgentResponse{}
-		if err := json.Unmarshal(response.Body(), &apiResponse); err != nil {
-			return errors.New("Unable to parse failed api response: " + err.Error())
-		} else {
-			return errors.New(apiResponse.Data)
+			glog.Warningf("Deleting benchmark failed with error: %s, retrying...", err.Error())
+			time.Sleep(3 * time.Second)
+			continue
+		}
+
+		if response.StatusCode() != 202 {
+			apiResponse := BenchmarkAgentResponse{}
+			if err := json.Unmarshal(response.Body(), &apiResponse); err != nil {
+				return errors.New("Unable to parse failed api response: " + err.Error())
+			} else {
+				return errors.New(apiResponse.Data)
+			}
 		}
 	}
 
