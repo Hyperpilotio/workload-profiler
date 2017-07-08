@@ -123,6 +123,7 @@ func NewCalibrationRun(deploymentId string, applicationConfig *models.Applicatio
 
 func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchmark) error {
 	for _, config := range benchmark.Configs {
+		glog.V(1).Infof("Deleting benchmark config %s", config.Name)
 		agentUrl, err := run.getBenchmarkAgentUrl(service, config)
 		if err != nil {
 			return fmt.Errorf(
@@ -431,7 +432,7 @@ func (run *BenchmarkRun) getBenchmarkAgentUrl(service string, config models.Benc
 
 func (run *BenchmarkRun) runBenchmark(id string, service string, benchmark models.Benchmark, intensity int) error {
 	for _, config := range benchmark.Configs {
-		glog.V(1).Infof("Current benchmark config: %+v", config)
+		glog.V(1).Infof("Run benchmark config: %+v", config)
 
 		agentUrl, err := run.getBenchmarkAgentUrl(service, config)
 		if err != nil {

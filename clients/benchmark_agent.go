@@ -137,7 +137,9 @@ func (client *BenchmarkAgentClient) DeleteBenchmark(baseUrl string, benchmarkNam
 				return errors.New(apiResponse.Data)
 			}
 		}
+
+		return nil
 	}
 
-	return nil
+	return errors.New("Unreachable")
 }
