@@ -121,7 +121,7 @@ func (client *BenchmarkAgentClient) DeleteBenchmark(baseUrl string, benchmarkNam
 		response, err := resty.R().Delete(requestUrl)
 		if err != nil {
 			if i == 5 {
-				return err
+				break
 			}
 
 			glog.Warningf("Deleting benchmark failed with error: %s, retrying...", err.Error())
@@ -141,5 +141,5 @@ func (client *BenchmarkAgentClient) DeleteBenchmark(baseUrl string, benchmarkNam
 		return nil
 	}
 
-	return errors.New("Unreachable")
+	return errors.New("Unable to delete benchmark after retries")
 }

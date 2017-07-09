@@ -58,6 +58,10 @@ func (client *BenchmarkControllerClient) RunCalibration(
 		body["initialize"] = controller.Initialize
 	}
 
+	if controller.InitializeType != "" {
+		body["initializeType"] = controller.InitializeType
+	}
+
 	body["loadTest"] = controller.Command
 	body["slo"] = slo
 	body["stageId"] = stageId
@@ -126,6 +130,10 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	body := make(map[string]interface{})
 	if controller.Initialize != nil {
 		body["initialize"] = controller.Initialize
+	}
+
+	if controller.InitializeType != "" {
+		body["initializeType"] = controller.InitializeType
 	}
 
 	loadTesterCommand := controller.Command

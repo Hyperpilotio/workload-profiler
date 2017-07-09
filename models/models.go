@@ -10,8 +10,9 @@ type Command struct {
 }
 
 type BenchmarkController struct {
-	Initialize *Command          `bson:"initialize" json:"initialize"`
-	Command    LoadTesterCommand `bson:"command" json:"command"`
+	InitializeType string            `bson:"initializeType" json:"initializeType"`
+	Initialize     *Command          `bson:"initialize" json:"initialize"`
+	Command        LoadTesterCommand `bson:"command" json:"command"`
 }
 
 type SlowCookerAppLoad struct {
