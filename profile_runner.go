@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/nu7hatch/gouuid"
@@ -21,6 +22,7 @@ type ProfileRun struct {
 	DeploymentId              string
 	MetricsDB                 *MetricsDB
 	ApplicationConfig         *models.ApplicationConfig
+	ProfileLog                *log.FileLog
 }
 
 type CalibrationRun struct {
@@ -76,6 +78,11 @@ func NewBenchmarkRun(
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
+	}
+
 	run := &BenchmarkRun{
 		ProfileRun: ProfileRun{
 			Id:                        id,
@@ -85,6 +92,7 @@ func NewBenchmarkRun(
 			SlowCookerClient:          &clients.SlowCookerClient{},
 			MetricsDB:                 NewMetricsDB(config),
 			DeploymentId:              deploymentId,
+			ProfileLog:                log,
 		},
 		StartingIntensity:    startingIntensity,
 		Step:                 step,
@@ -107,6 +115,11 @@ func NewCalibrationRun(deploymentId string, applicationConfig *models.Applicatio
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
+	}
+
 	run := &CalibrationRun{
 		ProfileRun: ProfileRun{
 			Id:                        id,
@@ -115,6 +128,7 @@ func NewCalibrationRun(deploymentId string, applicationConfig *models.Applicatio
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			MetricsDB:                 NewMetricsDB(config),
 			DeploymentId:              deploymentId,
+			ProfileLog:                log,
 		},
 	}
 
