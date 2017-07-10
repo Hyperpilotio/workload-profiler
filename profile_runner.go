@@ -505,48 +505,46 @@ func (run *BenchmarkRun) runApplicationLoadTest(
 	return nil, errors.New("No controller found in app load test request")
 }
 
-func (run *BenchmarkRun) runAppWithBenchmark(benchmark models.Benchmark, appIntensity float64) ([]*models.BenchmarkResult, error) {
+func (run *BenchmarkRun) runAppWithBenchmark(service string, benchmark models.Benchmark, appIntensity float64) ([]*models.BenchmarkResult, error) {
 	currentIntensity := run.StartingIntensity
 	results := []*models.BenchmarkResult{}
 
 	counts := 0
 
-	for _, service := range run.ApplicationConfig.ServiceNames {
-		for {
-			glog.V(1).Infof("Running benchmark %s at intensity %d along with app load test at intensity %.2f with service",
-				benchmark.Name, currentIntensity, appIntensity, service)
+	for {
+		glog.V(1).Infof("Running benchmark %s at intensity %d along with app load test at intensity %.2f with service",
+			benchmark.Name, currentIntensity, appIntensity, service)
 
-			stageId, err := generateId(benchmark.Name)
-			if err != nil {
-				return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())
-			}
-
-			if err = run.runBenchmark(stageId, service, benchmark, currentIntensity); err != nil {
-				run.deleteBenchmark(service, benchmark)
-				return nil, errors.New("Unable to run benchmark " + benchmark.Name + ": " + err.Error())
-			}
-
-			runResults, resultErr := run.runApplicationLoadTest(stageId, appIntensity, currentIntensity, benchmark.Name)
-			if resultErr != nil {
-				// Run through all benchmarks even if one failed
-				glog.Warningf("Unable to run app load test with benchmark %s: %s", benchmark.Name, resultErr.Error())
-			} else {
-				for _, result := range runResults {
-					results = append(results, result)
-				}
-
-				counts += 1
-			}
-
-			if err := run.deleteBenchmark(service, benchmark); err != nil {
-				return nil, errors.New("Unable to delete benchmark " + benchmark.Name + ": " + err.Error())
-			}
-
-			if currentIntensity >= 100 {
-				break
-			}
-			currentIntensity += run.Step
+		stageId, err := generateId(benchmark.Name)
+		if err != nil {
+			return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())
 		}
+
+		if err = run.runBenchmark(stageId, service, benchmark, currentIntensity); err != nil {
+			run.deleteBenchmark(service, benchmark)
+			return nil, errors.New("Unable to run benchmark " + benchmark.Name + ": " + err.Error())
+		}
+
+		runResults, resultErr := run.runApplicationLoadTest(stageId, appIntensity, currentIntensity, benchmark.Name)
+		if resultErr != nil {
+			// Run through all benchmarks even if one failed
+			glog.Warningf("Unable to run app load test with benchmark %s: %s", benchmark.Name, resultErr.Error())
+		} else {
+			for _, result := range runResults {
+				results = append(results, result)
+			}
+
+			counts += 1
+		}
+
+		if err := run.deleteBenchmark(service, benchmark); err != nil {
+			return nil, errors.New("Unable to delete benchmark " + benchmark.Name + ": " + err.Error())
+		}
+
+		if currentIntensity >= 100 {
+			break
+		}
+		currentIntensity += run.Step
 	}
 
 	return results, nil
@@ -561,36 +559,38 @@ func (run *BenchmarkRun) Run() error {
 	}
 	calibration := metric.(*models.CalibrationResults)
 
-	runResults := &models.BenchmarkRunResults{
-		TestId:        run.Id,
-		AppName:       appName,
-		NumServices:   len(run.ApplicationConfig.ServiceNames),
-		Services:      run.ApplicationConfig.ServiceNames,
-		ServiceInTest: run.ApplicationConfig.ServiceNames[0], // TODO: We assume only one service for now
-		LoadTester:    calibration.LoadTester,
-		AppCapacity:   calibration.FinalResult.LoadIntensity,
-		SloMetric:     run.ApplicationConfig.SLO.Metric,
-		SloTolerance:  run.SloTolerance,
-		Benchmarks:    []string{},
-		TestResult:    []*models.BenchmarkResult{},
-	}
-
-	for _, benchmark := range run.Benchmarks {
-		glog.V(1).Infof("Starting benchmark runs for app %s with benchmark: %+v", appName, benchmark)
-		results, err := run.runAppWithBenchmark(benchmark, calibration.FinalResult.LoadIntensity)
-		if err != nil {
-			return errors.New("Unable to run app " + appName + " along with benchmark " + benchmark.Name + ": " + err.Error())
+	for _, service := range run.ApplicationConfig.ServiceNames {
+		runResults := &models.BenchmarkRunResults{
+			TestId:        run.Id,
+			AppName:       appName,
+			NumServices:   len(run.ApplicationConfig.ServiceNames),
+			Services:      run.ApplicationConfig.ServiceNames,
+			ServiceInTest: service,
+			LoadTester:    calibration.LoadTester,
+			AppCapacity:   calibration.FinalResult.LoadIntensity,
+			SloMetric:     run.ApplicationConfig.SLO.Metric,
+			SloTolerance:  run.SloTolerance,
+			Benchmarks:    []string{},
+			TestResult:    []*models.BenchmarkResult{},
 		}
-		glog.V(1).Infof("Finished running app %s along with benchmark %s", appName, benchmark.Name)
-		runResults.Benchmarks = append(runResults.Benchmarks, benchmark.Name)
-		for _, result := range results {
-			runResults.TestResult = append(runResults.TestResult, result)
-		}
-	}
 
-	glog.V(1).Infof("Storing benchmark results for app %s: %+v", run.ApplicationConfig.Name, runResults.TestResult)
-	if err := run.MetricsDB.WriteMetrics("profiling", runResults); err != nil {
-		return errors.New("Unable to store benchmark results for app " + run.ApplicationConfig.Name + ": " + err.Error())
+		for _, benchmark := range run.Benchmarks {
+			glog.V(1).Infof("Starting benchmark runs for app %s with benchmark: %+v", appName, benchmark)
+			results, err := run.runAppWithBenchmark(service, benchmark, calibration.FinalResult.LoadIntensity)
+			if err != nil {
+				return errors.New("Unable to run app " + appName + " along with benchmark " + benchmark.Name + ": " + err.Error())
+			}
+			glog.V(1).Infof("Finished running app %s along with benchmark %s", appName, benchmark.Name)
+			runResults.Benchmarks = append(runResults.Benchmarks, benchmark.Name)
+			for _, result := range results {
+				runResults.TestResult = append(runResults.TestResult, result)
+			}
+		}
+
+		glog.V(1).Infof("Storing benchmark results for app %s: %+v", run.ApplicationConfig.Name, runResults.TestResult)
+		if err := run.MetricsDB.WriteMetrics("profiling", runResults); err != nil {
+			return errors.New("Unable to store benchmark results for app " + run.ApplicationConfig.Name + ": " + err.Error())
+		}
 	}
 
 	if b, err := json.MarshalIndent(runResults, "", "  "); err == nil {
