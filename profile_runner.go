@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/nu7hatch/gouuid"
@@ -21,6 +23,7 @@ type ProfileRun struct {
 	DeploymentId              string
 	MetricsDB                 *MetricsDB
 	ApplicationConfig         *models.ApplicationConfig
+	ProfileLog                *log.FileLog
 }
 
 type CalibrationRun struct {
@@ -76,6 +79,11 @@ func NewBenchmarkRun(
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
+	}
+
 	run := &BenchmarkRun{
 		ProfileRun: ProfileRun{
 			Id:                        id,
@@ -85,6 +93,7 @@ func NewBenchmarkRun(
 			SlowCookerClient:          &clients.SlowCookerClient{},
 			MetricsDB:                 NewMetricsDB(config),
 			DeploymentId:              deploymentId,
+			ProfileLog:                log,
 		},
 		StartingIntensity:    startingIntensity,
 		Step:                 step,
@@ -107,6 +116,11 @@ func NewCalibrationRun(deploymentId string, applicationConfig *models.Applicatio
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
 
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
+	}
+
 	run := &CalibrationRun{
 		ProfileRun: ProfileRun{
 			Id:                        id,
@@ -115,6 +129,7 @@ func NewCalibrationRun(deploymentId string, applicationConfig *models.Applicatio
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			MetricsDB:                 NewMetricsDB(config),
 			DeploymentId:              deploymentId,
+			ProfileLog:                log,
 		},
 	}
 
@@ -185,6 +200,10 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 		return errors.New("Unable to store calibration results: " + err.Error())
 	}
 
+	if b, err := json.MarshalIndent(calibrationResults, "", "  "); err == nil {
+		run.ProfileLog.Logger.Infof("Store calibration results: %s", string(b))
+	}
+
 	return nil
 }
 
@@ -230,6 +249,10 @@ func (run *CalibrationRun) runSlowCookerController(runId string, controller *mod
 
 	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
 		return errors.New("Unable to store calibration results: " + err.Error())
+	}
+
+	if b, err := json.MarshalIndent(calibrationResults, "", "  "); err == nil {
+		run.ProfileLog.Logger.Infof("Store calibration results: %s", string(b))
 	}
 
 	return nil
@@ -568,6 +591,10 @@ func (run *BenchmarkRun) Run() error {
 	glog.V(1).Infof("Storing benchmark results for app %s: %+v", run.ApplicationConfig.Name, runResults.TestResult)
 	if err := run.MetricsDB.WriteMetrics("profiling", runResults); err != nil {
 		return errors.New("Unable to store benchmark results for app " + run.ApplicationConfig.Name + ": " + err.Error())
+	}
+
+	if b, err := json.MarshalIndent(runResults, "", "  "); err == nil {
+		run.ProfileLog.Logger.Infof("Store benchmark results: %s", string(b))
 	}
 
 	return nil

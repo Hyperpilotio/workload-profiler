@@ -1,11 +1,15 @@
 package main
 
 import (
+	"errors"
 	"net/http"
-	"sync"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
+	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/spf13/viper"
 )
 
@@ -13,7 +17,8 @@ import (
 type Server struct {
 	Config   *viper.Viper
 	ConfigDB *ConfigDB
-	mutex    sync.Mutex
+
+	Clusters *Clusters
 }
 
 // NewServer return an instance of Server struct.
@@ -26,12 +31,33 @@ func NewServer(config *viper.Viper) *Server {
 
 // StartServer starts a web server
 func (server *Server) StartServer() error {
+	if server.Config.GetString("filesPath") == "" {
+		return errors.New("filesPath is not specified in the configuration file.")
+	}
+
+	if err := os.Mkdir(server.Config.GetString("filesPath"), 0755); err != nil {
+		if !os.IsExist(err) {
+			return errors.New("Unable to create filesPath directory: " + err.Error())
+		}
+	}
+
 	//gin.SetMode("release")
 	router := gin.New()
 
 	// Global middleware
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+
+	router.LoadHTMLGlob(filepath.Join(os.Getenv("GOPATH"),
+		"src/github.com/hyperpilotio/workload-profiler/ui/*.html"))
+	router.Static("/static", filepath.Join(os.Getenv("GOPATH"),
+		"src/github.com/hyperpilotio/workload-profiler/ui/static"))
+
+	uiGroup := router.Group("/ui")
+	{
+		uiGroup.GET("", server.logUI)
+		uiGroup.GET("/logs/:fileName", server.getDeploymentLogContent)
+	}
 
 	calibrateGroup := router.Group("/calibrate")
 	{
@@ -41,6 +67,17 @@ func (server *Server) StartServer() error {
 	benchmarkGroup := router.Group("/benchmarks")
 	{
 		benchmarkGroup.POST("/:appName", server.runBenchmarks)
+	}
+
+	deployerClient, deployerErr := clients.NewDeployerClient(server.Config)
+	if deployerErr != nil {
+		return errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	}
+
+	if clusters, err := NewClusters(deployerClient, server.Config); err != nil {
+		return errors.New("Unable to create clusters object: " + err.Error())
+	} else {
+		server.Clusters = clusters
 	}
 
 	return router.Run(":" + server.Config.GetString("port"))
@@ -112,8 +149,20 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
+	cluster := &cluster{
+		deploymentId: request.DeploymentId,
+		runId:        run.Id,
+		state:        AVAILABLE,
+		created:      time.Now(),
+	}
+	server.Clusters.Deployments = append(server.Clusters.Deployments, cluster)
+
+	log := run.ProfileLog
+	defer log.LogFile.Close()
+
+	log.Logger.Infof("Running %s job...", run.Id)
 	if err = run.Run(); err != nil {
-		glog.Errorf("Failed to run profiling benchmarks for app %s: %s", appName, err.Error())
+		log.Logger.Errorf("Failed to run profiling benchmarks for app %s: %s", appName, err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
 			"data":  "Unable to run profiling benchmarks: " + err.Error(),
@@ -168,7 +217,20 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
+	cluster := &cluster{
+		deploymentId: request.DeploymentId,
+		runId:        run.Id,
+		state:        AVAILABLE,
+		created:      time.Now(),
+	}
+	server.Clusters.Deployments = append(server.Clusters.Deployments, cluster)
+
+	log := run.ProfileLog
+	defer log.LogFile.Close()
+
+	log.Logger.Infof("Running %s job...", run.Id)
 	if err = run.Run(); err != nil {
+		log.Logger.Errorf("Failed to run profiling calibrate for app %s: %s", appName, err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
 			"data":  "Unable to run calibration: " + err.Error(),

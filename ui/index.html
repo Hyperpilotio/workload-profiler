@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Profiler</title>
+    <link rel="import" href="/static/common/linkCss.html">
+</head>
+
+<body>
+    <!-- header -->
+    <header>
+        <nav>
+            <a href="/ui" class="banner">Profiler</a>
+            <ul>
+                <li>
+                    <a href="/ui" class="active">profilers</a>
+                </li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- sidebar -->
+    <aside>
+        <ul class="deployment-list">
+            {{range $k,$v := .logs}}
+            <li class="deployment" data-runid="{{$v.RunId}}" data-deploymentid="{{$v.DeploymentId}}" data-status="{{$v.Status}}">
+                <div class="logName">{{$v.RunId}}</div>
+                <span class="timeLabel">Create:</span><span class="createTime">{{$v.Create}}</span>
+                <span class="badge badge-{{$v.Status}}">{{$v.Status}}</span>
+            </li>
+            {{end}}
+        </ul>
+    </aside>
+
+    <!-- main -->
+    <main>
+        <h3 id="statusMsg"></h3>
+        <div class="deployment-detail" style="display: none;">
+            <h2>Deployment Log</h2>
+            <div class="deployment-log">
+            </div>
+        </div>
+    </main>
+</body>
+<link rel="import" href="/static/common/linkJs.html">
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+    crossorigin="anonymous"></script>
+<script>
+    $(function () {
+        $('.deployment-list').on('click', 'li', function () {
+            $('.deployment-list li').removeClass('active');
+            $(this).addClass('active');
+            $('main h1').remove();
+            $('.deployment-detail').show();
+            getDeploymentLogContent($(this));
+        });
+    });
+
+    function getDeploymentLogContent(deployment) {
+        if (typeof deployment != 'undefined') {
+            $.ajax({
+                url: '/ui/logs/' + deployment.data('runid'),
+                type: 'GET',
+                dataType: 'json',
+                success: function (json) {
+                    if (json.error == false) {
+                        $('.deployment-log').html('');
+                        $.each(json.data, function (i, line) {
+                            $('.deployment-log').append('<p class="line">' + line.replace(/ /g,
+                                '&nbsp;') + '</p>');
+                        });
+                        $('.deployment-log').show();
+
+                        if (json.state == "") {
+                            deployment.remove();
+                            $('.deployment-detail').hide();
+                        } else {
+                            if (deployment.data('status') != json.state) {
+                                deployment.find('.badge').text(json.state);
+                                deployment.find('.badge').removeClass('badge-' + deployment.data('status'));
+                                deployment.find('.badge').addClass('badge-' + json.state);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        if ($('.deployment-list li.active').length == 1) {
+            setTimeout(getDeploymentLogContent, 5000, $('.deployment-list li.active'));
+        }
+    }
+</script>
+
+</html>
