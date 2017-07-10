@@ -200,6 +200,10 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 		return errors.New("Unable to store calibration results: " + err.Error())
 	}
 
+	if b, err := json.MarshalIndent(calibrationResults, "", "  "); err == nil {
+		run.ProfileLog.Logger.Infof("Store calibration results: %s", string(b))
+	}
+
 	return nil
 }
 
