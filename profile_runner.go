@@ -591,10 +591,12 @@ func (run *BenchmarkRun) Run() error {
 		if err := run.MetricsDB.WriteMetrics("profiling", runResults); err != nil {
 			return errors.New("Unable to store benchmark results for app " + run.ApplicationConfig.Name + ": " + err.Error())
 		}
-	}
 
-	if b, err := json.MarshalIndent(runResults, "", "  "); err == nil {
-		run.ProfileLog.Logger.Infof("Store benchmark results: %s", string(b))
+		if b, err := json.MarshalIndent(runResults, "", "  "); err != nil {
+			run.ProfileLog.Logger.Errorf("Unable to indent run results: " + err.Error())
+		} else {
+			run.ProfileLog.Logger.Infof("Store benchmark results: %s", string(b))
+		}
 	}
 
 	return nil
