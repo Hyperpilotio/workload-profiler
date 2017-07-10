@@ -23,8 +23,8 @@
     <aside>
         <ul class="deployment-list">
             {{range $k,$v := .logs}}
-            <li class="deployment" data-name="{{$v.Name}}" data-status="{{$v.Status}}">
-                <div class="logName">{{$v.Name}}</div>
+            <li class="deployment" data-runid="{{$v.RunId}}" data-deploymentid="{{$v.DeploymentId}}" data-status="{{$v.Status}}">
+                <div class="logName">{{$v.RunId}}</div>
                 <span class="timeLabel">Create:</span><span class="createTime">{{$v.Create}}</span>
                 <span class="badge badge-{{$v.Status}}">{{$v.Status}}</span>
             </li>
@@ -59,7 +59,7 @@
     function getDeploymentLogContent(deployment) {
         if (typeof deployment != 'undefined') {
             $.ajax({
-                url: '/ui/logs/' + deployment.data('name'),
+                url: '/ui/logs/' + deployment.data('runid'),
                 type: 'GET',
                 dataType: 'json',
                 success: function (json) {

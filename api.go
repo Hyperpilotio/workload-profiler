@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
@@ -30,6 +31,16 @@ func NewServer(config *viper.Viper) *Server {
 
 // StartServer starts a web server
 func (server *Server) StartServer() error {
+	if server.Config.GetString("filesPath") == "" {
+		return errors.New("filesPath is not specified in the configuration file.")
+	}
+
+	if err := os.Mkdir(server.Config.GetString("filesPath"), 0755); err != nil {
+		if !os.IsExist(err) {
+			return errors.New("Unable to create filesPath directory: " + err.Error())
+		}
+	}
+
 	//gin.SetMode("release")
 	router := gin.New()
 
@@ -45,7 +56,7 @@ func (server *Server) StartServer() error {
 	uiGroup := router.Group("/ui")
 	{
 		uiGroup.GET("", server.logUI)
-		uiGroup.GET("/logs/:logFile", server.getFileLogContent)
+		uiGroup.GET("/logs/:fileName", server.getDeploymentLogContent)
 	}
 
 	calibrateGroup := router.Group("/calibrate")
@@ -138,6 +149,14 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
+	cluster := &cluster{
+		deploymentId: request.DeploymentId,
+		runId:        run.Id,
+		state:        AVAILABLE,
+		created:      time.Now(),
+	}
+	server.Clusters.Deployments = append(server.Clusters.Deployments, cluster)
+
 	log := run.ProfileLog
 	defer log.LogFile.Close()
 
@@ -197,6 +216,14 @@ func (server *Server) runCalibration(c *gin.Context) {
 		})
 		return
 	}
+
+	cluster := &cluster{
+		deploymentId: request.DeploymentId,
+		runId:        run.Id,
+		state:        AVAILABLE,
+		created:      time.Now(),
+	}
+	server.Clusters.Deployments = append(server.Clusters.Deployments, cluster)
 
 	log := run.ProfileLog
 	defer log.LogFile.Close()

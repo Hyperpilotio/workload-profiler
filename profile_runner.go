@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -244,6 +245,10 @@ func (run *CalibrationRun) runSlowCookerController(runId string, controller *mod
 
 	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
 		return errors.New("Unable to store calibration results: " + err.Error())
+	}
+
+	if b, err := json.MarshalIndent(calibrationResults, "", "  "); err == nil {
+		run.ProfileLog.Logger.Infof("Store calibration results: %s", string(b))
 	}
 
 	return nil
@@ -582,6 +587,10 @@ func (run *BenchmarkRun) Run() error {
 	glog.V(1).Infof("Storing benchmark results for app %s: %+v", run.ApplicationConfig.Name, runResults.TestResult)
 	if err := run.MetricsDB.WriteMetrics("profiling", runResults); err != nil {
 		return errors.New("Unable to store benchmark results for app " + run.ApplicationConfig.Name + ": " + err.Error())
+	}
+
+	if b, err := json.MarshalIndent(runResults, "", "  "); err == nil {
+		run.ProfileLog.Logger.Infof("Store benchmark results: %s", string(b))
 	}
 
 	return nil

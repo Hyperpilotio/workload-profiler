@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -71,27 +72,15 @@ func NewClusters(deployerClient *clients.DeployerClient, config *viper.Viper) (*
 	}, nil
 }
 
-func (clusters *Clusters) SetState(runId string, state clusterState) {
+func (clusters *Clusters) GetCluster(runId string) (*cluster, error) {
 	clusters.mutex.Lock()
 	defer clusters.mutex.Unlock()
 
 	for _, deployment := range clusters.Deployments {
 		if deployment.runId == runId {
-			deployment.state = state
-			break
-		}
-	}
-}
-
-func (clusters *Clusters) GetState(runId string) clusterState {
-	clusters.mutex.Lock()
-	defer clusters.mutex.Unlock()
-
-	for _, deployment := range clusters.Deployments {
-		if deployment.runId == runId {
-			return deployment.state
+			return deployment, nil
 		}
 	}
 
-	return -1
+	return nil, fmt.Errorf("Unable find %s cluster", runId)
 }

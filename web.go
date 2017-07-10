@@ -11,36 +11,37 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type FileLog struct {
-	Name   string
-	Status string
-	Create time.Time
+type DeploymentLog struct {
+	DeploymentId string
+	RunId        string
+	Status       string
+	Create       time.Time
 }
 
-type FileLogs []*FileLog
+type DeploymentLogs []*DeploymentLog
 
-func (d FileLogs) Len() int { return len(d) }
-func (d FileLogs) Less(i, j int) bool {
+func (d DeploymentLogs) Len() int { return len(d) }
+func (d DeploymentLogs) Less(i, j int) bool {
 	return d[i].Create.Before(d[j].Create)
 }
-func (d FileLogs) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
+func (d DeploymentLogs) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
 
 func (server *Server) logUI(c *gin.Context) {
-	FileLogs, _ := server.getFileLogs(c)
+	DeploymentLogs, _ := server.getDeploymentLogs(c)
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"error": false,
-		"logs":  FileLogs,
+		"logs":  DeploymentLogs,
 	})
 }
 
-func (server *Server) getFileLogContent(c *gin.Context) {
-	logFile := c.Param("logFile")
-	logPath := path.Join(server.Config.GetString("filesPath"), "log", logFile+".log")
+func (server *Server) getDeploymentLogContent(c *gin.Context) {
+	fileName := c.Param("fileName")
+	logPath := path.Join(server.Config.GetString("filesPath"), "log", fileName+".log")
 	file, err := os.Open(logPath)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": true,
-			"data":  "Unable to read File log: " + err.Error(),
+			"data":  "Unable to read deployment log: " + err.Error(),
 		})
 		return
 	}
@@ -55,28 +56,39 @@ func (server *Server) getFileLogContent(c *gin.Context) {
 		lines = append(lines, scanner.Text())
 	}
 
+	deployment, err := server.Clusters.GetCluster(fileName)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"error": false,
+			"data":  lines,
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"error": false,
-		"data":  lines,
-		"state": GetStateString(server.Clusters.GetState(logFile)),
+		"error":      false,
+		"data":       lines,
+		"deployment": deployment,
+		"state":      GetStateString(deployment.state),
 	})
 }
 
-func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
-	FileLogs := FileLogs{}
+func (server *Server) getDeploymentLogs(c *gin.Context) (DeploymentLogs, error) {
+	DeploymentLogs := DeploymentLogs{}
 
 	server.Clusters.mutex.Lock()
 	defer server.Clusters.mutex.Unlock()
 
 	for _, cluster := range server.Clusters.Deployments {
-		FileLog := &FileLog{
-			Name:   cluster.runId,
-			Status: GetStateString(cluster.state),
-			Create: cluster.created,
+		DeploymentLog := &DeploymentLog{
+			DeploymentId: cluster.deploymentId,
+			RunId:        cluster.runId,
+			Status:       GetStateString(cluster.state),
+			Create:       cluster.created,
 		}
-		FileLogs = append(FileLogs, FileLog)
+		DeploymentLogs = append(DeploymentLogs, DeploymentLog)
 	}
 
-	sort.Sort(FileLogs)
-	return FileLogs, nil
+	sort.Sort(DeploymentLogs)
+	return DeploymentLogs, nil
 }
