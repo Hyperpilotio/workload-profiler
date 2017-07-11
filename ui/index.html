@@ -46,26 +46,28 @@
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
     crossorigin="anonymous"></script>
 <script>
-    $(function () {
-        $('.deployment-list').on('click', 'li', function () {
-            $('.deployment-list li').removeClass('active');
-            $(this).addClass('active');
-            $('main h1').remove();
+    $(function() {
+        $('.deployment-list').on('click', 'li', function() {
             $('.deployment-detail').show();
+            $('.deployment-log').html('');
             getDeploymentLogContent($(this));
         });
     });
 
-    function getDeploymentLogContent(deployment) {
+    function getDeploymentLogContent(deployment) { 
+        if ($('.deployment-list li.active').data('runid') != deployment.data('runid')) {
+            return false;
+        }
         if (typeof deployment != 'undefined') {
             $.ajax({
                 url: '/ui/logs/' + deployment.data('runid'),
                 type: 'GET',
                 dataType: 'json',
-                success: function (json) {
+                success: function(json) {
+
                     if (json.error == false) {
                         $('.deployment-log').html('');
-                        $.each(json.data, function (i, line) {
+                        $.each(json.data, function(i, line) {
                             $('.deployment-log').append('<p class="line">' + line.replace(/ /g,
                                 '&nbsp;') + '</p>');
                         });
