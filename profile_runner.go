@@ -171,8 +171,7 @@ func (run *CalibrationRun) replaceTargetingServiceAddress(controller *models.Ben
 		}
 
 		// Initialize
-		if nil != controller.Initialize.HostConfig {
-
+		if controller.Initialize.HostConfig != nil {
 			controller.Initialize.Args = append(
 				[]string{
 					controller.Initialize.HostConfig.Arg,
@@ -181,7 +180,7 @@ func (run *CalibrationRun) replaceTargetingServiceAddress(controller *models.Ben
 				controller.Initialize.Args...)
 		}
 
-		if nil != controller.Initialize.PortConfig {
+		if controller.Initialize.PortConfig != nil {
 			controller.Initialize.Args = append(
 				[]string{
 					controller.Initialize.PortConfig.Arg,
@@ -191,7 +190,7 @@ func (run *CalibrationRun) replaceTargetingServiceAddress(controller *models.Ben
 		}
 
 		// LoadTesterCommand
-		if nil != controller.Command.HostConfig {
+		if controller.Command.HostConfig != nil {
 			controller.Command.Args = append(
 				[]string{
 					controller.Command.HostConfig.Arg,
@@ -200,7 +199,7 @@ func (run *CalibrationRun) replaceTargetingServiceAddress(controller *models.Ben
 				controller.Command.Args...)
 		}
 
-		if nil != controller.Command.PortConfig {
+		if controller.Command.PortConfig != nil {
 			controller.Command.Args = append(
 				[]string{
 					controller.Command.PortConfig.Arg,
@@ -340,8 +339,7 @@ func (run *BenchmarkRun) replaceTargetingServiceAddress(controller *models.Bench
 		}
 
 		// Initialize
-		if nil != controller.Initialize.HostConfig {
-
+		if controller.Initialize.HostConfig != nil {
 			controller.Initialize.Args = append(
 				[]string{
 					controller.Initialize.HostConfig.Arg,
@@ -350,7 +348,7 @@ func (run *BenchmarkRun) replaceTargetingServiceAddress(controller *models.Bench
 				controller.Initialize.Args...)
 		}
 
-		if nil != controller.Initialize.PortConfig {
+		if controller.Initialize.PortConfig != nil {
 			controller.Initialize.Args = append(
 				[]string{
 					controller.Initialize.PortConfig.Arg,
@@ -360,7 +358,7 @@ func (run *BenchmarkRun) replaceTargetingServiceAddress(controller *models.Bench
 		}
 
 		// LoadTesterCommand
-		if nil != controller.Command.HostConfig {
+		if controller.Command.HostConfig != nil {
 			controller.Command.Args = append(
 				[]string{
 					controller.Command.HostConfig.Arg,
@@ -369,7 +367,7 @@ func (run *BenchmarkRun) replaceTargetingServiceAddress(controller *models.Bench
 				controller.Command.Args...)
 		}
 
-		if nil != controller.Command.PortConfig {
+		if controller.Command.PortConfig != nil {
 			controller.Command.Args = append(
 				[]string{
 					controller.Command.PortConfig.Arg,

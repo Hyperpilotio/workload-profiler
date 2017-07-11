@@ -140,7 +140,7 @@ func (client *DeployerClient) GetServiceAddress(deployment string, service strin
 	}
 
 	var address ServiceAddress
-	if err = json.Unmarshal(response.Body(), &address[]); err != nil {
+	if err = json.Unmarshal(response.Body(), &address); err != nil {
 		return nil, err
 	}
 
