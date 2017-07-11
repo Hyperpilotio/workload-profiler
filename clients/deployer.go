@@ -139,12 +139,12 @@ func (client *DeployerClient) GetServiceAddress(deployment string, service strin
 		return nil, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
 	}
 
-	var addres ServiceAddress
-	if err = json.Unmarshal(response.Body(), &addres); err != nil {
+	var address ServiceAddress
+	if err = json.Unmarshal(response.Body(), &address[]); err != nil {
 		return nil, err
 	}
 
-	return &addres, nil
+	return &address, nil
 }
 
 func (client *DeployerClient) IsDeploymentReady(deployment string) (bool, error) {
