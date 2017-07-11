@@ -46,10 +46,12 @@
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
     crossorigin="anonymous"></script>
 <script>
+    var timeout;
     $(function() {
         $('.deployment-list').on('click', 'li', function() {
             $('.deployment-detail').show();
             $('.deployment-log').html('');
+            clearTimeout(timeout);
             getDeploymentLogContent($(this));
         });
     });
@@ -89,7 +91,7 @@
         }
 
         if ($('.deployment-list li.active').length == 1) {
-            setTimeout(getDeploymentLogContent, 5000, $('.deployment-list li.active'));
+            timeout = setTimeout(getDeploymentLogContent, 5000, $('.deployment-list li.active'));
         }
     }
 </script>
