@@ -12,7 +12,7 @@ import (
 	"github.com/go-resty/resty"
 	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/hyperpilotio/workload-profiler/models"
-	"github.com/op/go-logging"
+	logging "github.com/op/go-logging"
 )
 
 type BenchmarkControllerClient struct{}
@@ -63,7 +63,11 @@ func (client *BenchmarkControllerClient) RunCalibration(
 		body["initializeType"] = controller.InitializeType
 	}
 
+	if ok, err := validateLoadTesterCommand(controller.Command); !ok {
+		return nil, err
+	}
 	body["loadTest"] = controller.Command
+
 	body["slo"] = slo
 	body["stageId"] = stageId
 
@@ -146,11 +150,17 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	// TODO: Intensity arguments might be differnet types, we assume it's all int at the moment
 	args = append(args, strconv.Itoa(int(intensity)))
 	command := models.Command{
-		Image: loadTesterCommand.Image,
-		Path:  loadTesterCommand.Path,
-		Args:  args,
+		Image:     loadTesterCommand.Image,
+		Path:      loadTesterCommand.Path,
+		Args:      args,
+		ParserURL: loadTesterCommand.ParserURL,
+	}
+
+	if ok, err := validateCommand(command); !ok {
+		return nil, err
 	}
 	body["loadTest"] = command
+
 	body["intensity"] = intensity
 	body["stageId"] = stageId
 
@@ -200,4 +210,18 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	}
 
 	return results, nil
+}
+
+func validateCommand(command models.Command) (bool, error) {
+	if nil == command.ParserURL || "" == *command.ParserURL {
+		return false, fmt.Errorf("parseURL field is missing in the Command. Please check your application.json in the database")
+	}
+	return true, nil
+}
+
+func validateLoadTesterCommand(command models.LoadTesterCommand) (bool, error) {
+	if nil == command.ParserURL || "" == *command.ParserURL {
+		return false, fmt.Errorf("parseURL field is missing in the LoadTesterCommand. Please check your application.json in the database")
+	}
+	return true, nil
 }

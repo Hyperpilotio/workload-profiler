@@ -5,7 +5,11 @@ import (
 )
 
 type Command struct {
-	Image      string            `bson:"image" json:"image"`
+	Image string `bson:"image" json:"image"`
+	// ParserURL unlike the field in LoadTesterCommand struct.
+	//This field is optional in Command struct which depends on the type of command
+	// (initialize or command for runBenchmark)
+	ParserURL  *string           `bson:"parserUrl,omitempty" json:"parserUrl,omitempty"`
 	Path       string            `bson:"path" json:"path"`
 	Args       []string          `bson:"args" json:"args"`
 	HostConfig *CommandParameter `bson:"hostConfig,omitempty" json:"hostConfig,omitempty"`
@@ -86,7 +90,9 @@ type IntensityArgument struct {
 }
 
 type LoadTesterCommand struct {
-	Image         string              `bson:"image" json:"image"`
+	Image string `bson:"image" json:"image"`
+	// ParserURL is required, developer must provide this parserURL in the application.json.
+	ParserURL     *string             `bson:"parserUrl,omitempty" json:"parserUrl,omitempty"`
 	Path          string              `bson:"path" json:"path"`
 	Args          []string            `bson:"args" json:"args"`
 	HostConfig    *CommandParameter   `bson:"hostConfig,omitempty" json:"hostConfig,omitempty"`
