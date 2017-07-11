@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/go-resty/resty"
-	"github.com/golang/glog"
 	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/hyperpilotio/workload-profiler/models"
+	"github.com/op/go-logging"
 )
 
 type BenchmarkControllerClient struct{}
@@ -46,7 +46,8 @@ func (client *BenchmarkControllerClient) RunCalibration(
 	baseUrl string,
 	stageId string,
 	controller *models.BenchmarkController,
-	slo models.SLO) (*BenchmarkControllerCalibrationResponse, error) {
+	slo models.SLO,
+	logger *logging.Logger) (*BenchmarkControllerCalibrationResponse, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, errors.New("Unable to parse url: " + err.Error())
@@ -66,7 +67,7 @@ func (client *BenchmarkControllerClient) RunCalibration(
 	body["slo"] = slo
 	body["stageId"] = stageId
 
-	glog.Infof("Sending calibration request to benchmark controller for stage: " + stageId)
+	logger.Infof("Sending calibration request to benchmark controller for stage: " + stageId)
 	response, err := resty.R().SetBody(body).Post(u.String())
 	if err != nil {
 		return nil, errors.New("Unable to send calibrate request to controller: " + err.Error())
@@ -93,17 +94,17 @@ func (client *BenchmarkControllerClient) RunCalibration(
 		}
 
 		if results.Error != "" {
-			glog.Infof("Calibration failed with error: " + results.Error)
+			logger.Infof("Calibration failed with error: " + results.Error)
 			return false, errors.New("Calibration failed with error: " + results.Error)
 		}
 
 		if results.Status != "running" {
-			glog.Infof("Load test finished with status: " + results.Status)
-			glog.Infof("Load test finished response: %v", response)
+			logger.Infof("Load test finished with status: " + results.Status)
+			logger.Infof("Load test finished response: %v", response)
 			return true, nil
 		}
 
-		glog.Infof("Continue to wait for calibration results for %s, %s", loadTesterName, stageId)
+		logger.Infof("Continue to wait for calibration results for %s, %s", loadTesterName, stageId)
 
 		return false, nil
 	})
@@ -120,7 +121,8 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	baseUrl string,
 	stageId string,
 	intensity float64,
-	controller *models.BenchmarkController) (*BenchmarkControllerBenchmarkResponse, error) {
+	controller *models.BenchmarkController,
+	logger *logging.Logger) (*BenchmarkControllerBenchmarkResponse, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, errors.New("Unable to parse url: " + err.Error())
@@ -151,7 +153,7 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	body["intensity"] = intensity
 	body["stageId"] = stageId
 
-	glog.Infof("Sending benchmark request to benchmark controller for stage: " + stageId)
+	logger.Infof("Sending benchmark request to benchmark controller for stage: " + stageId)
 	response, err := resty.R().SetBody(body).Post(u.String())
 	if err != nil {
 		return nil, errors.New("Unable to send calibrate request to controller: " + err.Error())
@@ -178,16 +180,16 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 		}
 
 		if results.Error != "" {
-			glog.Infof("Benchmark failed with error: " + results.Error)
+			logger.Infof("Benchmark failed with error: " + results.Error)
 			return false, errors.New("Benchmark failed with error: " + results.Error)
 		}
 
 		if results.Status != "running" {
-			glog.V(1).Infof("Load test finished with status: %s, response: %v", results.Status, response)
+			logger.Infof("Load test finished with status: %s, response: %v", results.Status, response)
 			return true, nil
 		}
 
-		glog.V(1).Infof("Continue to wait for benchmark results for %s, %s", loadTesterName, stageId)
+		logger.Infof("Continue to wait for benchmark results for %s, %s", loadTesterName, stageId)
 
 		return false, nil
 	})

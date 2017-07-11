@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/go-resty/resty"
-	"github.com/golang/glog"
 	"github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/hyperpilotio/workload-profiler/models"
+	"github.com/op/go-logging"
 )
 
 type BenchmarkAgentResponse struct {
@@ -32,7 +32,8 @@ func (client *BenchmarkAgentClient) CreateBenchmark(
 	baseUrl string,
 	benchmark *models.Benchmark,
 	config *models.BenchmarkConfig,
-	intensity int) error {
+	intensity int,
+	logger *logging.Logger) error {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return fmt.Errorf("Unable to parse url %s: %s", baseUrl, err.Error())
@@ -55,7 +56,7 @@ func (client *BenchmarkAgentClient) CreateBenchmark(
 		Count:          1,
 	}
 
-	glog.V(1).Infof("Sending benchmark %s to benchmark agent %s", benchmark.Name, u)
+	logger.Infof("Sending benchmark %s to benchmark agent %s", benchmark.Name, u)
 	url := UrlBasePath(u) + path.Join(u.Path, "benchmarks")
 	response, err := resty.R().SetBody(benchmarkRequest).Post(url)
 	if err != nil {
@@ -91,16 +92,16 @@ func (client *BenchmarkAgentClient) CreateBenchmark(
 		}
 
 		if pollResponse.Error {
-			glog.Infof("Create benchmark responded with error: %v", pollResponse)
+			logger.Infof("Create benchmark responded with error: %v", pollResponse)
 			return false, errors.New("Poll benchmark agent response returned error: " + pollResponse.Data)
 		}
 
 		if pollResponse.Status != "CREATING" {
-			glog.Infof("Benchmark %s is now in %s state", benchmark.Name, pollResponse.Status)
+			logger.Infof("Benchmark %s is now in %s state", benchmark.Name, pollResponse.Status)
 			return true, nil
 		}
 
-		glog.V(1).Infof("Continue to wait for benchmark %s to start, last poll response: %v", benchmark.Name, response)
+		logger.Infof("Continue to wait for benchmark %s to start, last poll response: %v", benchmark.Name, response)
 
 		return false, nil
 	})
@@ -108,7 +109,7 @@ func (client *BenchmarkAgentClient) CreateBenchmark(
 	return nil
 }
 
-func (client *BenchmarkAgentClient) DeleteBenchmark(baseUrl string, benchmarkName string) error {
+func (client *BenchmarkAgentClient) DeleteBenchmark(baseUrl string, benchmarkName string, logger *logging.Logger) error {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return fmt.Errorf("Unable to parse url %s: %s", baseUrl, err.Error())
@@ -116,7 +117,7 @@ func (client *BenchmarkAgentClient) DeleteBenchmark(baseUrl string, benchmarkNam
 
 	requestUrl := UrlBasePath(u) + path.Join(u.Path, "benchmarks", benchmarkName)
 
-	glog.V(1).Infof("Deleting benchmark %s from benchmark agent", benchmarkName)
+	logger.Infof("Deleting benchmark %s from benchmark agent", benchmarkName)
 	for i := 0; i < 5; i++ {
 		response, err := resty.R().Delete(requestUrl)
 		if err != nil {
@@ -124,7 +125,7 @@ func (client *BenchmarkAgentClient) DeleteBenchmark(baseUrl string, benchmarkNam
 				break
 			}
 
-			glog.Warningf("Deleting benchmark failed with error: %s, retrying...", err.Error())
+			logger.Warningf("Deleting benchmark failed with error: %s, retrying...", err.Error())
 			time.Sleep(3 * time.Second)
 			continue
 		}

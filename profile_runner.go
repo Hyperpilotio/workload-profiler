@@ -145,7 +145,7 @@ func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchm
 				"Unable to get benchmark agent url: " + err.Error())
 		}
 
-		if err := run.BenchmarkAgentClient.DeleteBenchmark(agentUrl, config.Name); err != nil {
+		if err := run.BenchmarkAgentClient.DeleteBenchmark(agentUrl, config.Name, run.ProfileLog.Logger); err != nil {
 			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
 				benchmark.Name, err.Error())
 		}
@@ -162,7 +162,8 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 	}
 
 	startTime := time.Now()
-	results, err := run.BenchmarkControllerClient.RunCalibration(loadTesterName, url, runId, controller, run.ApplicationConfig.SLO)
+	results, err := run.BenchmarkControllerClient.RunCalibration(
+		loadTesterName, url, runId, controller, run.ApplicationConfig.SLO, run.ProfileLog.Logger)
 	if err != nil {
 		return errors.New("Unable to run calibration: " + err.Error())
 	}
@@ -216,7 +217,8 @@ func (run *CalibrationRun) runSlowCookerController(runId string, controller *mod
 	}
 
 	startTime := time.Now()
-	results, err := run.SlowCookerClient.RunCalibration(url, runId, run.ApplicationConfig.SLO, controller)
+	results, err := run.SlowCookerClient.RunCalibration(
+		url, runId, run.ApplicationConfig.SLO, controller, run.ProfileLog.Logger)
 	if err != nil {
 		return errors.New("Unable to run calibration with slow cooker: " + err.Error())
 	}
@@ -270,7 +272,8 @@ func (run *BenchmarkRun) runBenchmarkController(
 		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
-	response, err := run.BenchmarkControllerClient.RunBenchmark(loadTesterName, url, stageId, appIntensity, controller)
+	response, err := run.BenchmarkControllerClient.RunBenchmark(
+		loadTesterName, url, stageId, appIntensity, controller, run.ProfileLog.Logger)
 	if err != nil {
 		return nil, errors.New("Unable to run benchmark: " + err.Error())
 	}
@@ -332,7 +335,8 @@ func (run *BenchmarkRun) runSlowCookerController(
 		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
-	response, err := run.SlowCookerClient.RunBenchmark(url, stageId, appIntensity, &run.ApplicationConfig.SLO, controller)
+	response, err := run.SlowCookerClient.RunBenchmark(
+		url, stageId, appIntensity, &run.ApplicationConfig.SLO, controller, run.ProfileLog.Logger)
 	if err != nil {
 		return nil, errors.New("Unable to run benchmark with slow cooker: " + err.Error())
 	}
@@ -463,7 +467,8 @@ func (run *BenchmarkRun) runBenchmark(id string, service string, benchmark model
 				"Unable to get benchmark agent url: " + err.Error())
 		}
 
-		if err := run.BenchmarkAgentClient.CreateBenchmark(agentUrl, &benchmark, &config, intensity); err != nil {
+		if err := run.BenchmarkAgentClient.CreateBenchmark(
+			agentUrl, &benchmark, &config, intensity, run.ProfileLog.Logger); err != nil {
 			return fmt.Errorf("Unable to run benchmark %s with intensity %d: %s",
 				benchmark.Name, intensity, err.Error())
 		}

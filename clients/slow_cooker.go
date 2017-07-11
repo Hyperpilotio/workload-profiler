@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/go-resty/resty"
-	"github.com/golang/glog"
 	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/hyperpilotio/workload-profiler/models"
+	"github.com/op/go-logging"
 )
 
 type SlowCookerClient struct{}
@@ -44,21 +44,20 @@ type SlowCookerCalibrateRequest struct {
 	LoadTime  string                      `json:"loadTime"`
 }
 
-func (request SlowCookerCalibrateRequest) PrintVerbose() {
-	if glog.V(1) {
-		message := fmt.Sprintf("Calibration: {%+v} ", request.Calibrate)
-		message += fmt.Sprintf("SLO: {%+v} ", request.SLO)
-		message += fmt.Sprintf("AppLoad: {%+v} ", request.AppLoad)
-		message += fmt.Sprint("LoadTime: %s", request.LoadTime)
-		glog.V(1).Infof("Slow cooker calibration request: %s", message)
-	}
+func (request SlowCookerCalibrateRequest) PrintVerbose(logger *logging.Logger) {
+	message := fmt.Sprintf("Calibration: {%+v} ", request.Calibrate)
+	message += fmt.Sprintf("SLO: {%+v} ", request.SLO)
+	message += fmt.Sprintf("AppLoad: {%+v} ", request.AppLoad)
+	message += fmt.Sprint("LoadTime: %s", request.LoadTime)
+	logger.Debugf("Slow cooker calibration request: %s", message)
 }
 
 func (client *SlowCookerClient) RunCalibration(
 	baseUrl string,
 	runId string,
 	slo models.SLO,
-	controller *models.SlowCookerController) (*SlowCookerCalibrateResponse, error) {
+	controller *models.SlowCookerController,
+	logger *logging.Logger) (*SlowCookerCalibrateResponse, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, errors.New("Unable to parse url: " + err.Error())
@@ -81,8 +80,8 @@ func (client *SlowCookerClient) RunCalibration(
 		LoadTime:  controller.LoadTime,
 	}
 
-	glog.Infof("Sending calibration request to slow cooker for stage: " + runId)
-	request.PrintVerbose()
+	logger.Infof("Sending calibration request to slow cooker for stage: " + runId)
+	request.PrintVerbose(logger)
 	response, err := resty.R().SetBody(request).Post(u.String())
 	if err != nil {
 		return nil, errors.New("Unable to send calibrate request to slow cooker: " + err.Error())
@@ -109,16 +108,16 @@ func (client *SlowCookerClient) RunCalibration(
 		}
 
 		if results.Error != "" {
-			glog.Infof("Slow cooker calibration failed with error: " + results.Error)
+			logger.Infof("Slow cooker calibration failed with error: " + results.Error)
 			return false, errors.New("Slow cooker calibration failed with error: " + results.Error)
 		}
 
 		if results.State != "running" {
-			glog.V(1).Infof("Calibration finished with status: %s, response: %v", results.State, response)
+			logger.Infof("Calibration finished with status: %s, response: %v", results.State, response)
 			return true, nil
 		}
 
-		glog.V(1).Infof("Continue to wait for slow cooker calibration results, last poll response: %v", response)
+		logger.Infof("Continue to wait for slow cooker calibration results, last poll response: %v", response)
 
 		return false, nil
 	})
@@ -152,13 +151,11 @@ type SlowCookerBenchmarkRequest struct {
 	AppLoad          *models.SlowCookerAppLoad `json:"appLoad"`
 }
 
-func (request SlowCookerBenchmarkRequest) PrintVerbose() {
-	if glog.V(1) {
-		message := fmt.Sprintf("AppLoad: {%+v} ", request.AppLoad)
-		message += fmt.Sprintf("RunsPerIntensity: %d ", request.RunsPerIntensity)
-		message += fmt.Sprintf("LoadTime: %s ", request.LoadTime)
-		glog.V(1).Infof("Slow cooker benchmark request: %s", message)
-	}
+func (request SlowCookerBenchmarkRequest) PrintVerbose(logger *logging.Logger) {
+	message := fmt.Sprintf("AppLoad: {%+v} ", request.AppLoad)
+	message += fmt.Sprintf("RunsPerIntensity: %d ", request.RunsPerIntensity)
+	message += fmt.Sprintf("LoadTime: %s ", request.LoadTime)
+	logger.Debugf("Slow cooker benchmark request: %s", message)
 }
 
 func (client *SlowCookerClient) RunBenchmark(
@@ -166,7 +163,8 @@ func (client *SlowCookerClient) RunBenchmark(
 	runId string,
 	appIntensity float64,
 	slo *models.SLO,
-	controller *models.SlowCookerController) (*SlowCookerBenchmarkResponse, error) {
+	controller *models.SlowCookerController,
+	logger *logging.Logger) (*SlowCookerBenchmarkResponse, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, errors.New("Unable to parse url: " + err.Error())
@@ -182,8 +180,8 @@ func (client *SlowCookerClient) RunBenchmark(
 		LoadTime:         controller.LoadTime,
 	}
 
-	glog.Infof("Sending benchmark request to slow cooker for stage: " + runId)
-	request.PrintVerbose()
+	logger.Infof("Sending benchmark request to slow cooker for stage: " + runId)
+	request.PrintVerbose(logger)
 	response, err := resty.R().SetBody(request).Post(u.String())
 	if err != nil {
 		return nil, errors.New("Unable to send benchmark request to slow cooker: " + err.Error())
@@ -210,16 +208,16 @@ func (client *SlowCookerClient) RunBenchmark(
 		}
 
 		if results.Error != "" {
-			glog.Infof("Slow cooker benchmark failed with error: " + results.Error)
+			logger.Infof("Slow cooker benchmark failed with error: " + results.Error)
 			return false, errors.New("Slow cooker benchmark failed with error: " + results.Error)
 		}
 
 		if results.State != "running" {
-			glog.V(1).Infof("Calibration finished with status: %s, response: %v", results.State, response)
+			logger.Infof("Calibration finished with status: %s, response: %v", results.State, response)
 			return true, nil
 		}
 
-		glog.V(1).Infof("Continue to wait for slow cooker benchmark results, last poll response: %v", response)
+		logger.Infof("Continue to wait for slow cooker benchmark results, last poll response: %v", response)
 
 		return false, nil
 	})
