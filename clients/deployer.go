@@ -24,9 +24,10 @@ type ServiceMappingResponse struct {
 }
 
 type DeployerClient struct {
-	ServiceMapping *ServiceMappingResponse
-	ServiceUrls    map[string]string
-	Url            *url.URL
+	ServiceMapping   *ServiceMappingResponse
+	ServiceUrls      map[string]string
+	ServiceAddresses map[string]*ServiceAddress
+	Url              *url.URL
 }
 
 func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
@@ -112,6 +113,38 @@ func (client *DeployerClient) GetServiceUrl(deployment string, service string) (
 	client.ServiceUrls[service] = url
 
 	return url, nil
+}
+
+// ServiceAddress GetServiceUrl return this object
+type ServiceAddress struct {
+	Host string `bson:"host,omitempty" json:"host,omitempty"`
+	Port int64  `bson:"port,omitempty" json:"port,omitempty"`
+}
+
+// GetServiceAddress return the address object of service container
+func (client *DeployerClient) GetServiceAddress(deployment string, service string) (*ServiceAddress, error) {
+	if address, ok := client.ServiceAddresses[service]; ok {
+		return address, nil
+	}
+
+	requestUrl := UrlBasePath(client.Url) +
+		path.Join(client.Url.Path, "v1", "deployments", deployment, "services", service, "address")
+
+	response, err := resty.R().Get(requestUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	if response.StatusCode() != 200 {
+		return nil, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+	}
+
+	var addres ServiceAddress
+	if err = json.Unmarshal(response.Body(), &addres); err != nil {
+		return nil, err
+	}
+
+	return &addres, nil
 }
 
 func (client *DeployerClient) IsDeploymentReady(deployment string) (bool, error) {

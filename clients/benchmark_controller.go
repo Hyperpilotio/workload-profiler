@@ -146,8 +146,9 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	// TODO: Intensity arguments might be differnet types, we assume it's all int at the moment
 	args = append(args, strconv.Itoa(int(intensity)))
 	command := models.Command{
-		Path: loadTesterCommand.Path,
-		Args: args,
+		Image: loadTesterCommand.Image,
+		Path:  loadTesterCommand.Path,
+		Args:  args,
 	}
 	body["loadTest"] = command
 	body["intensity"] = intensity
