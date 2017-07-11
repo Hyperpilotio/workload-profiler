@@ -10,3 +10,4 @@ import:
 - package: gopkg.in/mgo.v2
 - package: github.com/hyperpilotio/go-utils
 - package: github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis
+  repo:    git@github.com:Hyperpilotio/container-benchmarks.git 
