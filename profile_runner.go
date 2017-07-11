@@ -159,55 +159,55 @@ func (run *CalibrationRun) replaceTargetingServiceAddress(controller *models.Ben
 		return fmt.Errorf("No targeting service: ApplicationConfig.ServiceNames is empty")
 	}
 
-	targetingService := run.ApplicationConfig.ServiceNames[0]
+	for _, targetingService := range run.ApplicationConfig.ServiceNames {
+		// NOTE we assume the targeting service is an unique one in this deployment process.
+		// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
+		serviceAddress, err := run.DeployerClient.GetServiceAddress(run.DeploymentId, targetingService)
+		if err != nil {
+			return fmt.Errorf(
+				"Unable to get service %s address: %s",
+				targetingService,
+				err.Error())
+		}
 
-	// NOTE we assume the targeting service is an unique one in this deployment process.
-	// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
-	serviceAddress, err := run.DeployerClient.GetServiceAddress(run.DeploymentId, targetingService)
-	if err != nil {
-		return fmt.Errorf(
-			"Unable to get service %s address: %s",
-			targetingService,
-			err.Error())
-	}
+		// Initialize
+		if nil != controller.Initialize.HostConfig {
 
-	// Initialize
-	if (models.CommandParameter{}) != controller.Initialize.HostConfig {
+			controller.Initialize.Args = append(
+				[]string{
+					controller.Initialize.HostConfig.Arg,
+					serviceAddress.Host,
+				},
+				controller.Initialize.Args...)
+		}
 
-		controller.Initialize.Args = append(
-			[]string{
-				controller.Initialize.HostConfig.Arg,
-				serviceAddress.Host,
-			},
-			controller.Initialize.Args...)
-	}
+		if nil != controller.Initialize.PortConfig {
+			controller.Initialize.Args = append(
+				[]string{
+					controller.Initialize.PortConfig.Arg,
+					strconv.FormatInt(serviceAddress.Port, 10),
+				},
+				controller.Initialize.Args...)
+		}
 
-	if (models.CommandParameter{}) != controller.Initialize.PortConfig {
-		controller.Initialize.Args = append(
-			[]string{
-				controller.Command.PortConfig.Arg,
-				strconv.FormatInt(serviceAddress.Port, 10),
-			},
-			controller.Initialize.Args...)
-	}
+		// LoadTesterCommand
+		if nil != controller.Command.HostConfig {
+			controller.Command.Args = append(
+				[]string{
+					controller.Command.HostConfig.Arg,
+					serviceAddress.Host,
+				},
+				controller.Command.Args...)
+		}
 
-	// LoadTesterCommand
-	if (models.CommandParameter{}) != controller.Command.HostConfig {
-		controller.Command.Args = append(
-			[]string{
-				controller.Command.HostConfig.Arg,
-				serviceAddress.Host,
-			},
-			controller.Command.Args...)
-	}
-
-	if (models.CommandParameter{}) != controller.Command.PortConfig {
-		controller.Command.Args = append(
-			[]string{
-				controller.Command.PortConfig.Arg,
-				strconv.FormatInt(serviceAddress.Port, 10),
-			},
-			controller.Command.Args...)
+		if nil != controller.Command.PortConfig {
+			controller.Command.Args = append(
+				[]string{
+					controller.Command.PortConfig.Arg,
+					strconv.FormatInt(serviceAddress.Port, 10),
+				},
+				controller.Command.Args...)
+		}
 	}
 
 	return nil
@@ -328,27 +328,54 @@ func (run *BenchmarkRun) replaceTargetingServiceAddress(controller *models.Bench
 		return fmt.Errorf("No targeting service: ApplicationConfig.ServiceNames is empty")
 	}
 
-	targetingService := run.ApplicationConfig.ServiceNames[0]
-
-	// NOTE we assume the targeting service is an unique one in this deployment process.
-	// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
-	serviceAddress, err := run.DeployerClient.GetServiceAddress(run.DeploymentId, targetingService)
-	if err != nil {
-		return fmt.Errorf(
-			"Unable to get service %s address: %s",
-			targetingService,
-			err.Error())
-	}
-
-	for index, val := range controller.Initialize.Args {
-		if "$targetingServiceAddress$" == val {
-			controller.Initialize.Args[index] = serviceAddress.Host
+	for _, targetingService := range run.ApplicationConfig.ServiceNames {
+		// NOTE we assume the targeting service is an unique one in this deployment process.
+		// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
+		serviceAddress, err := run.DeployerClient.GetServiceAddress(run.DeploymentId, targetingService)
+		if err != nil {
+			return fmt.Errorf(
+				"Unable to get service %s address: %s",
+				targetingService,
+				err.Error())
 		}
-	}
 
-	for index, val := range controller.Command.Args {
-		if "$targetingServiceAddress$" == val {
-			controller.Command.Args[index] = serviceAddress.Host
+		// Initialize
+		if nil != controller.Initialize.HostConfig {
+
+			controller.Initialize.Args = append(
+				[]string{
+					controller.Initialize.HostConfig.Arg,
+					serviceAddress.Host,
+				},
+				controller.Initialize.Args...)
+		}
+
+		if nil != controller.Initialize.PortConfig {
+			controller.Initialize.Args = append(
+				[]string{
+					controller.Initialize.PortConfig.Arg,
+					strconv.FormatInt(serviceAddress.Port, 10),
+				},
+				controller.Initialize.Args...)
+		}
+
+		// LoadTesterCommand
+		if nil != controller.Command.HostConfig {
+			controller.Command.Args = append(
+				[]string{
+					controller.Command.HostConfig.Arg,
+					serviceAddress.Host,
+				},
+				controller.Command.Args...)
+		}
+
+		if nil != controller.Command.PortConfig {
+			controller.Command.Args = append(
+				[]string{
+					controller.Command.PortConfig.Arg,
+					strconv.FormatInt(serviceAddress.Port, 10),
+				},
+				controller.Command.Args...)
 		}
 	}
 
