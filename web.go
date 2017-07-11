@@ -11,30 +11,30 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type DeploymentLog struct {
+type ProfileLog struct {
 	DeploymentId string
 	RunId        string
 	Status       string
 	Create       time.Time
 }
 
-type DeploymentLogs []*DeploymentLog
+type ProfileLogs []*ProfileLog
 
-func (d DeploymentLogs) Len() int { return len(d) }
-func (d DeploymentLogs) Less(i, j int) bool {
+func (d ProfileLogs) Len() int { return len(d) }
+func (d ProfileLogs) Less(i, j int) bool {
 	return d[i].Create.Before(d[j].Create)
 }
-func (d DeploymentLogs) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
+func (d ProfileLogs) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
 
 func (server *Server) logUI(c *gin.Context) {
-	DeploymentLogs, _ := server.getDeploymentLogs(c)
+	ProfileLogs, _ := server.getProfileLogs(c)
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"error": false,
-		"logs":  DeploymentLogs,
+		"logs":  ProfileLogs,
 	})
 }
 
-func (server *Server) getDeploymentLogContent(c *gin.Context) {
+func (server *Server) getProfileLogContent(c *gin.Context) {
 	fileName := c.Param("fileName")
 	logPath := path.Join(server.Config.GetString("filesPath"), "log", fileName+".log")
 	file, err := os.Open(logPath)
@@ -73,22 +73,22 @@ func (server *Server) getDeploymentLogContent(c *gin.Context) {
 	})
 }
 
-func (server *Server) getDeploymentLogs(c *gin.Context) (DeploymentLogs, error) {
-	DeploymentLogs := DeploymentLogs{}
+func (server *Server) getProfileLogs(c *gin.Context) (ProfileLogs, error) {
+	ProfileLogs := ProfileLogs{}
 
 	server.Clusters.mutex.Lock()
 	defer server.Clusters.mutex.Unlock()
 
 	for _, cluster := range server.Clusters.Deployments {
-		DeploymentLog := &DeploymentLog{
+		ProfileLog := &ProfileLog{
 			DeploymentId: cluster.deploymentId,
 			RunId:        cluster.runId,
 			Status:       GetStateString(cluster.state),
 			Create:       cluster.created,
 		}
-		DeploymentLogs = append(DeploymentLogs, DeploymentLog)
+		ProfileLogs = append(ProfileLogs, ProfileLog)
 	}
 
-	sort.Sort(DeploymentLogs)
-	return DeploymentLogs, nil
+	sort.Sort(ProfileLogs)
+	return ProfileLogs, nil
 }

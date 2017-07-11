@@ -56,7 +56,7 @@ func (server *Server) StartServer() error {
 	uiGroup := router.Group("/ui")
 	{
 		uiGroup.GET("", server.logUI)
-		uiGroup.GET("/logs/:fileName", server.getDeploymentLogContent)
+		uiGroup.GET("/logs/:fileName", server.getProfileLogContent)
 	}
 
 	calibrateGroup := router.Group("/calibrate")
