@@ -1,5 +1,5 @@
 hash: e80b258ba17a27bdeb28b6b739c59daf25d5c95ee246ed7d8b226253b14263d9
-updated: 2017-07-10T17:50:27.419826982-07:00
+updated: 2017-07-11T11:22:32.363107693-07:00
 imports:
 - name: github.com/fsnotify/fsnotify
   version: a904159b9206978bb6d53fcc7a769e5cd726c737
@@ -36,6 +36,7 @@ imports:
   version: f7a943dc589b24d401aa511f4abd04f8cc5b36cf
   subpackages:
   - funcs
+  - log
 - name: github.com/magiconair/properties
   version: b3b15ef068fd0b17ddf408a23669f20811d194d2
 - name: github.com/manucorporat/sse
@@ -46,6 +47,8 @@ imports:
   version: db1efb556f84b25a0a13a04aad883943538ad2e0
 - name: github.com/nu7hatch/gouuid
   version: 179d4d0c4d8d407a32af483c2354df1d2c91e6c3
+- name: github.com/op/go-logging
+  version: 970db520ece77730c7e4724c61121037378659d9
 - name: github.com/pelletier/go-buffruneio
   version: df1e16fde7fc330a0ca68167c23bf7ed6ac31d6d
 - name: github.com/pelletier/go-toml
