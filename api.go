@@ -162,6 +162,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 
 	log.Logger.Infof("Running %s job for app %s...", run.Id, appName)
 	if err = run.Run(); err != nil {
+		cluster.state = FAILED
 		log.Logger.Errorf("Failed to run profiling benchmarks for app %s: %s", appName, err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
@@ -230,6 +231,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 
 	log.Logger.Infof("Running %s job for app %s...", run.Id, appName)
 	if err = run.Run(); err != nil {
+		cluster.state = FAILED
 		log.Logger.Errorf("Failed to run profiling calibrate for app %s: %s", appName, err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
