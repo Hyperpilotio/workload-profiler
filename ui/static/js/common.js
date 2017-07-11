@@ -2,11 +2,6 @@ var $deployments = $('.deployment-list')
 $(function() {
     if ($deployments) {
         fixDeploymentHeight();
-        $('.deployment-list li').click(function() {
-            $('.deployment-list li').removeClass('active');
-            $(this).addClass('active');
-            $('main h1').remove();
-        });
     }
 });
 

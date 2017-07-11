@@ -21,7 +21,16 @@
 
     <!-- sidebar -->
     <aside>
+        <ul class="nav nav-tabs">
+            <li class="active"><a href="#" data-status="Running">Running</a></li>
+            <li><a href="#" data-status="Failed">Failed</a></li>
+        </ul>
         <ul class="deployment-list">
+            <li id="deploymentTemplate" class="deployment" style="display: none;" data-runid data-deploymentid data-status>
+                <div class="logName"></div>
+                <span class="timeLabel">Create:</span><span class="createTime"></span>
+                <span class="badge"></span>
+            </li>
             {{range $k,$v := .logs}}
             <li class="deployment" data-runid="{{$v.RunId}}" data-deploymentid="{{$v.DeploymentId}}" data-status="{{$v.Status}}">
                 <div class="logName">{{$v.RunId}}</div>
@@ -43,20 +52,72 @@
     </main>
 </body>
 <link rel="import" href="/static/common/linkJs.html">
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
-    crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
 <script>
     var timeout;
     $(function() {
+        $('ul.nav-tabs a').on('click', function(event) {
+            $('ul.nav-tabs li').removeClass('active');
+            $(this).parent().addClass('active');
+            $('.deployment-log').hide();
+            
+            clearTimeout(timeout);
+            getDeploymentList($(this).data('status'));
+        });
+
         $('.deployment-list').on('click', 'li', function() {
+            $('.deployment-list li').removeClass('active');
+            $(this).addClass('active');
+            $('main h1').remove();
             $('.deployment-detail').show();
             $('.deployment-log').html('');
+            
             clearTimeout(timeout);
             getDeploymentLogContent($(this));
         });
     });
 
-    function getDeploymentLogContent(deployment) { 
+    function getDeploymentList(status) {
+        $.ajax({
+            url: '/ui/list/' + status,
+            type: 'GET',
+            dataType: 'json',
+            success: function(json) {
+                if (json.error == false) {
+                    if ($('ul.nav-tabs li.active a').data('status') !== status) {
+                        return;
+                    }
+
+                    let activeDeployment;
+                    $('li.deployment').not(':first').each(function() {
+                        if ($(this).hasClass('active')) {
+                            activeDeployment = $(this).data('name');
+                        }
+                        $(this).remove();
+                    });
+
+                    $.each(json.data, function(index, element) {
+                        let deployment = $('#deploymentTemplate').clone();
+                        if (activeDeployment && element.Name === activeDeployment) {
+                            deployment.addClass('active');
+                        }
+
+                        deployment.attr('data-runid', element.RunId);
+                        deployment.attr('data-deploymentid', element.DeploymentId);
+                        deployment.attr('data-status', element.Status);
+                        deployment.find('.logName').text(element.RunId);
+                        deployment.find('.createTime').text(element.Create);
+                        deployment.find('.badge').text(element.Status);
+                        deployment.find('.badge').addClass('badge-' + element.Status);
+                        deployment.removeAttr('id style');
+                        deployment.insertAfter('li.deployment:last');
+                    })
+                }
+            }
+        });
+    }
+
+    function getDeploymentLogContent(deployment) {
         if ($('.deployment-list li.active').data('runid') != deployment.data('runid')) {
             return false;
         }
@@ -66,7 +127,6 @@
                 type: 'GET',
                 dataType: 'json',
                 success: function(json) {
-
                     if (json.error == false) {
                         $('.deployment-log').html('');
                         $.each(json.data, function(i, line) {

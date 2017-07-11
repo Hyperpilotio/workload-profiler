@@ -27,10 +27,26 @@ func (d ProfileLogs) Less(i, j int) bool {
 func (d ProfileLogs) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
 
 func (server *Server) logUI(c *gin.Context) {
-	ProfileLogs, _ := server.getProfileLogs(c)
+	profileLogs, _ := server.getProfileLogs(c)
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"error": false,
-		"logs":  ProfileLogs,
+		"logs":  profileLogs,
+	})
+}
+
+func (server *Server) getProfileLogList(c *gin.Context) {
+	profileLogs, err := server.getProfileLogs(c)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"error": true,
+			"data":  "",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"error": false,
+		"data":  profileLogs,
 	})
 }
 
@@ -74,21 +90,25 @@ func (server *Server) getProfileLogContent(c *gin.Context) {
 }
 
 func (server *Server) getProfileLogs(c *gin.Context) (ProfileLogs, error) {
-	ProfileLogs := ProfileLogs{}
+	profileLogs := ProfileLogs{}
 
 	server.Clusters.mutex.Lock()
 	defer server.Clusters.mutex.Unlock()
 
+	filterStatus := c.Param("status")
 	for _, cluster := range server.Clusters.Deployments {
-		ProfileLog := &ProfileLog{
+		profileLog := &ProfileLog{
 			DeploymentId: cluster.deploymentId,
 			RunId:        cluster.runId,
 			Status:       GetStateString(cluster.state),
 			Create:       cluster.created,
 		}
-		ProfileLogs = append(ProfileLogs, ProfileLog)
+
+		if profileLog.Status == filterStatus {
+			profileLogs = append(profileLogs, profileLog)
+		}
 	}
 
-	sort.Sort(ProfileLogs)
-	return ProfileLogs, nil
+	sort.Sort(profileLogs)
+	return profileLogs, nil
 }
