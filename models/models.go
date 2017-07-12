@@ -5,8 +5,11 @@ import (
 )
 
 type Command struct {
-	Path string   `bson:"path" json:"path"`
-	Args []string `bson:"args" json:"args"`
+	Image      string            `bson:"image" json:"image"`
+	Path       string            `bson:"path" json:"path"`
+	Args       []string          `bson:"args" json:"args"`
+	HostConfig *CommandParameter `bson:"hostConfig,omitempty" json:"hostConfig,omitempty"`
+	PortConfig *CommandParameter `bson:"portConfig,omitempty" json:"portConfig,omitempty"`
 }
 
 type BenchmarkController struct {
@@ -83,8 +86,11 @@ type IntensityArgument struct {
 }
 
 type LoadTesterCommand struct {
+	Image         string              `bson:"image" json:"image"`
 	Path          string              `bson:"path" json:"path"`
 	Args          []string            `bson:"args" json:"args"`
+	HostConfig    *CommandParameter   `bson:"hostConfig,omitempty" json:"hostConfig,omitempty"`
+	PortConfig    *CommandParameter   `bson:"portConfig,omitempty" json:"portConfig,omitempty"`
 	IntensityArgs []IntensityArgument `bson:"intensityArgs" json:"intensityArgs"`
 }
 
