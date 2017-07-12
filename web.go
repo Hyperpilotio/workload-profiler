@@ -11,31 +11,29 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ProfileLog struct {
+type FileLog struct {
 	DeploymentId string
 	RunId        string
 	Status       string
 	Create       time.Time
 }
 
-type ProfileLogs []*ProfileLog
+type FileLogs []*FileLog
 
-func (d ProfileLogs) Len() int { return len(d) }
-func (d ProfileLogs) Less(i, j int) bool {
+func (d FileLogs) Len() int { return len(d) }
+func (d FileLogs) Less(i, j int) bool {
 	return d[i].Create.Before(d[j].Create)
 }
-func (d ProfileLogs) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
+func (d FileLogs) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
 
 func (server *Server) logUI(c *gin.Context) {
-	profileLogs, _ := server.getProfileLogs(c)
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"error": false,
-		"logs":  profileLogs,
 	})
 }
 
-func (server *Server) getProfileLogList(c *gin.Context) {
-	profileLogs, err := server.getProfileLogs(c)
+func (server *Server) getFileLogList(c *gin.Context) {
+	fileLogs, err := server.getFileLogs(c)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"error": true,
@@ -46,11 +44,11 @@ func (server *Server) getProfileLogList(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"error": false,
-		"data":  profileLogs,
+		"data":  fileLogs,
 	})
 }
 
-func (server *Server) getProfileLogContent(c *gin.Context) {
+func (server *Server) getFileLogContent(c *gin.Context) {
 	fileName := c.Param("fileName")
 	logPath := path.Join(server.Config.GetString("filesPath"), "log", fileName+".log")
 	file, err := os.Open(logPath)
@@ -89,26 +87,33 @@ func (server *Server) getProfileLogContent(c *gin.Context) {
 	})
 }
 
-func (server *Server) getProfileLogs(c *gin.Context) (ProfileLogs, error) {
-	profileLogs := ProfileLogs{}
+func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
+	fileLogs := FileLogs{}
 
 	server.Clusters.mutex.Lock()
 	defer server.Clusters.mutex.Unlock()
 
 	filterStatus := c.Param("status")
 	for _, cluster := range server.Clusters.Deployments {
-		profileLog := &ProfileLog{
+		fileLog := &FileLog{
 			DeploymentId: cluster.deploymentId,
 			RunId:        cluster.runId,
 			Status:       GetStateString(cluster.state),
 			Create:       cluster.created,
 		}
 
-		if profileLog.Status == filterStatus {
-			profileLogs = append(profileLogs, profileLog)
+		switch filterStatus {
+		case "Failed":
+			if fileLog.Status == "Failed" {
+				fileLogs = append(fileLogs, fileLog)
+			}
+		case "Running":
+			if fileLog.Status != "Failed" {
+				fileLogs = append(fileLogs, fileLog)
+			}
 		}
 	}
 
-	sort.Sort(profileLogs)
-	return profileLogs, nil
+	sort.Sort(fileLogs)
+	return fileLogs, nil
 }
