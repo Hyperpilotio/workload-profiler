@@ -21,14 +21,16 @@
 
     <!-- sidebar -->
     <aside>
+        <ul class="nav nav-tabs">
+            <li class="active"><a href="#" data-status="Running">Running</a></li>
+            <li><a href="#" data-status="Failed">Failed</a></li>
+        </ul>
         <ul class="deployment-list">
-            {{range $k,$v := .logs}}
-            <li class="deployment" data-runid="{{$v.RunId}}" data-deploymentid="{{$v.DeploymentId}}" data-status="{{$v.Status}}">
-                <div class="logName">{{$v.RunId}}</div>
-                <span class="timeLabel">Create:</span><span class="createTime">{{$v.Create}}</span>
-                <span class="badge badge-{{$v.Status}}">{{$v.Status}}</span>
+            <li id="deploymentTemplate" class="deployment" style="display: none;" data-runid data-deploymentid data-status>
+                <div class="logName"></div>
+                <span class="timeLabel">Create:</span><span class="createTime"></span>
+                <span class="badge"></span>
             </li>
-            {{end}}
         </ul>
     </aside>
 
@@ -43,51 +45,104 @@
     </main>
 </body>
 <link rel="import" href="/static/common/linkJs.html">
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
-    crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
 <script>
+    var timeout;
+    var activeRunId;
     $(function () {
+        $('ul.nav-tabs a').on('click', function (event) {
+            $('ul.nav-tabs li').removeClass('active');
+            $(this).parent().addClass('active');
+
+            clearTimeout(timeout);
+            getDeploymentList($(this).data('status'));
+        });
+
         $('.deployment-list').on('click', 'li', function () {
             $('.deployment-list li').removeClass('active');
             $(this).addClass('active');
             $('main h1').remove();
             $('.deployment-detail').show();
-            getDeploymentLogContent($(this));
+            $('.deployment-log').html('');
+
+            clearTimeout(timeout);
+            getActiveDeploymentLogContent();
         });
+
+        getDeploymentList('Running');
     });
 
-    function getDeploymentLogContent(deployment) {
-        if (typeof deployment != 'undefined') {
-            $.ajax({
-                url: '/ui/logs/' + deployment.data('runid'),
-                type: 'GET',
-                dataType: 'json',
-                success: function (json) {
-                    if (json.error == false) {
-                        $('.deployment-log').html('');
-                        $.each(json.data, function (i, line) {
-                            $('.deployment-log').append('<p class="line">' + line.replace(/ /g,
-                                '&nbsp;') + '</p>');
-                        });
-                        $('.deployment-log').show();
+    function getDeploymentList(status) {
+        $.ajax({
+            url: '/ui/list/' + status,
+            type: 'GET',
+            dataType: 'json',
+            success: function (json) {
+                if (json.error == false) {
+                    if ($('ul.nav-tabs li.active a').data('status') != status) {
+                        return false;
+                    }
 
-                        if (json.state == "") {
-                            deployment.remove();
-                            $('.deployment-detail').hide();
-                        } else {
-                            if (deployment.data('status') != json.state) {
-                                deployment.find('.badge').text(json.state);
-                                deployment.find('.badge').removeClass('badge-' + deployment.data('status'));
-                                deployment.find('.badge').addClass('badge-' + json.state);
-                            }
+                    $('li.deployment').not(':first').each(function () {
+                        $(this).remove();
+                    });
+
+                    $.each(json.data, function (index, element) {
+                        var deployment = $('#deploymentTemplate').clone();
+                        if (activeRunId && element.RunId === activeRunId) {
+                            deployment.addClass('active');
+                        }
+
+                        deployment.attr('data-runid', element.RunId);
+                        deployment.attr('data-deploymentid', element.DeploymentId);
+                        deployment.attr('data-status', element.Status);
+                        deployment.find('.logName').text(element.RunId);
+                        deployment.find('.createTime').text(element.Create);
+                        deployment.find('.badge').text(element.Status);
+                        deployment.find('.badge').addClass('badge-' + element.Status);
+                        deployment.removeAttr('id style');
+                        deployment.insertAfter('li.deployment:last');
+                    })
+                }
+            }
+        });
+    }
+
+    function getActiveDeploymentLogContent() {
+        if ($('.deployment-list li.active').length != 1) {
+            return false;
+        }
+
+        var deployment = $('.deployment-list li.active');
+        activeRunId = deployment.data('runid');
+        $.ajax({
+            url: '/ui/logs/' + deployment.data('runid'),
+            type: 'GET',
+            dataType: 'json',
+            success: function (json) {
+                if (json.error == false) {
+                    $('.deployment-log').html('');
+                    $.each(json.data, function (i, line) {
+                        $('.deployment-log').append('<p class="line">' + line.replace(/ /g, '&nbsp;') + '</p>');
+                    });
+                    $('.deployment-log').show();
+
+                    if (json.state == "") {
+                        deployment.remove();
+                        $('.deployment-detail').hide();
+                    } else {
+                        if (deployment.data('status') != json.state) {
+                            deployment.find('.badge').text(json.state);
+                            deployment.find('.badge').removeClass('badge-' + deployment.data('status'));
+                            deployment.find('.badge').addClass('badge-' + json.state);
                         }
                     }
                 }
-            });
-        }
+            }
+        });
 
         if ($('.deployment-list li.active').length == 1) {
-            setTimeout(getDeploymentLogContent, 5000, $('.deployment-list li.active'));
+            timeout = setTimeout(getActiveDeploymentLogContent, 5000);
         }
     }
 </script>

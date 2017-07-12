@@ -11,30 +11,44 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type DeploymentLog struct {
+type FileLog struct {
 	DeploymentId string
 	RunId        string
 	Status       string
 	Create       time.Time
 }
 
-type DeploymentLogs []*DeploymentLog
+type FileLogs []*FileLog
 
-func (d DeploymentLogs) Len() int { return len(d) }
-func (d DeploymentLogs) Less(i, j int) bool {
+func (d FileLogs) Len() int { return len(d) }
+func (d FileLogs) Less(i, j int) bool {
 	return d[i].Create.Before(d[j].Create)
 }
-func (d DeploymentLogs) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
+func (d FileLogs) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
 
 func (server *Server) logUI(c *gin.Context) {
-	DeploymentLogs, _ := server.getDeploymentLogs(c)
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"error": false,
-		"logs":  DeploymentLogs,
 	})
 }
 
-func (server *Server) getDeploymentLogContent(c *gin.Context) {
+func (server *Server) getFileLogList(c *gin.Context) {
+	fileLogs, err := server.getFileLogs(c)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"error": true,
+			"data":  "",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"error": false,
+		"data":  fileLogs,
+	})
+}
+
+func (server *Server) getFileLogContent(c *gin.Context) {
 	fileName := c.Param("fileName")
 	logPath := path.Join(server.Config.GetString("filesPath"), "log", fileName+".log")
 	file, err := os.Open(logPath)
@@ -73,22 +87,33 @@ func (server *Server) getDeploymentLogContent(c *gin.Context) {
 	})
 }
 
-func (server *Server) getDeploymentLogs(c *gin.Context) (DeploymentLogs, error) {
-	DeploymentLogs := DeploymentLogs{}
+func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
+	fileLogs := FileLogs{}
 
 	server.Clusters.mutex.Lock()
 	defer server.Clusters.mutex.Unlock()
 
+	filterStatus := c.Param("status")
 	for _, cluster := range server.Clusters.Deployments {
-		DeploymentLog := &DeploymentLog{
+		fileLog := &FileLog{
 			DeploymentId: cluster.deploymentId,
 			RunId:        cluster.runId,
 			Status:       GetStateString(cluster.state),
 			Create:       cluster.created,
 		}
-		DeploymentLogs = append(DeploymentLogs, DeploymentLog)
+
+		switch filterStatus {
+		case "Failed":
+			if fileLog.Status == "Failed" {
+				fileLogs = append(fileLogs, fileLog)
+			}
+		case "Running":
+			if fileLog.Status != "Failed" {
+				fileLogs = append(fileLogs, fileLog)
+			}
+		}
 	}
 
-	sort.Sort(DeploymentLogs)
-	return DeploymentLogs, nil
+	sort.Sort(fileLogs)
+	return fileLogs, nil
 }
