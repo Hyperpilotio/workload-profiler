@@ -31,13 +31,6 @@
                 <span class="timeLabel">Create:</span><span class="createTime"></span>
                 <span class="badge"></span>
             </li>
-            {{range $k,$v := .logs}}
-            <li class="deployment" data-runid="{{$v.RunId}}" data-deploymentid="{{$v.DeploymentId}}" data-status="{{$v.Status}}">
-                <div class="logName">{{$v.RunId}}</div>
-                <span class="timeLabel">Create:</span><span class="createTime">{{$v.Create}}</span>
-                <span class="badge badge-{{$v.Status}}">{{$v.Status}}</span>
-            </li>
-            {{end}}
         </ul>
     </aside>
 
@@ -55,26 +48,28 @@
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
 <script>
     var timeout;
-    $(function() {
-        $('ul.nav-tabs a').on('click', function(event) {
+    var activeRunId;
+    $(function () {
+        $('ul.nav-tabs a').on('click', function (event) {
             $('ul.nav-tabs li').removeClass('active');
             $(this).parent().addClass('active');
-            $('.deployment-log').hide();
-            
+
             clearTimeout(timeout);
             getDeploymentList($(this).data('status'));
         });
 
-        $('.deployment-list').on('click', 'li', function() {
+        $('.deployment-list').on('click', 'li', function () {
             $('.deployment-list li').removeClass('active');
             $(this).addClass('active');
             $('main h1').remove();
             $('.deployment-detail').show();
             $('.deployment-log').html('');
-            
+
             clearTimeout(timeout);
-            getDeploymentLogContent($(this));
+            getActiveDeploymentLogContent();
         });
+
+        getDeploymentList('Running');
     });
 
     function getDeploymentList(status) {
@@ -82,23 +77,19 @@
             url: '/ui/list/' + status,
             type: 'GET',
             dataType: 'json',
-            success: function(json) {
+            success: function (json) {
                 if (json.error == false) {
-                    if ($('ul.nav-tabs li.active a').data('status') !== status) {
-                        return;
+                    if ($('ul.nav-tabs li.active a').data('status') != status) {
+                        return false;
                     }
 
-                    let activeDeployment;
-                    $('li.deployment').not(':first').each(function() {
-                        if ($(this).hasClass('active')) {
-                            activeDeployment = $(this).data('name');
-                        }
+                    $('li.deployment').not(':first').each(function () {
                         $(this).remove();
                     });
 
-                    $.each(json.data, function(index, element) {
-                        let deployment = $('#deploymentTemplate').clone();
-                        if (activeDeployment && element.Name === activeDeployment) {
+                    $.each(json.data, function (index, element) {
+                        var deployment = $('#deploymentTemplate').clone();
+                        if (activeRunId && element.RunId === activeRunId) {
                             deployment.addClass('active');
                         }
 
@@ -117,41 +108,41 @@
         });
     }
 
-    function getDeploymentLogContent(deployment) {
-        if ($('.deployment-list li.active').data('runid') != deployment.data('runid')) {
+    function getActiveDeploymentLogContent() {
+        if ($('.deployment-list li.active').length != 1) {
             return false;
         }
-        if (typeof deployment != 'undefined') {
-            $.ajax({
-                url: '/ui/logs/' + deployment.data('runid'),
-                type: 'GET',
-                dataType: 'json',
-                success: function(json) {
-                    if (json.error == false) {
-                        $('.deployment-log').html('');
-                        $.each(json.data, function(i, line) {
-                            $('.deployment-log').append('<p class="line">' + line.replace(/ /g,
-                                '&nbsp;') + '</p>');
-                        });
-                        $('.deployment-log').show();
 
-                        if (json.state == "") {
-                            deployment.remove();
-                            $('.deployment-detail').hide();
-                        } else {
-                            if (deployment.data('status') != json.state) {
-                                deployment.find('.badge').text(json.state);
-                                deployment.find('.badge').removeClass('badge-' + deployment.data('status'));
-                                deployment.find('.badge').addClass('badge-' + json.state);
-                            }
+        var deployment = $('.deployment-list li.active');
+        activeRunId = deployment.data('runid');
+        $.ajax({
+            url: '/ui/logs/' + deployment.data('runid'),
+            type: 'GET',
+            dataType: 'json',
+            success: function (json) {
+                if (json.error == false) {
+                    $('.deployment-log').html('');
+                    $.each(json.data, function (i, line) {
+                        $('.deployment-log').append('<p class="line">' + line.replace(/ /g, '&nbsp;') + '</p>');
+                    });
+                    $('.deployment-log').show();
+
+                    if (json.state == "") {
+                        deployment.remove();
+                        $('.deployment-detail').hide();
+                    } else {
+                        if (deployment.data('status') != json.state) {
+                            deployment.find('.badge').text(json.state);
+                            deployment.find('.badge').removeClass('badge-' + deployment.data('status'));
+                            deployment.find('.badge').addClass('badge-' + json.state);
                         }
                     }
                 }
-            });
-        }
+            }
+        });
 
         if ($('.deployment-list li.active').length == 1) {
-            timeout = setTimeout(getDeploymentLogContent, 5000, $('.deployment-list li.active'));
+            timeout = setTimeout(getActiveDeploymentLogContent, 5000);
         }
     }
 </script>
