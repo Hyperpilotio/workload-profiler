@@ -213,15 +213,15 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 }
 
 func validateCommand(command models.Command) (bool, error) {
-	if nil == command.ParserURL || "" == *command.ParserURL {
-		return false, fmt.Errorf("parseURL field is missing in the Command. Please check your application.json in the database")
+	if command.ParserURL == nil || *command.ParserURL == "" {
+		return false, fmt.Errorf("parser field is missing in the Command. Please check your application.json in the database")
 	}
 	return true, nil
 }
 
 func validateLoadTesterCommand(command models.LoadTesterCommand) (bool, error) {
-	if nil == command.ParserURL || "" == *command.ParserURL {
-		return false, fmt.Errorf("parseURL field is missing in the LoadTesterCommand. Please check your application.json in the database")
+	if command.ParserURL == nil || *command.ParserURL == "" {
+		return false, fmt.Errorf("parser field is missing in the LoadTesterCommand. Please check your application.json in the database")
 	}
 	return true, nil
 }
