@@ -93,8 +93,7 @@ type IntensityArgument struct {
 }
 
 type LoadTesterCommand struct {
-	Image string `bson:"image" json:"image"`
-	// ParserURL is required, developer must provide this parserURL in the application.json.
+	Image          string              `bson:"image" json:"image"`
 	ParserURL      *string             `bson:"parserUrl,omitempty" json:"parserUrl,omitempty"`
 	Path           string              `bson:"path" json:"path"`
 	Args           []string            `bson:"args" json:"args"`

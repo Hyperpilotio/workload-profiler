@@ -178,7 +178,6 @@ func replaceTargetingServiceAddress(controller *models.BenchmarkController, depl
 					targetingService.Name,
 					err.Error())
 			}
-
 			// Initialize
 			if targetingService.PortConfig != nil {
 				controller.Initialize.Args = append(
