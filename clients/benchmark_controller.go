@@ -63,7 +63,7 @@ func (client *BenchmarkControllerClient) RunCalibration(
 		body["initializeType"] = controller.InitializeType
 	}
 
-	if ok, err := validateLoadTesterCommand(controller.Command); !ok {
+	if err := validateLoadTesterCommand(controller.Command); err != nil {
 		return nil, err
 	}
 	body["loadTest"] = controller.Command
@@ -156,11 +156,10 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 		ParserURL: loadTesterCommand.ParserURL,
 	}
 
-	if ok, err := validateCommand(command); !ok {
+	if err := validateCommand(command); err != nil {
 		return nil, err
 	}
 	body["loadTest"] = command
-
 	body["intensity"] = intensity
 	body["stageId"] = stageId
 
@@ -212,16 +211,16 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	return results, nil
 }
 
-func validateCommand(command models.Command) (bool, error) {
+func validateCommand(command models.Command) error {
 	if command.ParserURL == nil || *command.ParserURL == "" {
-		return false, fmt.Errorf("parser field is missing in the Command. Please check your application.json in the database")
+		return fmt.Errorf("parser field is missing in the Command. Please check your application.json in the database")
 	}
-	return true, nil
+	return nil
 }
 
-func validateLoadTesterCommand(command models.LoadTesterCommand) (bool, error) {
+func validateLoadTesterCommand(command models.LoadTesterCommand) error {
 	if command.ParserURL == nil || *command.ParserURL == "" {
-		return false, fmt.Errorf("parser field is missing in the LoadTesterCommand. Please check your application.json in the database")
+		return fmt.Errorf("parser field is missing in the LoadTesterCommand. Please check your application.json in the database")
 	}
-	return true, nil
+	return nil
 }

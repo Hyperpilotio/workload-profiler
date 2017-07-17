@@ -154,58 +154,77 @@ func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchm
 	return nil
 }
 
-func (run *CalibrationRun) replaceTargetingServiceAddress(controller *models.BenchmarkController) error {
-	if 0 == len(run.ApplicationConfig.ServiceNames) {
-		return fmt.Errorf("No targeting service: ApplicationConfig.ServiceNames is empty")
+func replaceTargetingServiceAddress(controller *models.BenchmarkController, deployerClient *clients.DeployerClient, deploymentId string) error {
+	errMsg := "Unable to replace the targeting service address because"
+	if controller == nil {
+		return fmt.Errorf("%s the pointer of controller is nil", errMsg)
+	}
+	if deployerClient == nil {
+		return fmt.Errorf("%s the pointer of deployerClient is nil", errMsg)
+	}
+	if deploymentId == "" {
+		return fmt.Errorf("$s the DeploymentId is a empty string")
 	}
 
-	for _, targetingService := range run.ApplicationConfig.ServiceNames {
-		// NOTE we assume the targeting service is an unique one in this deployment process.
-		// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
-		serviceAddress, err := run.DeployerClient.GetServiceAddress(run.DeploymentId, targetingService)
-		if err != nil {
-			return fmt.Errorf(
-				"Unable to get service %s address: %s",
-				targetingService,
-				err.Error())
-		}
+	if controller.Initialize.ServiceConfigs != nil {
+		for _, targetingService := range *controller.Initialize.ServiceConfigs {
+			// NOTE we assume the targeting service is an unique one in this deployment process.
+			// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
+			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name)
+			if err != nil {
+				return fmt.Errorf(
+					"Unable to get service %s address: %s",
+					targetingService.Name,
+					err.Error())
+			}
 
-		// Initialize
-		if controller.Initialize.HostConfig != nil {
-			controller.Initialize.Args = append(
-				[]string{
-					controller.Initialize.HostConfig.Arg,
-					serviceAddress.Host,
-				},
-				controller.Initialize.Args...)
+			// Initialize
+			if targetingService.PortConfig != nil {
+				controller.Initialize.Args = append(
+					[]string{
+						targetingService.PortConfig.Arg,
+						strconv.FormatInt(serviceAddress.Port, 10),
+					},
+					controller.Initialize.Args...)
+			}
+			if targetingService.HostConfig != nil {
+				controller.Initialize.Args = append(
+					[]string{
+						targetingService.HostConfig.Arg,
+						serviceAddress.Host,
+					},
+					controller.Initialize.Args...)
+			}
 		}
+	}
 
-		if controller.Initialize.PortConfig != nil {
-			controller.Initialize.Args = append(
-				[]string{
-					controller.Initialize.PortConfig.Arg,
-					strconv.FormatInt(serviceAddress.Port, 10),
-				},
-				controller.Initialize.Args...)
-		}
+	if controller.Command.ServiceConfigs != nil {
+		for _, targetingService := range *controller.Command.ServiceConfigs {
+			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name)
+			if err != nil {
+				return fmt.Errorf(
+					"Unable to get service %s address: %s",
+					targetingService.Name,
+					err.Error())
+			}
 
-		// LoadTesterCommand
-		if controller.Command.HostConfig != nil {
-			controller.Command.Args = append(
-				[]string{
-					controller.Command.HostConfig.Arg,
-					serviceAddress.Host,
-				},
-				controller.Command.Args...)
-		}
-
-		if controller.Command.PortConfig != nil {
-			controller.Command.Args = append(
-				[]string{
-					controller.Command.PortConfig.Arg,
-					strconv.FormatInt(serviceAddress.Port, 10),
-				},
-				controller.Command.Args...)
+			// LoadTesterCommand
+			if targetingService.PortConfig != nil {
+				controller.Command.Args = append(
+					[]string{
+						targetingService.PortConfig.Arg,
+						strconv.FormatInt(serviceAddress.Port, 10),
+					},
+					controller.Command.Args...)
+			}
+			if targetingService.HostConfig != nil {
+				controller.Command.Args = append(
+					[]string{
+						targetingService.HostConfig.Arg,
+						serviceAddress.Host,
+					},
+					controller.Command.Args...)
+			}
 		}
 	}
 
@@ -219,7 +238,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
-	if err := run.replaceTargetingServiceAddress(controller); err != nil {
+	if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId); err != nil {
 		return fmt.Errorf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
 	}
 
@@ -322,64 +341,6 @@ func (run *CalibrationRun) runSlowCookerController(runId string, controller *mod
 	return nil
 }
 
-func (run *BenchmarkRun) replaceTargetingServiceAddress(controller *models.BenchmarkController) error {
-	if 0 == len(run.ApplicationConfig.ServiceNames) {
-		return fmt.Errorf("No targeting service: ApplicationConfig.ServiceNames is empty")
-	}
-
-	for _, targetingService := range run.ApplicationConfig.ServiceNames {
-		// NOTE we assume the targeting service is an unique one in this deployment process.
-		// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
-		serviceAddress, err := run.DeployerClient.GetServiceAddress(run.DeploymentId, targetingService)
-		if err != nil {
-			return fmt.Errorf(
-				"Unable to get service %s address: %s",
-				targetingService,
-				err.Error())
-		}
-
-		// Initialize
-		if controller.Initialize.HostConfig != nil {
-			controller.Initialize.Args = append(
-				[]string{
-					controller.Initialize.HostConfig.Arg,
-					serviceAddress.Host,
-				},
-				controller.Initialize.Args...)
-		}
-
-		if controller.Initialize.PortConfig != nil {
-			controller.Initialize.Args = append(
-				[]string{
-					controller.Initialize.PortConfig.Arg,
-					strconv.FormatInt(serviceAddress.Port, 10),
-				},
-				controller.Initialize.Args...)
-		}
-
-		// LoadTesterCommand
-		if controller.Command.HostConfig != nil {
-			controller.Command.Args = append(
-				[]string{
-					controller.Command.HostConfig.Arg,
-					serviceAddress.Host,
-				},
-				controller.Command.Args...)
-		}
-
-		if controller.Command.PortConfig != nil {
-			controller.Command.Args = append(
-				[]string{
-					controller.Command.PortConfig.Arg,
-					strconv.FormatInt(serviceAddress.Port, 10),
-				},
-				controller.Command.Args...)
-		}
-	}
-
-	return nil
-}
-
 func (run *BenchmarkRun) runBenchmarkController(
 	stageId string,
 	appIntensity float64,
@@ -392,7 +353,7 @@ func (run *BenchmarkRun) runBenchmarkController(
 		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
-	if err := run.replaceTargetingServiceAddress(controller); err != nil {
+	if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId); err != nil {
 		return nil, fmt.Errorf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
 	}
 
