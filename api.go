@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,13 +11,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/db"
+	"github.com/hyperpilotio/workload-profiler/runners"
 	"github.com/spf13/viper"
 )
 
 // Server store the stats / data of every deployment
 type Server struct {
 	Config   *viper.Viper
-	ConfigDB *ConfigDB
+	ConfigDB *db.ConfigDB
 
 	Clusters *Clusters
 }
@@ -25,7 +28,7 @@ type Server struct {
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
 		Config:   config,
-		ConfigDB: NewConfigDB(config),
+		ConfigDB: db.NewConfigDB(config),
 	}
 }
 
@@ -84,6 +87,26 @@ func (server *Server) StartServer() error {
 	return router.Run(":" + server.Config.GetString("port"))
 }
 
+func (server *Server) runAWSSizing(c *gin.Context) {
+	appName := c.Param("appName")
+
+	glog.V(1).Infof("Received request to run aws sizing for app: %s", appName)
+
+	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  fmt.Sprintf("Unable to get application config for %s: %s", appName, err.Error()),
+		})
+		return
+	}
+
+	run, err := runners.NewAWSSizingRun(applicationConfig)
+	if err != nil {
+
+	}
+}
+
 func (server *Server) runBenchmarks(c *gin.Context) {
 	appName := c.Param("appName")
 
@@ -133,7 +156,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
-	run, err := NewBenchmarkRun(
+	run, err := runners.NewBenchmarkRun(
 		applicationConfig,
 		benchmarks,
 		request.DeploymentId,
@@ -210,7 +233,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	run, runErr := NewCalibrationRun(request.DeploymentId, applicationConfig, server.Config)
+	run, runErr := runners.NewCalibrationRun(request.DeploymentId, applicationConfig, server.Config)
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,

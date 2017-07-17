@@ -1,34 +1,18 @@
-package main
+package runners
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/db"
 	"github.com/hyperpilotio/workload-profiler/models"
-	"github.com/nu7hatch/gouuid"
 	"github.com/spf13/viper"
 )
-
-type ProfileRun struct {
-	Id                        string
-	DeployerClient            *clients.DeployerClient
-	BenchmarkControllerClient *clients.BenchmarkControllerClient
-	SlowCookerClient          *clients.SlowCookerClient
-	DeploymentId              string
-	MetricsDB                 *MetricsDB
-	ApplicationConfig         *models.ApplicationConfig
-	ProfileLog                *log.FileLog
-}
-
-type CalibrationRun struct {
-	ProfileRun
-}
 
 type BenchmarkRun struct {
 	ProfileRun
@@ -40,23 +24,17 @@ type BenchmarkRun struct {
 	Benchmarks           []models.Benchmark
 }
 
-type ProfileResults struct {
-	Id           string
-	StageResults []StageResult
-}
-
-type StageResult struct {
-	Id        string
-	StartTime string
-	EndTime   string
-}
-
-func generateId(prefix string) (string, error) {
-	u4, err := uuid.NewV4()
-	if err != nil {
-		return "", errors.New("Unable to generate stage id: " + err.Error())
+func getSlowcookerBenchmarkQos(result *clients.SlowCookerBenchmarkResult, metric string) (int64, error) {
+	switch metric {
+	case "50":
+		return result.Percentile50, nil
+	case "95":
+		return result.Percentile95, nil
+	case "99":
+		return result.Percentile99, nil
 	}
-	return prefix + "-" + u4.String(), nil
+
+	return 0, errors.New("Unsupported latency metric: " + metric)
 }
 
 func NewBenchmarkRun(
@@ -91,7 +69,7 @@ func NewBenchmarkRun(
 			DeployerClient:            deployerClient,
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			SlowCookerClient:          &clients.SlowCookerClient{},
-			MetricsDB:                 NewMetricsDB(config),
+			MetricsDB:                 db.NewMetricsDB(config),
 			DeploymentId:              deploymentId,
 			ProfileLog:                log,
 		},
@@ -100,37 +78,6 @@ func NewBenchmarkRun(
 		SloTolerance:         sloTolerance,
 		BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
 		Benchmarks:           benchmarks,
-	}
-
-	return run, nil
-}
-
-func NewCalibrationRun(deploymentId string, applicationConfig *models.ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
-	id, err := generateId("calibrate")
-	if err != nil {
-		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
-	}
-
-	deployerClient, deployerErr := clients.NewDeployerClient(config)
-	if deployerErr != nil {
-		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
-	}
-
-	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
-	if logErr != nil {
-		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
-	}
-
-	run := &CalibrationRun{
-		ProfileRun: ProfileRun{
-			Id:                        id,
-			ApplicationConfig:         applicationConfig,
-			DeployerClient:            deployerClient,
-			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
-			MetricsDB:                 NewMetricsDB(config),
-			DeploymentId:              deploymentId,
-			ProfileLog:                log,
-		},
 	}
 
 	return run, nil
@@ -148,87 +95,6 @@ func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchm
 		if err := run.BenchmarkAgentClient.DeleteBenchmark(agentUrl, config.Name, run.ProfileLog.Logger); err != nil {
 			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
 				benchmark.Name, err.Error())
-		}
-	}
-
-	return nil
-}
-
-func replaceTargetingServiceAddress(controller *models.BenchmarkController, deployerClient *clients.DeployerClient, deploymentId string) error {
-	errMsg := "Unable to replace the targeting service address because"
-	if controller == nil {
-		return fmt.Errorf("%s the pointer of controller is nil", errMsg)
-	}
-	if deployerClient == nil {
-		return fmt.Errorf("%s the pointer of deployerClient is nil", errMsg)
-	}
-	if deploymentId == "" {
-		return fmt.Errorf("%s the DeploymentId is a empty string", errMsg)
-	}
-
-	glog.V(3).Infof("func replaceTargetingServiceAddress: Initialize %+v", controller.Initialize)
-	if controller.Initialize.ServiceConfigs != nil {
-		for _, targetingService := range *controller.Initialize.ServiceConfigs {
-			// NOTE we assume the targeting service is an unique one in this deployment process.
-			// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
-			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name)
-			if err != nil {
-				return fmt.Errorf(
-					"Unable to get service %s address: %s",
-					targetingService.Name,
-					err.Error())
-			}
-			// Initialize
-			if targetingService.PortConfig != nil {
-				controller.Initialize.Args = append(
-					[]string{
-						targetingService.PortConfig.Arg,
-						strconv.FormatInt(serviceAddress.Port, 10),
-					},
-					controller.Initialize.Args...)
-			}
-			if targetingService.HostConfig != nil {
-				controller.Initialize.Args = append(
-					[]string{
-						targetingService.HostConfig.Arg,
-						serviceAddress.Host,
-					},
-					controller.Initialize.Args...)
-			}
-			glog.V(2).Infof("Arguments of Initialize command are %s", controller.Initialize.Args)
-		}
-	}
-
-	glog.V(3).Infof("func replaceTargetingServiceAddress: Command %+v", controller.Command)
-	if controller.Command.ServiceConfigs != nil {
-		for _, targetingService := range *controller.Command.ServiceConfigs {
-			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name)
-			if err != nil {
-				return fmt.Errorf(
-					"Unable to get service %s address: %s",
-					targetingService.Name,
-					err.Error())
-			}
-
-			// LoadTesterCommand
-			if targetingService.PortConfig != nil {
-				controller.Command.Args = append(
-					[]string{
-						targetingService.PortConfig.Arg,
-						strconv.FormatInt(serviceAddress.Port, 10),
-					},
-					controller.Command.Args...)
-			}
-			if targetingService.HostConfig != nil {
-				controller.Command.Args = append(
-					[]string{
-						targetingService.HostConfig.Arg,
-						serviceAddress.Host,
-					},
-					controller.Command.Args...)
-			}
-
-			glog.V(2).Infof("Arguments of load testing command are %s", controller.Command.Args)
 		}
 	}
 
@@ -383,29 +249,8 @@ func (run *BenchmarkRun) runBenchmarkController(
 	return results, nil
 }
 
-func min(a int, b int) int {
-	if a > b {
-		return b
-	} else {
-		return a
-	}
-}
-
 func (run *BenchmarkRun) runLocustController(runId string, appIntensity float64, controller *models.LocustController) ([]*models.BenchmarkResult, error) {
 	return nil, errors.New("Unimplemented")
-}
-
-func getSlowcookerBenchmarkQos(result *clients.SlowCookerBenchmarkResult, metric string) (int64, error) {
-	switch metric {
-	case "50":
-		return result.Percentile50, nil
-	case "95":
-		return result.Percentile95, nil
-	case "99":
-		return result.Percentile99, nil
-	}
-
-	return 0, errors.New("Unsupported latency metric: " + metric)
 }
 
 func (run *BenchmarkRun) runSlowCookerController(
@@ -443,79 +288,6 @@ func (run *BenchmarkRun) runSlowCookerController(
 	}
 
 	return results, nil
-}
-
-func (run *CalibrationRun) runLocustController(runId string, controller *models.LocustController) error {
-	/*
-		waitTime, err := time.ParseDuration(controller.StepDuration)
-		if err != nil {
-			return fmt.Errorf("Unable to parse wait time %s: %s", controller.StepDuration, err.Error())
-		}
-
-		url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, "locust-master")
-		if urlErr != nil {
-			return fmt.Errorf("Unable to retrieve locust master url: %s", urlErr.Error())
-		}
-
-		lastUserCount := 0
-		nextUserCount := controller.StartCount
-
-		for lastUserCount < nextUserCount {
-			body := make(map[string]string)
-			body["locust_count"] = strconv.Itoa(nextUserCount)
-			body["hatch_rate"] = strconv.Itoa(nextUserCount)
-			body["stage_id"] = stageId
-
-			startRequest := HTTPRequest{
-				HTTPMethod: "POST",
-				UrlPath:    "/swarm",
-				FormData:   body,
-			}
-
-			glog.Infof("Starting locust run with id %s, count %d", stageId, nextUserCount)
-			if response, err := sendHTTPRequest(url, startRequest); err != nil {
-				return fmt.Errorf("Unable to send start request for locust test %v: %s", startRequest, err.Error())
-			} else if response.StatusCode() >= 300 {
-				return fmt.Errorf("Unexpected response code when starting locust: %d, body: %s",
-					response.StatusCode(), response.String())
-			}
-
-			glog.Infof("Waiting locust run for %s..", controller.StepDuration)
-			<-time.After(waitTime)
-
-			lastUserCount = nextUserCount
-			nextUserCount = min(nextUserCount+controller.StepCount, controller.EndCount)
-		}
-
-		stopRequest := HTTPRequest{
-			HTTPMethod: "GET",
-			UrlPath:    "/stop",
-		}
-
-		glog.Infof("Stopping locust run..")
-
-		if response, err := sendHTTPRequest(url, stopRequest); err != nil {
-			return fmt.Errorf("Unable to send stop request for locust test: %s", err.Error())
-		} else if response.StatusCode() >= 300 {
-			return fmt.Errorf("Unexpected response code when stopping locust: %d, body: %s",
-				response.StatusCode(), response.String())
-		}
-	*/
-
-	return errors.New("Unimplemented")
-}
-
-func (run *CalibrationRun) Run() error {
-	loadTester := run.ApplicationConfig.LoadTester
-	if loadTester.BenchmarkController != nil {
-		return run.runBenchmarkController(run.Id, loadTester.BenchmarkController)
-	} else if loadTester.LocustController != nil {
-		return run.runLocustController(run.Id, loadTester.LocustController)
-	} else if loadTester.SlowCookerController != nil {
-		return run.runSlowCookerController(run.Id, loadTester.SlowCookerController)
-	}
-
-	return errors.New("No controller found in calibration request")
 }
 
 func (run *BenchmarkRun) getBenchmarkAgentUrl(service string, config models.BenchmarkConfig) (string, error) {
