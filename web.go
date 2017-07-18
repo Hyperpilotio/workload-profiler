@@ -50,6 +50,19 @@ func (server *Server) getFileLogList(c *gin.Context) {
 
 func (server *Server) getFileLogContent(c *gin.Context) {
 	fileName := c.Param("fileName")
+
+	server.mutex.Lock()
+	run, ok := server.Jobs[fileName]
+	server.mutex.Unlock()
+
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": true,
+			"data":  "Unable to find run: " + fileName,
+		})
+		return
+	}
+
 	logPath := path.Join(server.Config.GetString("filesPath"), "log", fileName+".log")
 	file, err := os.Open(logPath)
 	if err != nil {
@@ -70,20 +83,11 @@ func (server *Server) getFileLogContent(c *gin.Context) {
 		lines = append(lines, scanner.Text())
 	}
 
-	deployment, err := server.Clusters.GetCluster(fileName)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"error": false,
-			"data":  lines,
-		})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"error":      false,
 		"data":       lines,
-		"deployment": deployment,
-		"state":      GetStateString(deployment.state),
+		"deployment": run.GetSummary(),
+		"state":      run.GetState(),
 	})
 }
 

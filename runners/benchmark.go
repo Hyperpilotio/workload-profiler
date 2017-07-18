@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/go-utils/log"
@@ -40,7 +41,6 @@ func getSlowcookerBenchmarkQos(result *clients.SlowCookerBenchmarkResult, metric
 func NewBenchmarkRun(
 	applicationConfig *models.ApplicationConfig,
 	benchmarks []models.Benchmark,
-	deploymentId string,
 	startingIntensity int,
 	step int,
 	sloTolerance float64,
@@ -70,8 +70,8 @@ func NewBenchmarkRun(
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			SlowCookerClient:          &clients.SlowCookerClient{},
 			MetricsDB:                 db.NewMetricsDB(config),
-			DeploymentId:              deploymentId,
 			ProfileLog:                log,
+			Created:                   time.Now(),
 		},
 		StartingIntensity:    startingIntensity,
 		Step:                 step,
@@ -96,116 +96,6 @@ func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchm
 			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
 				benchmark.Name, err.Error())
 		}
-	}
-
-	return nil
-}
-
-func (run *CalibrationRun) runBenchmarkController(runId string, controller *models.BenchmarkController) error {
-	loadTesterName := run.ApplicationConfig.LoadTester.Name
-	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
-	if urlErr != nil {
-		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
-	}
-
-	if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId); err != nil {
-		return fmt.Errorf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
-	}
-
-	startTime := time.Now()
-	results, err := run.BenchmarkControllerClient.RunCalibration(
-		loadTesterName, url, runId, controller, run.ApplicationConfig.SLO, run.ProfileLog.Logger)
-	if err != nil {
-		return errors.New("Unable to run calibration: " + err.Error())
-	}
-
-	testResults := []models.CalibrationTestResult{}
-	for _, runResult := range results.Results.RunResults {
-		qosValue := runResult.Results[run.ApplicationConfig.SLO.Metric].(float64)
-
-		// TODO: For now we assume just one intensity argument, but we can support multiple
-		// in the future.
-		loadIntensity := runResult.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
-		testResults = append(testResults, models.CalibrationTestResult{
-			QosValue:      qosValue,
-			LoadIntensity: loadIntensity,
-		})
-	}
-
-	finalIntensity := results.Results.FinalResults.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
-	// Translate benchmark controller results to expected results format for analyzer
-	finalResult := &models.CalibrationTestResult{
-		LoadIntensity: finalIntensity,
-		QosValue:      results.Results.FinalResults.Qos,
-	}
-	calibrationResults := &models.CalibrationResults{
-		TestId:       run.Id,
-		AppName:      run.ApplicationConfig.Name,
-		LoadTester:   loadTesterName,
-		QosMetrics:   []string{run.ApplicationConfig.SLO.Type},
-		TestDuration: time.Since(startTime).String(),
-		TestResults:  testResults,
-		FinalResult:  finalResult,
-	}
-
-	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
-		return errors.New("Unable to store calibration results: " + err.Error())
-	}
-
-	if b, err := json.MarshalIndent(calibrationResults, "", "  "); err == nil {
-		run.ProfileLog.Logger.Infof("Store calibration results: %s", string(b))
-	}
-
-	return nil
-}
-
-func (run *CalibrationRun) runSlowCookerController(runId string, controller *models.SlowCookerController) error {
-	glog.V(1).Infof("Running slow cooker with controller: %+v", controller)
-	loadTesterName := run.ApplicationConfig.LoadTester.Name
-	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
-	if urlErr != nil {
-		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
-	}
-
-	startTime := time.Now()
-	results, err := run.SlowCookerClient.RunCalibration(
-		url, runId, run.ApplicationConfig.SLO, controller, run.ProfileLog.Logger)
-	if err != nil {
-		return errors.New("Unable to run calibration with slow cooker: " + err.Error())
-	}
-
-	testResults := []models.CalibrationTestResult{}
-	for _, runResult := range results.Results {
-		qosValue := runResult.LatencyMs
-		loadIntensity := runResult.Concurrency
-		testResults = append(testResults, models.CalibrationTestResult{
-			QosValue:      float64(qosValue),
-			LoadIntensity: float64(loadIntensity),
-		})
-	}
-
-	finalIntensity := results.FinalResult
-	// Translate benchmark controller results to expected results format for analyzer
-	finalResult := &models.CalibrationTestResult{
-		LoadIntensity: float64(finalIntensity.Concurrency),
-		QosValue:      float64(finalIntensity.LatencyMs),
-	}
-	calibrationResults := &models.CalibrationResults{
-		TestId:       run.Id,
-		AppName:      run.ApplicationConfig.Name,
-		LoadTester:   loadTesterName,
-		QosMetrics:   []string{run.ApplicationConfig.SLO.Type},
-		TestDuration: time.Since(startTime).String(),
-		TestResults:  testResults,
-		FinalResult:  finalResult,
-	}
-
-	if err := run.MetricsDB.WriteMetrics("calibration", calibrationResults); err != nil {
-		return errors.New("Unable to store calibration results: " + err.Error())
-	}
-
-	if b, err := json.MarshalIndent(calibrationResults, "", "  "); err == nil {
-		run.ProfileLog.Logger.Infof("Store calibration results: %s", string(b))
 	}
 
 	return nil
@@ -412,7 +302,8 @@ func (run *BenchmarkRun) runAppWithBenchmark(service string, benchmark models.Be
 	return results, nil
 }
 
-func (run *BenchmarkRun) Run() error {
+func (run *BenchmarkRun) Run(deploymentId string) error {
+	run.DeploymentId = deploymentId
 	appName := run.ApplicationConfig.Name
 	glog.V(1).Infof("Reading calibration results for app %s", appName)
 	metric, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name, &models.CalibrationResults{})

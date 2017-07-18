@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,27 +24,36 @@ type Job interface {
 	GetApplicationConfig() *models.ApplicationConfig
 	GetLog() *log.FileLog
 	Run(deploymentId string) error
+	GetState() string
+	SetState(state string)
+	GetSummary() runners.RunSummary
 }
 
 // Server store the stats / data of every deployment
 type Server struct {
 	Config   *viper.Viper
-	ConfigDB *ConfigDB
+	ConfigDB *db.ConfigDB
 
 	Clusters       *Clusters
 	JobQueue       chan Job
+	Jobs           map[string]Job
 	UnreserveQueue chan UnreserveResult
+	mutex          sync.Mutex
 }
 
 func (server *Server) AddJob(job Job) {
+	server.Jobs[job.GetId()] = job
 	server.JobQueue <- job
 }
 
 // NewServer return an instance of Server struct.
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
-		Config:   config,
-		ConfigDB: db.NewConfigDB(config),
+		Config:         config,
+		ConfigDB:       db.NewConfigDB(config),
+		JobQueue:       make(chan Job, 100),
+		UnreserveQueue: make(chan UnreserveResult, 100),
+		Jobs:           make(map[string]Job),
 	}
 }
 
@@ -114,6 +124,7 @@ func (server *Server) RunJobLoop() {
 		for {
 			select {
 			case job := <-server.JobQueue:
+				job.SetState(runners.RESERVING)
 				log := job.GetLog()
 				defer log.LogFile.Close()
 
@@ -134,12 +145,16 @@ func (server *Server) RunJobLoop() {
 					}
 				}
 
-				// TODO: Allow multiple workers to process job
+				job.SetState(runners.RUNNING)
+				// TODO: Allow multiple jobs to run
 				log.Logger.Infof("Running %s job", job.GetId())
+				defer log.LogFile.Close()
 				if err := job.Run(deploymentId); err != nil {
 					// TODO: Store the error state in a map and display/return job status
 					log.Logger.Errorf("Unable to run %s job: %s", runId, err)
-					server.Clusters.SetState(runId, FAILED)
+					job.SetState(runners.FAILED)
+				} else {
+					job.SetState(runners.FINISHED)
 				}
 
 				unreserveResult := <-server.Clusters.UnreserveDeployment(runId, log.Logger)
@@ -165,10 +180,19 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 		return
 	}
 
-	run, err := runners.NewAWSSizingRun(applicationConfig)
+	run, err := runners.NewAWSSizingRun(applicationConfig, server.Config)
 	if err != nil {
 
 	}
+
+	log := run.ProfileLog
+	log.Logger.Infof("Queueing aws sizing job %s for app %s...", run.Id, appName)
+	server.AddJob(run)
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"error": false,
+		"data":  "",
+	})
 }
 
 func (server *Server) runBenchmarks(c *gin.Context) {
@@ -247,7 +271,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	run, runErr := runners.NewCalibrationRun(request.DeploymentId, applicationConfig, server.Config)
+	run, runErr := runners.NewCalibrationRun(applicationConfig, server.Config)
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,

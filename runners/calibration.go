@@ -18,7 +18,7 @@ type CalibrationRun struct {
 	ProfileRun
 }
 
-func NewCalibrationRun(deploymentId string, applicationConfig *models.ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
+func NewCalibrationRun(applicationConfig *models.ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
 	id, err := generateId("calibrate")
 	if err != nil {
 		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
@@ -41,8 +41,9 @@ func NewCalibrationRun(deploymentId string, applicationConfig *models.Applicatio
 			DeployerClient:            deployerClient,
 			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
 			MetricsDB:                 db.NewMetricsDB(config),
-			DeploymentId:              deploymentId,
 			ProfileLog:                log,
+			State:                     "Queued",
+			Created:                   time.Now(),
 		},
 	}
 
@@ -219,7 +220,8 @@ func (run *CalibrationRun) runLocustController(runId string, controller *models.
 	return errors.New("Unimplemented")
 }
 
-func (run *CalibrationRun) Run() error {
+func (run *CalibrationRun) Run(deploymentId string) error {
+	run.DeploymentId = deploymentId
 	loadTester := run.ApplicationConfig.LoadTester
 	if loadTester.BenchmarkController != nil {
 		return run.runBenchmarkController(run.Id, loadTester.BenchmarkController)

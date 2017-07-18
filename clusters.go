@@ -328,6 +328,7 @@ func (clusters *Clusters) unreserveCluster(cluster *cluster, log *logging.Logger
 		cluster.state = AVAILABLE
 
 		if err != nil {
+			cluster.state = FAILED
 			unreserveResult <- UnreserveResult{
 				Err: err.Error(),
 			}

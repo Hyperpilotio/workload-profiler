@@ -6,9 +6,14 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-resty/resty"
+	deployer "github.com/hyperpilotio/deployer/apis"
+	"github.com/hyperpilotio/go-utils/funcs"
+	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
 
@@ -21,6 +26,11 @@ type ServiceMapping struct {
 type ServiceMappingResponse struct {
 	Data  map[string]ServiceMapping
 	Error bool
+}
+
+type DeployerResponse struct {
+	Error bool   `json:"error"`
+	Data  string `json:"data`
 }
 
 type DeployerClient struct {
@@ -343,4 +353,26 @@ func (client *DeployerClient) CreateDeployment(
 	}
 
 	return &deploymentId, nil
+}
+
+func (client *DeployerClient) waitUntilServiceUrlAvailable(
+	deploymentId string, serviceName string, log *logging.Logger) error {
+	url, err := client.GetServiceUrl(deploymentId, serviceName)
+	if err != nil {
+		return fmt.Errorf("Unable to retrieve service url [%s]: %s", serviceName, err.Error())
+	}
+
+	return funcs.LoopUntil(time.Minute*5, time.Second*10, func() (bool, error) {
+		response, err := resty.R().Get(url)
+		if err != nil {
+			return false, nil
+		}
+
+		if response.StatusCode() != 200 {
+			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+		}
+
+		log.Infof("%s url is now available", serviceName)
+		return true, nil
+	})
 }
