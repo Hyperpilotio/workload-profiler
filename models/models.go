@@ -4,9 +4,19 @@ import (
 	benchmarkagent "github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
 )
 
+// ServiceConfig a struct that describes the address of the corresponding service
+type ServiceConfig struct {
+	Name       string            `bson:"name" json:"name"`
+	HostConfig *CommandParameter `bson:"hostConfig,omitempty" json:"hostConfig,omitempty"`
+	PortConfig *CommandParameter `bson:"portConfig,omitempty" json:"portConfig,omitempty"`
+}
+
 type Command struct {
-	Path string   `bson:"path" json:"path"`
-	Args []string `bson:"args" json:"args"`
+	Image          string           `bson:"image" json:"image"`
+	ParserURL      *string          `bson:"parserUrl,omitempty" json:"parserUrl,omitempty"`
+	Path           string           `bson:"path" json:"path"`
+	Args           []string         `bson:"args" json:"args"`
+	ServiceConfigs *[]ServiceConfig `bson:"serviceConfigs,omitempty" json:"serviceConfigs,omitempty"`
 }
 
 type BenchmarkController struct {
@@ -83,9 +93,12 @@ type IntensityArgument struct {
 }
 
 type LoadTesterCommand struct {
-	Path          string              `bson:"path" json:"path"`
-	Args          []string            `bson:"args" json:"args"`
-	IntensityArgs []IntensityArgument `bson:"intensityArgs" json:"intensityArgs"`
+	Image          string              `bson:"image" json:"image"`
+	ParserURL      *string             `bson:"parserUrl,omitempty" json:"parserUrl,omitempty"`
+	Path           string              `bson:"path" json:"path"`
+	Args           []string            `bson:"args" json:"args"`
+	ServiceConfigs *[]ServiceConfig    `bson:"serviceConfigs,omitempty" json:"serviceConfigs,omitempty"`
+	IntensityArgs  []IntensityArgument `bson:"intensityArgs" json:"intensityArgs"`
 }
 
 type LoadTester struct {

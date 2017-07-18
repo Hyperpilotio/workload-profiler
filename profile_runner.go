@@ -154,11 +154,96 @@ func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchm
 	return nil
 }
 
+func replaceTargetingServiceAddress(controller *models.BenchmarkController, deployerClient *clients.DeployerClient, deploymentId string) error {
+	errMsg := "Unable to replace the targeting service address because"
+	if controller == nil {
+		return fmt.Errorf("%s the pointer of controller is nil", errMsg)
+	}
+	if deployerClient == nil {
+		return fmt.Errorf("%s the pointer of deployerClient is nil", errMsg)
+	}
+	if deploymentId == "" {
+		return fmt.Errorf("%s the DeploymentId is a empty string", errMsg)
+	}
+
+	glog.V(3).Infof("func replaceTargetingServiceAddress: Initialize %+v", controller.Initialize)
+	if controller.Initialize.ServiceConfigs != nil {
+		for _, targetingService := range *controller.Initialize.ServiceConfigs {
+			// NOTE we assume the targeting service is an unique one in this deployment process.
+			// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
+			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name)
+			if err != nil {
+				return fmt.Errorf(
+					"Unable to get service %s address: %s",
+					targetingService.Name,
+					err.Error())
+			}
+			// Initialize
+			if targetingService.PortConfig != nil {
+				controller.Initialize.Args = append(
+					[]string{
+						targetingService.PortConfig.Arg,
+						strconv.FormatInt(serviceAddress.Port, 10),
+					},
+					controller.Initialize.Args...)
+			}
+			if targetingService.HostConfig != nil {
+				controller.Initialize.Args = append(
+					[]string{
+						targetingService.HostConfig.Arg,
+						serviceAddress.Host,
+					},
+					controller.Initialize.Args...)
+			}
+			glog.V(2).Infof("Arguments of Initialize command are %s", controller.Initialize.Args)
+		}
+	}
+
+	glog.V(3).Infof("func replaceTargetingServiceAddress: Command %+v", controller.Command)
+	if controller.Command.ServiceConfigs != nil {
+		for _, targetingService := range *controller.Command.ServiceConfigs {
+			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name)
+			if err != nil {
+				return fmt.Errorf(
+					"Unable to get service %s address: %s",
+					targetingService.Name,
+					err.Error())
+			}
+
+			// LoadTesterCommand
+			if targetingService.PortConfig != nil {
+				controller.Command.Args = append(
+					[]string{
+						targetingService.PortConfig.Arg,
+						strconv.FormatInt(serviceAddress.Port, 10),
+					},
+					controller.Command.Args...)
+			}
+			if targetingService.HostConfig != nil {
+				controller.Command.Args = append(
+					[]string{
+						targetingService.HostConfig.Arg,
+						serviceAddress.Host,
+					},
+					controller.Command.Args...)
+			}
+
+			glog.V(2).Infof("Arguments of load testing command are %s", controller.Command.Args)
+		}
+	}
+
+	return nil
+}
+
 func (run *CalibrationRun) runBenchmarkController(runId string, controller *models.BenchmarkController) error {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
 	if urlErr != nil {
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	}
+
+	if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId); err != nil {
+		return fmt.Errorf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
 	}
 
 	startTime := time.Now()
@@ -563,6 +648,14 @@ func (run *BenchmarkRun) Run() error {
 		return errors.New("Unable to get calibration results for app " + run.ApplicationConfig.Name + ": " + err.Error())
 	}
 	calibration := metric.(*models.CalibrationResults)
+
+	// FIXME should support all the load tester includes slow cooker and locust
+	// For now, only benchmark controller works
+	if controller := run.ApplicationConfig.LoadTester.BenchmarkController; controller != nil {
+		if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId); err != nil {
+			return fmt.Errorf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
+		}
+	}
 
 	for _, service := range run.ApplicationConfig.ServiceNames {
 		runResults := &models.BenchmarkRunResults{
