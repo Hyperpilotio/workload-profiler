@@ -10,18 +10,33 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
+	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/db"
+	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/hyperpilotio/workload-profiler/runners"
 	"github.com/spf13/viper"
 )
 
+type Job interface {
+	GetId() string
+	GetApplicationConfig() *models.ApplicationConfig
+	GetLog() *log.FileLog
+	Run(deploymentId string) error
+}
+
 // Server store the stats / data of every deployment
 type Server struct {
 	Config   *viper.Viper
-	ConfigDB *db.ConfigDB
+	ConfigDB *ConfigDB
 
-	Clusters *Clusters
+	Clusters       *Clusters
+	JobQueue       chan Job
+	UnreserveQueue chan UnreserveResult
+}
+
+func (server *Server) AddJob(job Job) {
+	server.JobQueue <- job
 }
 
 // NewServer return an instance of Server struct.
@@ -84,7 +99,56 @@ func (server *Server) StartServer() error {
 		server.Clusters = clusters
 	}
 
+	if err := server.Clusters.ReloadClusterState(); err != nil {
+		return errors.New("Unable to reload cluster state: " + err.Error())
+	}
+
+	server.RunJobLoop()
+
 	return router.Run(":" + server.Config.GetString("port"))
+}
+
+func (server *Server) RunJobLoop() {
+	userId := server.Config.GetString("userId")
+	go func() {
+		for {
+			select {
+			case job := <-server.JobQueue:
+				log := job.GetLog()
+				defer log.LogFile.Close()
+
+				deploymentId := ""
+				runId := job.GetId()
+				log.Logger.Infof("Waiting until %s job is completed...", runId)
+				for {
+					result := <-server.Clusters.ReserveDeployment(server.Config,
+						job.GetApplicationConfig(), runId, userId, log.Logger)
+					if result.Err != "" {
+						log.Logger.Warningf("Unable to reserve deployment for job: " + result.Err)
+						// Try reserving again after sleep
+						time.Sleep(60 * time.Second)
+					} else {
+						deploymentId = result.DeploymentId
+						log.Logger.Infof("Deploying job %s with deploymentId is %s", runId, deploymentId)
+						break
+					}
+				}
+
+				// TODO: Allow multiple workers to process job
+				log.Logger.Infof("Running %s job", job.GetId())
+				if err := job.Run(deploymentId); err != nil {
+					// TODO: Store the error state in a map and display/return job status
+					log.Logger.Errorf("Unable to run %s job: %s", runId, err)
+					server.Clusters.SetState(runId, FAILED)
+				}
+
+				unreserveResult := <-server.Clusters.UnreserveDeployment(runId, log.Logger)
+				if unreserveResult.Err != "" {
+					log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
+				}
+			}
+		}
+	}()
 }
 
 func (server *Server) runAWSSizing(c *gin.Context) {
@@ -111,7 +175,6 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	appName := c.Param("appName")
 
 	var request struct {
-		DeploymentId      string  `json:"deploymentId" binding:"required"`
 		StartingIntensity int     `json:"startingIntensity" binding:"required"`
 		Step              int     `json:"step" binding:"required"`
 		SloTolerance      float64 `json:"sloTolerance"`
@@ -124,16 +187,6 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		})
 		return
 	}
-
-	if request.DeploymentId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Empty deployment id found",
-		})
-		return
-	}
-
-	glog.V(1).Infof("Target app: %s, deployment Id: %s", appName, request.DeploymentId)
 
 	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
 	if err != nil {
@@ -159,7 +212,6 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	run, err := runners.NewBenchmarkRun(
 		applicationConfig,
 		benchmarks,
-		request.DeploymentId,
 		request.StartingIntensity,
 		request.Step,
 		request.SloTolerance,
@@ -173,27 +225,9 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		return
 	}
 
-	cluster := &cluster{
-		deploymentId: request.DeploymentId,
-		runId:        run.Id,
-		state:        AVAILABLE,
-		created:      time.Now(),
-	}
-	server.Clusters.Deployments = append(server.Clusters.Deployments, cluster)
-
 	log := run.ProfileLog
-	defer log.LogFile.Close()
-
-	log.Logger.Infof("Running %s job for app %s...", run.Id, appName)
-	if err = run.Run(); err != nil {
-		cluster.state = FAILED
-		log.Logger.Errorf("Failed to run profiling benchmarks for app %s: %s", appName, err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": true,
-			"data":  "Unable to run profiling benchmarks: " + err.Error(),
-		})
-		return
-	}
+	log.Logger.Infof("Queueing benchmark job %s for app %s...", run.Id, appName)
+	server.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
@@ -203,26 +237,6 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 
 func (server *Server) runCalibration(c *gin.Context) {
 	appName := c.Param("appName")
-
-	var request struct {
-		DeploymentId string `json:"deploymentId" binding:"required"`
-	}
-
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to parse calibration request: " + err.Error(),
-		})
-		return
-	}
-
-	if request.DeploymentId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Empty request id found",
-		})
-		return
-	}
 
 	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
 	if err != nil {
@@ -242,27 +256,9 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	cluster := &cluster{
-		deploymentId: request.DeploymentId,
-		runId:        run.Id,
-		state:        AVAILABLE,
-		created:      time.Now(),
-	}
-	server.Clusters.Deployments = append(server.Clusters.Deployments, cluster)
-
 	log := run.ProfileLog
-	defer log.LogFile.Close()
-
-	log.Logger.Infof("Running %s job for app %s...", run.Id, appName)
-	if err = run.Run(); err != nil {
-		cluster.state = FAILED
-		log.Logger.Errorf("Failed to run profiling calibrate for app %s: %s", appName, err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": true,
-			"data":  "Unable to run calibration: " + err.Error(),
-		})
-		return
-	}
+	log.Logger.Infof("Running calibration job %s for app %s...", run.Id, appName)
+	server.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,

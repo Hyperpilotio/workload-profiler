@@ -2,6 +2,7 @@ package models
 
 import (
 	benchmarkagent "github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis"
+	deployer "github.com/hyperpilotio/deployer/apis"
 )
 
 // ServiceConfig a struct that describes the address of the corresponding service
@@ -58,6 +59,16 @@ type SLO struct {
 	Type   string  `bson:"type" json:"type"`
 }
 
+type ApplicationTask struct {
+	NodeMapping    interface{} `bson:"nodeMapping" json:"nodeMapping"`
+	TaskDefinition interface{} `bson:"taskDefinition" json:"taskDefinition"`
+}
+
+type TaskDefinitions struct {
+	LoadTests    []deployer.KubernetesTask `bson:"loadTests" json:"loadTests"`
+	Applications []deployer.KubernetesTask `bson:"applications" json:"applications"`
+}
+
 type BenchmarkConfig struct {
 	Name           string                         `bson:"name" json:"name"`
 	DurationConfig *benchmarkagent.DurationConfig `bson:"durationConfig" json:"durationConfig" binding:"required`
@@ -78,11 +89,14 @@ type Benchmark struct {
 }
 
 type ApplicationConfig struct {
-	Name         string     `bson:"name" json:"name"`
-	ServiceNames []string   `bson:"serviceNames" json:"serviceNames"`
-	LoadTester   LoadTester `bson:"loadTester" json:"loadTester"`
-	Type         string     `bson:"type" json:"type"`
-	SLO          SLO        `bson:"slo" json:"slo"`
+	Name               string `bson:"name" json:"name"`
+	DeploymentTemplate string `bson:"deploymentTemplate" json:"deploymentTemplate
+"`
+	TaskDefinitions []ApplicationTask `bson:"taskDefinitions" json:"taskDefinitions"`
+	ServiceNames    []string          `bson:"serviceNames" json:"serviceNames"`
+	LoadTester      LoadTester        `bson:"loadTester" json:"loadTester"`
+	Type            string            `bson:"type" json:"type"`
+	SLO             SLO               `bson:"slo" json:"slo"`
 }
 
 type IntensityArgument struct {
