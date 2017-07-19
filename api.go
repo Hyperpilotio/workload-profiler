@@ -6,54 +6,28 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
-	"github.com/hyperpilotio/go-utils/log"
-	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/db"
-	"github.com/hyperpilotio/workload-profiler/models"
+	"github.com/hyperpilotio/workload-profiler/jobs"
 	"github.com/hyperpilotio/workload-profiler/runners"
 	"github.com/spf13/viper"
 )
-
-type Job interface {
-	GetId() string
-	GetApplicationConfig() *models.ApplicationConfig
-	GetLog() *log.FileLog
-	Run(deploymentId string) error
-	GetState() string
-	SetState(state string)
-	GetSummary() runners.RunSummary
-}
 
 // Server store the stats / data of every deployment
 type Server struct {
 	Config   *viper.Viper
 	ConfigDB *db.ConfigDB
 
-	Clusters       *Clusters
-	JobQueue       chan Job
-	Jobs           map[string]Job
-	UnreserveQueue chan UnreserveResult
-	mutex          sync.Mutex
-}
-
-func (server *Server) AddJob(job Job) {
-	server.Jobs[job.GetId()] = job
-	server.JobQueue <- job
+	JobManager *jobs.JobManager
 }
 
 // NewServer return an instance of Server struct.
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
-		Config:         config,
-		ConfigDB:       db.NewConfigDB(config),
-		JobQueue:       make(chan Job, 100),
-		UnreserveQueue: make(chan UnreserveResult, 100),
-		Jobs:           make(map[string]Job),
+		Config:   config,
+		ConfigDB: db.NewConfigDB(config),
 	}
 }
 
@@ -98,72 +72,14 @@ func (server *Server) StartServer() error {
 		benchmarkGroup.POST("/:appName", server.runBenchmarks)
 	}
 
-	deployerClient, deployerErr := clients.NewDeployerClient(server.Config)
-	if deployerErr != nil {
-		return errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	jobManager, err := jobs.NewJobManager(server.Config)
+	if err != nil {
+		return errors.New("Unable to create job manager: " + err.Error())
 	}
-
-	if clusters, err := NewClusters(deployerClient, server.Config); err != nil {
-		return errors.New("Unable to create clusters object: " + err.Error())
-	} else {
-		server.Clusters = clusters
-	}
-
-	if err := server.Clusters.ReloadClusterState(); err != nil {
-		return errors.New("Unable to reload cluster state: " + err.Error())
-	}
-
-	server.RunJobLoop()
+	server.JobManager = jobManager
+	server.JobManager.Loop(server.Config.GetString("userId"))
 
 	return router.Run(":" + server.Config.GetString("port"))
-}
-
-func (server *Server) RunJobLoop() {
-	userId := server.Config.GetString("userId")
-	go func() {
-		for {
-			select {
-			case job := <-server.JobQueue:
-				job.SetState(runners.RESERVING)
-				log := job.GetLog()
-				defer log.LogFile.Close()
-
-				deploymentId := ""
-				runId := job.GetId()
-				log.Logger.Infof("Waiting until %s job is completed...", runId)
-				for {
-					result := <-server.Clusters.ReserveDeployment(server.Config,
-						job.GetApplicationConfig(), runId, userId, log.Logger)
-					if result.Err != "" {
-						log.Logger.Warningf("Unable to reserve deployment for job: " + result.Err)
-						// Try reserving again after sleep
-						time.Sleep(60 * time.Second)
-					} else {
-						deploymentId = result.DeploymentId
-						log.Logger.Infof("Deploying job %s with deploymentId is %s", runId, deploymentId)
-						break
-					}
-				}
-
-				job.SetState(runners.RUNNING)
-				// TODO: Allow multiple jobs to run
-				log.Logger.Infof("Running %s job", job.GetId())
-				defer log.LogFile.Close()
-				if err := job.Run(deploymentId); err != nil {
-					// TODO: Store the error state in a map and display/return job status
-					log.Logger.Errorf("Unable to run %s job: %s", runId, err)
-					job.SetState(runners.FAILED)
-				} else {
-					job.SetState(runners.FINISHED)
-				}
-
-				unreserveResult := <-server.Clusters.UnreserveDeployment(runId, log.Logger)
-				if unreserveResult.Err != "" {
-					log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
-				}
-			}
-		}
-	}()
 }
 
 func (server *Server) runAWSSizing(c *gin.Context) {
@@ -180,14 +96,16 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 		return
 	}
 
-	run, err := runners.NewAWSSizingRun(applicationConfig, server.Config)
+	run, err := runners.NewAWSSizingRun(server.JobManager, applicationConfig, server.Config)
 	if err != nil {
 
 	}
 
 	log := run.ProfileLog
-	log.Logger.Infof("Queueing aws sizing job %s for app %s...", run.Id, appName)
-	server.AddJob(run)
+	log.Logger.Infof("Running aws sizing job %s for app %s...", run.Id, appName)
+	go func() {
+		run.Run()
+	}()
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
@@ -251,7 +169,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 
 	log := run.ProfileLog
 	log.Logger.Infof("Queueing benchmark job %s for app %s...", run.Id, appName)
-	server.AddJob(run)
+	server.JobManager.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
@@ -282,7 +200,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 
 	log := run.ProfileLog
 	log.Logger.Infof("Running calibration job %s for app %s...", run.Id, appName)
-	server.AddJob(run)
+	server.JobManager.AddJob(run)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,

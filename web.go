@@ -6,19 +6,12 @@ import (
 	"os"
 	"path"
 	"sort"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hyperpilotio/workload-profiler/jobs"
 )
 
-type FileLog struct {
-	DeploymentId string
-	RunId        string
-	Status       string
-	Create       time.Time
-}
-
-type FileLogs []*FileLog
+type FileLogs []jobs.JobSummary
 
 func (d FileLogs) Len() int { return len(d) }
 func (d FileLogs) Less(i, j int) bool {
@@ -51,14 +44,11 @@ func (server *Server) getFileLogList(c *gin.Context) {
 func (server *Server) getFileLogContent(c *gin.Context) {
 	fileName := c.Param("fileName")
 
-	server.mutex.Lock()
-	run, ok := server.Jobs[fileName]
-	server.mutex.Unlock()
-
-	if !ok {
+	run, err := server.JobManager.FindJob(fileName)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": true,
-			"data":  "Unable to find run: " + fileName,
+			"data":  err,
 		})
 		return
 	}
@@ -94,27 +84,11 @@ func (server *Server) getFileLogContent(c *gin.Context) {
 func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
 	fileLogs := FileLogs{}
 
-	server.Clusters.mutex.Lock()
-	defer server.Clusters.mutex.Unlock()
-
 	filterStatus := c.Param("status")
-	for _, cluster := range server.Clusters.Deployments {
-		fileLog := &FileLog{
-			DeploymentId: cluster.deploymentId,
-			RunId:        cluster.runId,
-			Status:       GetStateString(cluster.state),
-			Create:       cluster.created,
-		}
-
-		switch filterStatus {
-		case "Failed":
-			if fileLog.Status == "Failed" {
-				fileLogs = append(fileLogs, fileLog)
-			}
-		case "Running":
-			if fileLog.Status != "Failed" {
-				fileLogs = append(fileLogs, fileLog)
-			}
+	for _, job := range server.JobManager.GetJobs() {
+		fileLog := job.GetSummary()
+		if filterStatus == fileLog.Status {
+			fileLogs = append(fileLogs, fileLog)
 		}
 	}
 

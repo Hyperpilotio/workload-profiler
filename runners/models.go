@@ -6,23 +6,9 @@ import (
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/db"
+	"github.com/hyperpilotio/workload-profiler/jobs"
 	"github.com/hyperpilotio/workload-profiler/models"
 )
-
-const (
-	QUEUED    = "QUEUED"
-	RESERVING = "RESERVING"
-	RUNNING   = "RUNNING"
-	FINISHED  = "FINISHED"
-	FAILED    = "FAILED"
-)
-
-type RunSummary struct {
-	DeploymentId string    `json:"deploymentId"`
-	RunId        string    `json:"runId"`
-	State        string    `json:"state"`
-	Created      time.Time `json:"created"`
-}
 
 type ProfileRun struct {
 	Id                        string
@@ -57,12 +43,12 @@ func (run *ProfileRun) SetState(state string) {
 	run.State = state
 }
 
-func (run *ProfileRun) GetSummary() RunSummary {
-	return RunSummary{
+func (run *ProfileRun) GetSummary() jobs.JobSummary {
+	return jobs.JobSummary{
 		DeploymentId: run.DeploymentId,
 		RunId:        run.Id,
-		State:        run.State,
-		Created:      run.Created,
+		Status:       run.State,
+		Create:       run.Created,
 	}
 }
 
