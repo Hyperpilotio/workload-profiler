@@ -187,6 +187,21 @@ func (clusters *Clusters) newStoreCluster(selectedCluster *cluster) (*storeClust
 	return cluster, nil
 }
 
+func (clusters *Clusters) removeDeployment(runId string) bool {
+	clusters.mutex.Lock()
+	for i, deployment := range clusters.Deployments {
+		if deployment.runId == runId {
+			// Remove cluster from list
+			clusters.Deployments[i] = clusters.Deployments[len(clusters.Deployments)-1]
+			clusters.Deployments[len(clusters.Deployments)-1] = nil
+			clusters.Deployments = clusters.Deployments[:len(clusters.Deployments)-1]
+			return true
+		}
+	}
+	clusters.mutex.Unlock()
+	return false
+}
+
 func (clusters *Clusters) ReserveDeployment(
 	config *viper.Viper,
 	applicationConfig *models.ApplicationConfig,
@@ -221,17 +236,7 @@ func (clusters *Clusters) ReserveDeployment(
 
 		go func() {
 			if deploymentId, err := clusters.createDeployment(applicationConfig, userId, runId, log); err != nil {
-				clusters.mutex.Lock()
-				for i, deployment := range clusters.Deployments {
-					if deployment.runId == runId {
-						// Remove cluster from list
-						clusters.Deployments[i] = clusters.Deployments[len(clusters.Deployments)-1]
-						clusters.Deployments[len(clusters.Deployments)-1] = nil
-						clusters.Deployments = clusters.Deployments[:len(clusters.Deployments)-1]
-						break
-					}
-				}
-				clusters.mutex.Unlock()
+				clusters.removeDeployment(runId)
 				reserveResult <- ReserveResult{
 					Err: err.Error(),
 				}
@@ -321,30 +326,22 @@ func (clusters *Clusters) unreserveCluster(cluster *cluster, log *logging.Logger
 	cluster.state = UNRESERVING
 
 	go func() {
-		err := clusters.resetTemplateDeployment(
-			cluster.deploymentTemplate,
-			cluster.deploymentId,
-			log)
-		cluster.state = AVAILABLE
-
-		if err != nil {
-			cluster.state = FAILED
+		// TODO: Cache deployments and only reset deployment
+		if err := clusters.DeployerClient.DeleteDeployment(cluster.deploymentId, log); err != nil {
 			unreserveResult <- UnreserveResult{
 				Err: err.Error(),
 			}
 		} else {
-			if err := clusters.storeCluster(cluster); err != nil {
-				log.Warningf(
-					"Unable to store %s cluster during unreserve deployment: %s",
-					cluster.runId,
-					err.Error())
-			}
-
 			unreserveResult <- UnreserveResult{
 				RunId: cluster.runId,
 			}
 		}
 
+		clusters.removeDeployment(cluster.runId)
+
+		if err := clusters.Store.Delete(cluster.runId); err != nil {
+			glog.Errorf("Unable to delete profiler cluster: %s", err.Error())
+		}
 	}()
 
 	return unreserveResult
@@ -436,9 +433,6 @@ func (clusters *Clusters) resetTemplateDeployment(
 	deploymentTemplate string,
 	deploymentId string,
 	log *logging.Logger) error {
-	if err := clusters.DeployerClient.ResetTemplateDeployment(deploymentTemplate, deploymentId, log); err != nil {
-		return errors.New("Unable to reset template deployment: " + err.Error())
-	}
 
 	return nil
 }
