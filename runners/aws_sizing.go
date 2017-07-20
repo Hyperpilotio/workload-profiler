@@ -21,6 +21,7 @@ type SizeRunResults struct {
 type AWSSizingRun struct {
 	ProfileRun
 
+	Config     *viper.Viper
 	JobManager *jobs.JobManager
 }
 
@@ -51,6 +52,7 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 			Created:           time.Now(),
 		},
 		JobManager: jobManager,
+		Config:     config,
 	}, nil
 }
 
@@ -60,6 +62,23 @@ func (run *AWSSizingRun) Run() error {
 	// Then it need to be able to wait until the job finishes, and report the results to analyzer.
 	// The analyzer should return a set of recommendation AWS instance types, and then each one should be
 	// pushed to the job manager to run.
+
+	// TODO: Configure initial aws instance type(s) to start the process
+	instanceTypes := []string{"c4.xlarge"}
+	for _, instanceType := range instanceTypes {
+		newId := run.GetId() + instanceType
+		singleRun, err := NewAWSSizingSingleRun(
+			newId,
+			instanceType,
+			run.ApplicationConfig,
+			run.Config,
+			run.ProfileLog)
+		if err != nil {
+			// TODO: clean up
+			return errors.New("Unable to create AWS single run: " + err.Error())
+		}
+		run.JobManager.AddJob(singleRun)
+	}
 
 	return nil
 }
