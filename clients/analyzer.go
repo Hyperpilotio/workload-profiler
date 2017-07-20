@@ -29,14 +29,14 @@ type GetNextInstanceTypesRequest struct {
 // vm instance types or not. If the return array is empty, then the analyzer has found the
 // optimal choice.
 func (client *AnalyzerClient) GetNextInstanceTypes(appName string, results []interface{}) ([]string, error) {
-	results := []string{}
+	instanceTypes := []string{}
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "get-next-instance-type", appName)
 
 	request := GetNextInstanceTypesRequest{}
 	response, err := resty.R().SetBody(request).Post(requestUrl)
 	if err != nil {
-		return results, errors.New("Unable to send analyzer request: " + err.Error())
+		return instanceTypes, errors.New("Unable to send analyzer request: " + err.Error())
 	}
 
 	if response.StatusCode() != 202 {
@@ -45,5 +45,5 @@ func (client *AnalyzerClient) GetNextInstanceTypes(appName string, results []int
 
 	// TODO: Parse the response
 
-	return results, nil
+	return instanceTypes, nil
 }

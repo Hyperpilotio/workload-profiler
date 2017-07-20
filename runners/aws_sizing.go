@@ -70,7 +70,7 @@ func (run *AWSSizingRun) Run() error {
 	instanceTypes := []string{"c4.xlarge"}
 	for len(instanceTypes) > 0 {
 		resultChans := []chan SizeRunResults{}
-		results := []SizeRunResults{}
+		results := make([]interface{}, 0)
 		for _, instanceType := range instanceTypes {
 			newId := run.GetId() + instanceType
 			singleRun, err := NewAWSSizingSingleRun(
@@ -87,11 +87,11 @@ func (run *AWSSizingRun) Run() error {
 			resultChans = append(resultChans, singleRun.ResultsChan)
 		}
 
-		for _, resultChan := range results {
+		for _, resultChan := range resultChans {
 			results = append(results, <-resultChan)
 		}
 
-		instanceTypes, err = run.AnalyzerClient.GetNextInstanceTypes(run.ApplicationConfig.Name, results)
+		instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.ApplicationConfig.Name, results)
 		if err != nil {
 			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
 		}

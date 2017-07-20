@@ -5,9 +5,21 @@ import:
 - package: github.com/go-resty/resty
   version: ~0.10.0
 - package: github.com/golang/glog
+- package: github.com/hyperpilotio/blobstore
+- package: github.com/hyperpilotio/container-benchmarks
+  subpackages:
+  - benchmark-agent/apis
+- package: k8s.io/client-go  
+- package: github.com/hyperpilotio/deployer
+  subpackages:
+  - apis
+- package: github.com/hyperpilotio/go-utils
+  subpackages:
+  - funcs
+  - log
 - package: github.com/nu7hatch/gouuid
+- package: github.com/op/go-logging
 - package: github.com/spf13/viper
 - package: gopkg.in/mgo.v2
-- package: github.com/hyperpilotio/go-utils
-- package: github.com/hyperpilotio/container-benchmarks/benchmark-agent/apis
-  repo:    git@github.com:Hyperpilotio/container-benchmarks.git 
+  subpackages:
+  - bson
