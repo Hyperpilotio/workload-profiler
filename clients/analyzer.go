@@ -28,7 +28,7 @@ type GetNextInstanceTypesRequest struct {
 // GetNextInstanceTypes asks the analyzer if we should run more benchmark runs on different
 // vm instance types or not. If the return array is empty, then the analyzer has found the
 // optimal choice.
-func (client *AnalyzerClient) GetNextInstanceTypes(appName string) ([]string, error) {
+func (client *AnalyzerClient) GetNextInstanceTypes(appName string, results []interface{}) ([]string, error) {
 	results := []string{}
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "get-next-instance-type", appName)

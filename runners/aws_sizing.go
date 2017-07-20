@@ -21,8 +21,9 @@ type SizeRunResults struct {
 type AWSSizingRun struct {
 	ProfileRun
 
-	Config     *viper.Viper
-	JobManager *jobs.JobManager
+	Config         *viper.Viper
+	JobManager     *jobs.JobManager
+	AnalyzerClient *clients.AnalyzerClient
 }
 
 // AWSSizingSingleRun represents a single benchmark run for a particular
@@ -31,6 +32,8 @@ type AWSSizingSingleRun struct {
 	ProfileRun
 
 	InstanceType string
+
+	ResultsChan chan SizeRunResults
 }
 
 func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.ApplicationConfig, config *viper.Viper) (*AWSSizingRun, error) {
@@ -44,6 +47,11 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
 	}
 
+	analyzerClient, err := clients.NewAnalyzerClient(config)
+	if err != nil {
+		return nil, errors.New("Unable to create analyzer client: " + err.Error())
+	}
+
 	return &AWSSizingRun{
 		ProfileRun: ProfileRun{
 			Id:                id,
@@ -51,34 +59,46 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 			ProfileLog:        log,
 			Created:           time.Now(),
 		},
-		JobManager: jobManager,
-		Config:     config,
+		AnalyzerClient: analyzerClient,
+		JobManager:     jobManager,
+		Config:         config,
 	}, nil
 }
 
 func (run *AWSSizingRun) Run() error {
-	// Beginning first create a initial AWSSizingSingleRun based on a default aws instance type (c4.xlarge),
-	// and submit to the job manager to run.
-	// Then it need to be able to wait until the job finishes, and report the results to analyzer.
-	// The analyzer should return a set of recommendation AWS instance types, and then each one should be
-	// pushed to the job manager to run.
-
 	// TODO: Configure initial aws instance type(s) to start the process
 	instanceTypes := []string{"c4.xlarge"}
-	for _, instanceType := range instanceTypes {
-		newId := run.GetId() + instanceType
-		singleRun, err := NewAWSSizingSingleRun(
-			newId,
-			instanceType,
-			run.ApplicationConfig,
-			run.Config,
-			run.ProfileLog)
-		if err != nil {
-			// TODO: clean up
-			return errors.New("Unable to create AWS single run: " + err.Error())
+	for len(instanceTypes) > 0 {
+		resultChans := []chan SizeRunResults{}
+		results := []SizeRunResults{}
+		for _, instanceType := range instanceTypes {
+			newId := run.GetId() + instanceType
+			singleRun, err := NewAWSSizingSingleRun(
+				newId,
+				instanceType,
+				run.ApplicationConfig,
+				run.Config,
+				run.ProfileLog)
+			if err != nil {
+				// TODO: clean up
+				return errors.New("Unable to create AWS single run: " + err.Error())
+			}
+			run.JobManager.AddJob(singleRun)
+			resultChans = append(resultChans, singleRun.ResultsChan)
 		}
-		run.JobManager.AddJob(singleRun)
+
+		for _, resultChan := range results {
+			results = append(results, <-resultChan)
+		}
+
+		instanceTypes, err = run.AnalyzerClient.GetNextInstanceTypes(run.ApplicationConfig.Name, results)
+		if err != nil {
+			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
+		}
+		run.ProfileLog.Logger.Infof("Received next instance types to run sizing: %s", instanceTypes)
 	}
+
+	run.ProfileLog.Logger.Infof("AWS Sizing run finished")
 
 	return nil
 }
@@ -103,6 +123,7 @@ func NewAWSSizingSingleRun(
 			Created:           time.Now(),
 		},
 		InstanceType: instanceType,
+		ResultsChan:  make(chan SizeRunResults, 1),
 	}, nil
 }
 
@@ -110,7 +131,7 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 	run.DeploymentId = deploymentId
 
 	// Run load test based on calibration intensity
-	// And return data results to AWSSizingRun, for it to report to the analyzer.
+	// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
 
 	return nil
 }
