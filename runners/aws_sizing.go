@@ -1,9 +1,13 @@
 package runners
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/jobs"
@@ -12,6 +16,11 @@ import (
 )
 
 type SizeRunResults struct {
+	InstanceType string
+	RunId        string
+	Duration     string
+	AppName      string
+	SloResult    models.SLO
 }
 
 // AWSSizingRun is the overall app request for find best instance type in AWS.
@@ -129,9 +138,166 @@ func NewAWSSizingSingleRun(
 
 func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 	run.DeploymentId = deploymentId
+	appName := run.ApplicationConfig.Name
+	glog.V(1).Infof("Reading calibration results for app %s", appName)
+	metric, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name, &models.CalibrationResults{})
+	if err != nil {
+		return errors.New("Unable to get calibration results for app " + run.ApplicationConfig.Name + ": " + err.Error())
+	}
+	calibration := metric.(*models.CalibrationResults)
 
-	// Run load test based on calibration intensity
-	// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
+	if controller := run.ApplicationConfig.LoadTester.BenchmarkController; controller != nil {
+		if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId); err != nil {
+			return fmt.Errorf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
+		}
+	}
+
+	for _, service := range run.ApplicationConfig.ServiceNames {
+		startTime := time.Now()
+		results, err := run.runApp(service, calibration.FinalResult.LoadIntensity)
+		if err != nil {
+			return errors.New("Unable to run app " + appName + ": " + err.Error())
+		}
+
+		if b, err := json.MarshalIndent(results, "", "  "); err != nil {
+			run.ProfileLog.Logger.Errorf("Unable to indent run results: " + err.Error())
+		} else {
+			run.ProfileLog.Logger.Infof("Store benchmark results: %s", string(b))
+		}
+
+		// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
+		run.ResultsChan <- SizeRunResults{
+			InstanceType: run.InstanceType,
+			RunId:        run.Id,
+			AppName:      appName,
+			SloResult: models.SLO{
+				Metric: run.ApplicationConfig.SLO.Metric,
+				Value:  float32(results[0].QosValue),
+				Type:   run.ApplicationConfig.SLO.Type,
+			},
+			Duration: time.Since(startTime).String(),
+		}
+	}
 
 	return nil
+}
+
+func (run *AWSSizingSingleRun) runApp(service string, appIntensity float64) ([]*models.BenchmarkResult, error) {
+	glog.V(1).Infof("Running app load test at intensity %.2f with service",
+		appIntensity, service)
+	results := []*models.BenchmarkResult{}
+
+	stageId, err := generateId(service)
+	if err != nil {
+		return nil, errors.New("Unable to generate stage id " + service + ": " + err.Error())
+	}
+
+	runResults, resultErr := run.runApplicationLoadTest(stageId, appIntensity)
+	if resultErr != nil {
+		glog.Warningf("Unable to run app load test: %s", resultErr.Error())
+	} else {
+		for _, result := range runResults {
+			results = append(results, result)
+		}
+	}
+
+	return results, nil
+}
+
+func (run *AWSSizingSingleRun) runApplicationLoadTest(
+	stageId string,
+	appIntensity float64) ([]*models.BenchmarkResult, error) {
+	loadTester := run.ApplicationConfig.LoadTester
+
+	glog.V(1).Infof("Starting app load test at intensity %.2f", appIntensity)
+
+	if loadTester.BenchmarkController != nil {
+		return run.runBenchmarkController(
+			stageId,
+			appIntensity,
+			loadTester.BenchmarkController)
+	} else if loadTester.LocustController != nil {
+		return run.runLocustController(
+			stageId,
+			appIntensity,
+			loadTester.LocustController)
+	} else if loadTester.SlowCookerController != nil {
+		return run.runSlowCookerController(
+			stageId,
+			appIntensity,
+			loadTester.SlowCookerController)
+	}
+
+	return nil, errors.New("No controller found in app load test request")
+}
+
+func (run *AWSSizingSingleRun) runBenchmarkController(
+	stageId string,
+	appIntensity float64,
+	controller *models.BenchmarkController) ([]*models.BenchmarkResult, error) {
+	loadTesterName := run.ApplicationConfig.LoadTester.Name
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
+	if urlErr != nil {
+		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	}
+
+	response, err := run.BenchmarkControllerClient.RunBenchmark(
+		loadTesterName, url, stageId, appIntensity, controller, run.ProfileLog.Logger)
+	if err != nil {
+		return nil, errors.New("Unable to run benchmark: " + err.Error())
+	}
+
+	results := []*models.BenchmarkResult{}
+	for _, runResult := range response.Results {
+		qosResults := runResult.Results
+		qosMetric := fmt.Sprintf("%v", qosResults[run.ApplicationConfig.SLO.Metric])
+		qosValue, parseErr := strconv.ParseFloat(qosMetric, 64)
+		if parseErr != nil {
+			return nil, fmt.Errorf("Unable to parse QoS value %s to float: %s", qosMetric, parseErr.Error())
+		}
+
+		result := &models.BenchmarkResult{
+			QosValue: qosValue,
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+func (run *AWSSizingSingleRun) runLocustController(runId string, appIntensity float64, controller *models.LocustController) ([]*models.BenchmarkResult, error) {
+	return nil, errors.New("Unimplemented")
+}
+
+func (run *AWSSizingSingleRun) runSlowCookerController(
+	stageId string,
+	appIntensity float64,
+	controller *models.SlowCookerController) ([]*models.BenchmarkResult, error) {
+	loadTesterName := run.ApplicationConfig.LoadTester.Name
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
+	if urlErr != nil {
+		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	}
+
+	response, err := run.SlowCookerClient.RunBenchmark(
+		url, stageId, appIntensity, &run.ApplicationConfig.SLO, controller, run.ProfileLog.Logger)
+	if err != nil {
+		return nil, errors.New("Unable to run benchmark with slow cooker: " + err.Error())
+	}
+
+	results := []*models.BenchmarkResult{}
+	for _, runResult := range response.Results {
+		qosValue, err := getSlowcookerBenchmarkQos(&runResult, run.ApplicationConfig.SLO.Metric)
+		if err != nil {
+			return nil, errors.New("Unable to get benchmark qos from slow cooker result: " + err.Error())
+		}
+
+		result := &models.BenchmarkResult{
+			QosValue: float64(qosValue),
+			Failures: runResult.Failures,
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
 }
