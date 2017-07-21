@@ -1,12 +1,16 @@
 package clients
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"path"
+	"strconv"
+	"time"
 
 	"github.com/go-resty/resty"
+	"github.com/hyperpilotio/go-utils/funcs"
 	"github.com/spf13/viper"
 )
 
@@ -22,18 +26,38 @@ func NewAnalyzerClient(config *viper.Viper) (*AnalyzerClient, error) {
 	}
 }
 
+type InstanceResult struct {
+	InstanceType string  `json:"instanceType"`
+	QosValue     float32 `json:"qosValue"`
+}
+
 type GetNextInstanceTypesRequest struct {
+	AppName string           `json:"appName"`
+	Data    []InstanceResult `json:"data"`
+}
+
+type GetNextInstanceTypesResponse struct {
+	Status        string   `json:"status"`
+	InstanceTypes []string `json:"instanceTypes"`
 }
 
 // GetNextInstanceTypes asks the analyzer if we should run more benchmark runs on different
 // vm instance types or not. If the return array is empty, then the analyzer has found the
 // optimal choice.
-func (client *AnalyzerClient) GetNextInstanceTypes(appName string, results []interface{}) ([]string, error) {
+func (client *AnalyzerClient) GetNextInstanceTypes(appName string, results map[string]float32) ([]string, error) {
 	instanceTypes := []string{}
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "get-next-instance-type", appName)
 
-	request := GetNextInstanceTypesRequest{}
+	instanceResults := []InstanceResult{}
+	for instanceType, result := range results {
+		instanceResults = append(instanceResults, InstanceResult{InstanceType: instanceType, QosValue: result})
+	}
+
+	request := GetNextInstanceTypesRequest{
+		AppName: appName,
+		Data:    instanceResults,
+	}
 	response, err := resty.R().SetBody(request).Post(requestUrl)
 	if err != nil {
 		return instanceTypes, errors.New("Unable to send analyzer request: " + err.Error())
@@ -43,7 +67,27 @@ func (client *AnalyzerClient) GetNextInstanceTypes(appName string, results []int
 		return nil, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
 	}
 
-	// TODO: Parse the response
+	var nextInstanceResponse GetNextInstanceTypesResponse
+	funcs.LoopUntil(time.Minute*10, time.Second*10, func() (bool, error) {
+		response, err := resty.R().Get(requestUrl)
+		if err != nil {
+			return false, nil
+		}
 
-	return instanceTypes, nil
+		if response.StatusCode() != 200 {
+			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+		}
+
+		if err := json.Unmarshal(response.Body(), &nextInstanceResponse); err != nil {
+			return false, errors.New("Unable to parse analyzer response: " + err.Error())
+		}
+
+		if nextInstanceResponse.Status != "running" {
+			return false, nil
+		}
+
+		return true, nil
+	})
+
+	return nextInstanceResponse.InstanceTypes, nil
 }

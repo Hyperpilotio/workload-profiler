@@ -20,7 +20,7 @@ type SizeRunResults struct {
 	RunId        string
 	Duration     string
 	AppName      string
-	SloResult    models.SLO
+	QosValue     models.SLO
 }
 
 // AWSSizingRun is the overall app request for find best instance type in AWS.
@@ -78,8 +78,8 @@ func (run *AWSSizingRun) Run() error {
 	// TODO: Configure initial aws instance type(s) to start the process
 	instanceTypes := []string{"c4.xlarge"}
 	for len(instanceTypes) > 0 {
-		resultChans := []chan SizeRunResults{}
-		results := make([]interface{}, 0)
+		resultChans := make(map[string]chan SizeRunResults)
+		results := make(map[string]float32)
 		for _, instanceType := range instanceTypes {
 			newId := run.GetId() + instanceType
 			singleRun, err := NewAWSSizingSingleRun(
@@ -93,11 +93,11 @@ func (run *AWSSizingRun) Run() error {
 				return errors.New("Unable to create AWS single run: " + err.Error())
 			}
 			run.JobManager.AddJob(singleRun)
-			resultChans = append(resultChans, singleRun.ResultsChan)
+			resultChans[instanceType] = singleRun.ResultsChan
 		}
 
-		for _, resultChan := range resultChans {
-			results = append(results, <-resultChan)
+		for instanceType, resultChan := range resultChans {
+			results[instanceType] = (<-resultChan).QosValue.Value
 		}
 
 		instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.ApplicationConfig.Name, results)
@@ -170,7 +170,7 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 			InstanceType: run.InstanceType,
 			RunId:        run.Id,
 			AppName:      appName,
-			SloResult: models.SLO{
+			QosValue: models.SLO{
 				Metric: run.ApplicationConfig.SLO.Metric,
 				Value:  float32(results[0].QosValue),
 				Type:   run.ApplicationConfig.SLO.Type,
