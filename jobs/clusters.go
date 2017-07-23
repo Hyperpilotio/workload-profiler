@@ -14,7 +14,6 @@ import (
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
-
 	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
@@ -205,6 +204,7 @@ func (clusters *Clusters) removeDeployment(runId string) bool {
 func (clusters *Clusters) ReserveDeployment(
 	config *viper.Viper,
 	applicationConfig *models.ApplicationConfig,
+	jobDeploymentConfig JobDeploymentConfig,
 	runId string,
 	userId string,
 	log *logging.Logger) <-chan ReserveResult {
@@ -235,7 +235,7 @@ func (clusters *Clusters) ReserveDeployment(
 		clusters.Deployments = append(clusters.Deployments, selectedCluster)
 
 		go func() {
-			if deploymentId, err := clusters.createDeployment(applicationConfig, userId, runId, log); err != nil {
+			if deploymentId, err := clusters.createDeployment(applicationConfig, jobDeploymentConfig, userId, runId, log); err != nil {
 				clusters.removeDeployment(runId)
 				reserveResult <- ReserveResult{
 					Err: err.Error(),
@@ -378,12 +378,13 @@ func (clusters *Clusters) storeCluster(cluster *cluster) error {
 
 func (clusters *Clusters) createDeployment(
 	applicationConfig *models.ApplicationConfig,
+	jobDeploymentConfig JobDeploymentConfig,
 	userId string,
 	runId string,
 	log *logging.Logger) (*string, error) {
 	// TODO: We assume region is us-east-1 and we assume Kubernetes only.
 	clusterDefinition := &deployer.ClusterDefinition{
-		Nodes: []deployer.ClusterNode{},
+		Nodes: jobDeploymentConfig.Nodes,
 	}
 
 	deployment := &deployer.Deployment{

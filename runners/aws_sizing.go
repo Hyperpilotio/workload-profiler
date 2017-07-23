@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/jobs"
@@ -134,6 +135,18 @@ func NewAWSSizingSingleRun(
 		InstanceType: instanceType,
 		ResultsChan:  make(chan SizeRunResults, 1),
 	}, nil
+}
+
+func (run *AWSSizingSingleRun) GetJobDeploymentConfig() jobs.JobDeploymentConfig {
+	nodes := []deployer.ClusterNode{
+		deployer.ClusterNode{
+			Id:           2,
+			InstanceType: run.InstanceType,
+		},
+	}
+	return jobs.JobDeploymentConfig{
+		Nodes: nodes,
+	}
 }
 
 func (run *AWSSizingSingleRun) Run(deploymentId string) error {

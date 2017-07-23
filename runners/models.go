@@ -52,6 +52,10 @@ func (run *ProfileRun) GetSummary() jobs.JobSummary {
 	}
 }
 
+func (run *ProfileRun) GetJobDeploymentConfig() jobs.JobDeploymentConfig {
+	return jobs.JobDeploymentConfig{}
+}
+
 type ProfileResults struct {
 	Id           string
 	StageResults []StageResult

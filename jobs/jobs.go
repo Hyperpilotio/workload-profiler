@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
@@ -29,11 +30,16 @@ type JobSummary struct {
 type Job interface {
 	GetId() string
 	GetApplicationConfig() *models.ApplicationConfig
+	GetJobDeploymentConfig() JobDeploymentConfig
 	GetLog() *log.FileLog
 	Run(deploymentId string) error
 	GetState() string
 	SetState(state string)
 	GetSummary() JobSummary
+}
+
+type JobDeploymentConfig struct {
+	Nodes []deployer.ClusterNode
 }
 
 type JobManager struct {
@@ -90,6 +96,7 @@ func (manager *JobManager) Loop(userId string) {
 					result := <-manager.Clusters.ReserveDeployment(
 						manager.Config,
 						job.GetApplicationConfig(),
+						job.GetJobDeploymentConfig(),
 						runId,
 						userId,
 						log.Logger)
