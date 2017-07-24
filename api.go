@@ -72,6 +72,11 @@ func (server *Server) StartServer() error {
 		benchmarkGroup.POST("/:appName", server.runBenchmarks)
 	}
 
+	sizingGroup := router.Group("/sizing")
+	{
+		sizingGroup.POST("/aws/:appName", server.runAWSSizing)
+	}
+
 	jobManager, err := jobs.NewJobManager(server.Config)
 	if err != nil {
 		return errors.New("Unable to create job manager: " + err.Error())
