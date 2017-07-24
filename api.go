@@ -81,8 +81,8 @@ func (server *Server) StartServer() error {
 	if err != nil {
 		return errors.New("Unable to create job manager: " + err.Error())
 	}
+
 	server.JobManager = jobManager
-	server.JobManager.Loop(server.Config.GetString("userId"))
 
 	return router.Run(":" + server.Config.GetString("port"))
 }
