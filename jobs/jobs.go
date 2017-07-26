@@ -50,7 +50,6 @@ type Worker struct {
 }
 
 func (worker *Worker) Run() {
-	userId := worker.Config.GetString("userId")
 	go func() {
 		for job := range worker.Jobs {
 			job.SetState(JOB_RESERVING)
@@ -66,7 +65,6 @@ func (worker *Worker) Run() {
 					job.GetApplicationConfig(),
 					job.GetJobDeploymentConfig(),
 					runId,
-					userId,
 					log.Logger)
 				if result.Err != "" {
 					log.Logger.Warningf("Unable to reserve deployment for job: " + result.Err)

@@ -206,7 +206,6 @@ func (clusters *Clusters) ReserveDeployment(
 	applicationConfig *models.ApplicationConfig,
 	jobDeploymentConfig JobDeploymentConfig,
 	runId string,
-	userId string,
 	log *logging.Logger) <-chan ReserveResult {
 	clusters.mutex.Lock()
 	defer clusters.mutex.Unlock()
@@ -215,7 +214,7 @@ func (clusters *Clusters) ReserveDeployment(
 	// If not, launch a new one up to the configured limit.
 	var selectedCluster *cluster
 
-	reserveResult := make(chan ReserveResult, 2)
+	reserveResult := make(chan ReserveResult)
 
 	if selectedCluster == nil {
 		if len(clusters.Deployments) == clusters.MaxClusters {
@@ -235,7 +234,8 @@ func (clusters *Clusters) ReserveDeployment(
 		clusters.Deployments = append(clusters.Deployments, selectedCluster)
 
 		go func() {
-			if deploymentId, err := clusters.createDeployment(applicationConfig, jobDeploymentConfig, userId, runId, log); err != nil {
+			if deploymentId, err := clusters.createDeployment(applicationConfig,
+				jobDeploymentConfig, runId, log); err != nil {
 				clusters.removeDeployment(runId)
 				reserveResult <- ReserveResult{
 					Err: err.Error(),
@@ -277,7 +277,7 @@ func (clusters *Clusters) ReserveDeployment(
 			}
 
 			if err := clusters.deployExtensions(applicationConfig,
-				selectedCluster.deploymentId, userId, runId, log); err != nil {
+				selectedCluster.deploymentId, runId, log); err != nil {
 				selectedCluster.state = FAILED
 				selectedCluster.failure = err.Error()
 				reserveResult <- ReserveResult{
@@ -379,7 +379,6 @@ func (clusters *Clusters) storeCluster(cluster *cluster) error {
 func (clusters *Clusters) createDeployment(
 	applicationConfig *models.ApplicationConfig,
 	jobDeploymentConfig JobDeploymentConfig,
-	userId string,
 	runId string,
 	log *logging.Logger) (*string, error) {
 	// TODO: We assume region is us-east-1 and we assume Kubernetes only.
@@ -388,7 +387,7 @@ func (clusters *Clusters) createDeployment(
 	}
 
 	deployment := &deployer.Deployment{
-		UserId:            userId,
+		UserId:            " ",
 		Region:            "us-east-1",
 		Name:              "workload-profiler-" + applicationConfig.Name,
 		NodeMapping:       []deployer.NodeMapping{},
@@ -441,14 +440,13 @@ func (clusters *Clusters) resetTemplateDeployment(
 func (clusters *Clusters) deployExtensions(
 	applicationConfig *models.ApplicationConfig,
 	deploymentId string,
-	userId string,
 	runId string,
 	log *logging.Logger) error {
 	clusterDefinition := &deployer.ClusterDefinition{
 		Nodes: []deployer.ClusterNode{},
 	}
 	deployment := &deployer.Deployment{
-		UserId:            userId,
+		UserId:            " ",
 		Region:            "us-east-1",
 		Name:              "workload-profiler-" + applicationConfig.Name,
 		NodeMapping:       []deployer.NodeMapping{},
