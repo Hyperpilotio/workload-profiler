@@ -10,6 +10,7 @@ import (
 	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/db"
 	"github.com/hyperpilotio/workload-profiler/jobs"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/spf13/viper"
@@ -66,6 +67,7 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 		ProfileRun: ProfileRun{
 			Id:                id,
 			ApplicationConfig: applicationConfig,
+			MetricsDB:         db.NewMetricsDB(config),
 			ProfileLog:        log,
 			Created:           time.Now(),
 		},
@@ -77,7 +79,7 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 
 func (run *AWSSizingRun) Run() error {
 	// TODO: Configure initial aws instance type(s) to start the process
-	instanceTypes := []string{"c4.xlarge"}
+	instanceTypes := []string{"t2.large"}
 	for len(instanceTypes) > 0 {
 		resultChans := make(map[string]chan SizeRunResults)
 		results := make(map[string]float32)
@@ -136,6 +138,7 @@ func NewAWSSizingSingleRun(
 			Id:                id,
 			ApplicationConfig: applicationConfig,
 			DeployerClient:    deployerClient,
+			MetricsDB:         db.NewMetricsDB(config),
 			ProfileLog:        log,
 			Created:           time.Now(),
 		},
@@ -214,7 +217,7 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 }
 
 func (run *AWSSizingSingleRun) runApp(service string, appIntensity float64) ([]*models.BenchmarkResult, error) {
-	run.ProfileLog.Logger.Infof("Running app load test at intensity %.2f with service", appIntensity, service)
+	run.ProfileLog.Logger.Infof("Running app load test at intensity %.2f with service %s", appIntensity, service)
 	stageId, err := generateId(service)
 	if err != nil {
 		return nil, errors.New("Unable to generate stage id " + service + ": " + err.Error())
