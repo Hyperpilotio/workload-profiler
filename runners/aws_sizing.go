@@ -79,7 +79,7 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 
 func (run *AWSSizingRun) Run() error {
 	// TODO: Configure initial aws instance type(s) to start the process
-	instanceTypes := []string{"t2.large"}
+	instanceTypes := []string{"c4.xlarge"}
 	for len(instanceTypes) > 0 {
 		resultChans := make(map[string]chan SizeRunResults)
 		results := make(map[string]float32)
