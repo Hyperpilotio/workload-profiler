@@ -94,16 +94,24 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 
 	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
 	if err != nil {
+		message := fmt.Sprintf("Unable to get application config for %s: %s", appName, err.Error())
+		glog.Infof(message)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  fmt.Sprintf("Unable to get application config for %s: %s", appName, err.Error()),
+			"data":  message,
 		})
 		return
 	}
 
 	run, err := runners.NewAWSSizingRun(server.JobManager, applicationConfig, server.Config)
 	if err != nil {
-
+		message := fmt.Sprintf("Unable to create aws sizing run: " + err.Error())
+		glog.Infof(message)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  message,
+		})
+		return
 	}
 
 	log := run.ProfileLog
