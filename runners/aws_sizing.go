@@ -112,7 +112,8 @@ func (run *AWSSizingRun) Run() error {
 			}
 		}
 
-		instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.ApplicationConfig.Name, results)
+		instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.ApplicationConfig.Name,
+			results, run.ProfileLog.Logger)
 		if err != nil {
 			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
 		}
@@ -158,6 +159,15 @@ func (run *AWSSizingSingleRun) GetJobDeploymentConfig() jobs.JobDeploymentConfig
 	}
 	return jobs.JobDeploymentConfig{
 		Nodes: nodes,
+	}
+}
+
+func (run *AWSSizingSingleRun) GetSummary() jobs.JobSummary {
+	return jobs.JobSummary{
+		DeploymentId: run.DeploymentId,
+		RunId:        run.Id,
+		Status:       run.State,
+		Create:       run.Created,
 	}
 }
 

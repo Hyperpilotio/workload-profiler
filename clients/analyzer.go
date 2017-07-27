@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-resty/resty"
 	"github.com/hyperpilotio/go-utils/funcs"
+	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
 
@@ -44,7 +45,10 @@ type GetNextInstanceTypesResponse struct {
 // GetNextInstanceTypes asks the analyzer if we should run more benchmark runs on different
 // vm instance types or not. If the return array is empty, then the analyzer has found the
 // optimal choice.
-func (client *AnalyzerClient) GetNextInstanceTypes(appName string, results map[string]float32) ([]string, error) {
+func (client *AnalyzerClient) GetNextInstanceTypes(
+	appName string,
+	results map[string]float32,
+	logger *logging.Logger) ([]string, error) {
 	instanceTypes := []string{}
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "get-next-instance-type", appName)
@@ -58,10 +62,13 @@ func (client *AnalyzerClient) GetNextInstanceTypes(appName string, results map[s
 		AppName: appName,
 		Data:    instanceResults,
 	}
+
+	logger.Infof("Sending get next instance types request to analyzer %+v: ", request)
 	response, err := resty.R().SetBody(request).Post(requestUrl)
 	if err != nil {
 		return instanceTypes, errors.New("Unable to send analyzer request: " + err.Error())
 	}
+	logger.Infof("Received analyzer response: %+v", response)
 
 	if response.StatusCode() != 202 {
 		return nil, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
