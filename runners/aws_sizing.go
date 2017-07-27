@@ -106,7 +106,9 @@ func (run *AWSSizingRun) Run() error {
 					"Failed to aws single run with instance type %s: %s", instanceType, result.Error)
 				// TODO: Retry?
 			} else {
-				results[instanceType] = (<-resultChan).QosValue.Value
+				qosValue := (<-resultChan).QosValue.Value
+				run.ProfileLog.Logger.Infof("Received sizing run value %d with instance type %s", qosValue, instanceType)
+				results[instanceType] = qosValue
 			}
 		}
 
