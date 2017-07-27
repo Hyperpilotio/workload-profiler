@@ -389,7 +389,6 @@ func (clusters *Clusters) createDeployment(
 	}
 
 	deployment := &deployer.Deployment{
-		UserId:            " ",
 		Region:            "us-east-1",
 		Name:              "workload-profiler-" + applicationConfig.Name,
 		NodeMapping:       []deployer.NodeMapping{},
@@ -448,7 +447,6 @@ func (clusters *Clusters) deployExtensions(
 		Nodes: []deployer.ClusterNode{},
 	}
 	deployment := &deployer.Deployment{
-		UserId:            " ",
 		Region:            "us-east-1",
 		Name:              "workload-profiler-" + applicationConfig.Name,
 		NodeMapping:       []deployer.NodeMapping{},
