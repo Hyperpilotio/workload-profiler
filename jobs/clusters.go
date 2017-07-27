@@ -188,6 +188,7 @@ func (clusters *Clusters) newStoreCluster(selectedCluster *cluster) (*storeClust
 
 func (clusters *Clusters) removeDeployment(runId string) bool {
 	clusters.mutex.Lock()
+	defer clusters.mutex.Unlock()
 	for i, deployment := range clusters.Deployments {
 		if deployment.runId == runId {
 			// Remove cluster from list
@@ -197,7 +198,6 @@ func (clusters *Clusters) removeDeployment(runId string) bool {
 			return true
 		}
 	}
-	clusters.mutex.Unlock()
 	return false
 }
 
@@ -234,23 +234,25 @@ func (clusters *Clusters) ReserveDeployment(
 		clusters.Deployments = append(clusters.Deployments, selectedCluster)
 
 		go func() {
-			if deploymentId, err := clusters.createDeployment(applicationConfig,
-				jobDeploymentConfig, runId, log); err != nil {
+			deploymentId, deploymentErr :=
+				clusters.createDeployment(applicationConfig, jobDeploymentConfig, runId, log)
+			if deploymentErr != nil {
 				clusters.removeDeployment(runId)
 				reserveResult <- ReserveResult{
-					Err: err.Error(),
+					Err: deploymentErr.Error(),
 				}
-			} else {
-				selectedCluster.deploymentId = *deploymentId
-				selectedCluster.state = RESERVED
+				return
+			}
 
-				if err := clusters.storeCluster(selectedCluster); err != nil {
-					log.Errorf("Unable to store %s cluster during reserve deployment: %s", runId, err.Error())
-				}
+			selectedCluster.deploymentId = *deploymentId
+			selectedCluster.state = RESERVED
 
-				reserveResult <- ReserveResult{
-					DeploymentId: *deploymentId,
-				}
+			if err := clusters.storeCluster(selectedCluster); err != nil {
+				log.Errorf("Unable to store %s cluster during reserve deployment: %s", runId, err.Error())
+			}
+
+			reserveResult <- ReserveResult{
+				DeploymentId: *deploymentId,
 			}
 		}()
 	} else {
