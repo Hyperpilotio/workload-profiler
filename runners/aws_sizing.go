@@ -106,7 +106,7 @@ func (run *AWSSizingRun) Run() error {
 					"Failed to aws single run with instance type %s: %s", instanceType, result.Error)
 				// TODO: Retry?
 			} else {
-				qosValue := (<-resultChan).QosValue.Value
+				qosValue := result.QosValue.Value
 				run.ProfileLog.Logger.Infof("Received sizing run value %d with instance type %s", qosValue, instanceType)
 				results[instanceType] = qosValue
 			}
@@ -146,7 +146,7 @@ func NewAWSSizingSingleRun(
 			Created:           time.Now(),
 		},
 		InstanceType: instanceType,
-		ResultsChan:  make(chan SizeRunResults, 1),
+		ResultsChan:  make(chan SizeRunResults, 2),
 	}, nil
 }
 
@@ -199,48 +199,31 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 		}
 	}
 
-	for _, service := range run.ApplicationConfig.ServiceNames {
-		startTime := time.Now()
-		runResults, err := run.runApp(service, calibration.FinalResult.LoadIntensity)
-		if err != nil {
-			message := "Unable to run app " + appName + ": " + err.Error()
-			results.Error = message
-			run.ResultsChan <- results
-			return errors.New(message)
-		}
-
-		if b, err := json.MarshalIndent(runResults, "", "  "); err != nil {
-			run.ProfileLog.Logger.Errorf("Unable to indent run results: " + err.Error())
-		} else {
-			run.ProfileLog.Logger.Infof("Sizing results: %s", string(b))
-		}
-
-		// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
-		results.QosValue = models.SLO{
-			Metric: run.ApplicationConfig.SLO.Metric,
-			Value:  float32(runResults[0].QosValue),
-			Type:   run.ApplicationConfig.SLO.Type,
-		}
-		results.Duration = time.Since(startTime).String()
+	startTime := time.Now()
+	runResults, err := run.runApplicationLoadTest(run.Id, calibration.FinalResult.LoadIntensity)
+	if err != nil {
+		message := "Unable to run app " + appName + ": " + err.Error()
+		results.Error = message
 		run.ResultsChan <- results
+		return errors.New(message)
 	}
+
+	if b, err := json.MarshalIndent(runResults, "", "  "); err != nil {
+		run.ProfileLog.Logger.Errorf("Unable to indent run results: " + err.Error())
+	} else {
+		run.ProfileLog.Logger.Infof("Sizing results: %s", string(b))
+	}
+
+	// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
+	results.QosValue = models.SLO{
+		Metric: run.ApplicationConfig.SLO.Metric,
+		Value:  float32(runResults[0].QosValue),
+		Type:   run.ApplicationConfig.SLO.Type,
+	}
+	results.Duration = time.Since(startTime).String()
+	run.ResultsChan <- results
 
 	return nil
-}
-
-func (run *AWSSizingSingleRun) runApp(service string, appIntensity float64) ([]*models.BenchmarkResult, error) {
-	run.ProfileLog.Logger.Infof("Running app load test at intensity %.2f with service %s", appIntensity, service)
-	stageId, err := generateId(service)
-	if err != nil {
-		return nil, errors.New("Unable to generate stage id " + service + ": " + err.Error())
-	}
-
-	runResults, resultErr := run.runApplicationLoadTest(stageId, appIntensity)
-	if resultErr != nil {
-		return nil, errors.New("Unable to run app load test: " + resultErr.Error())
-	}
-
-	return runResults, nil
 }
 
 func (run *AWSSizingSingleRun) runApplicationLoadTest(
