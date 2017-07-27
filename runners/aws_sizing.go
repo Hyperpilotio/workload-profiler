@@ -200,7 +200,7 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 		if b, err := json.MarshalIndent(runResults, "", "  "); err != nil {
 			run.ProfileLog.Logger.Errorf("Unable to indent run results: " + err.Error())
 		} else {
-			run.ProfileLog.Logger.Infof("Store benchmark results: %s", string(b))
+			run.ProfileLog.Logger.Infof("Sizing results: %s", string(b))
 		}
 
 		// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
