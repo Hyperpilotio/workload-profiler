@@ -51,7 +51,7 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 	logger *logging.Logger) ([]string, error) {
 	instanceTypes := []string{}
 	requestUrl := UrlBasePath(client.Url) + path.Join(
-		client.Url.Path, "get-next-instance-type", appName)
+		client.Url.Path, "api", "apps", appName, "suggest-instance-types")
 
 	instanceResults := []InstanceResult{}
 	for instanceType, result := range results {
@@ -76,6 +76,9 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 
 	var nextInstanceResponse GetNextInstanceTypesResponse
 	funcs.LoopUntil(time.Minute*10, time.Second*10, func() (bool, error) {
+		requestUrl := UrlBasePath(client.Url) + path.Join(
+			client.Url.Path, "api", "apps", appName, "get-optimizer-status")
+
 		response, err := resty.R().Get(requestUrl)
 		if err != nil {
 			return false, nil
