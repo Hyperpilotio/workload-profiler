@@ -283,7 +283,8 @@ func (run *AWSSizingSingleRun) runBenchmarkController(
 		}
 
 		result := &models.BenchmarkResult{
-			QosValue: qosValue,
+			Intensity: int(appIntensity),
+			QosValue:  qosValue,
 		}
 		results = append(results, result)
 	}
