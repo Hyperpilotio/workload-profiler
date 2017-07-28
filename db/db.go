@@ -28,6 +28,7 @@ type MetricsDB struct {
 	Database              string
 	CalibrationCollection string
 	ProfilingCollection   string
+	SizingCollection      string
 }
 
 func NewConfigDB(config *viper.Viper) *ConfigDB {
@@ -97,6 +98,7 @@ func NewMetricsDB(config *viper.Viper) *MetricsDB {
 		Database:              config.GetString("database.metricDatabase"),
 		CalibrationCollection: config.GetString("database.calibrationCollection"),
 		ProfilingCollection:   config.GetString("database.profilingCollection"),
+		SizingCollection:      config.GetString("database.sizingCollection"),
 	}
 }
 
@@ -106,6 +108,8 @@ func (metricsDb *MetricsDB) getCollection(dataType string) (string, error) {
 		return metricsDb.CalibrationCollection, nil
 	case "profiling":
 		return metricsDb.ProfilingCollection, nil
+	case "sizing":
+		return metricsDb.SizingCollection, nil
 	default:
 		return "", errors.New("Unable to find collection for: " + dataType)
 	}
