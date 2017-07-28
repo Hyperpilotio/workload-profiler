@@ -107,7 +107,7 @@ func (run *AWSSizingRun) Run() error {
 				// TODO: Retry?
 			} else {
 				qosValue := result.QosValue.Value
-				run.ProfileLog.Logger.Infof("Received sizing run value %d with instance type %s", qosValue, instanceType)
+				run.ProfileLog.Logger.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
 				results[instanceType] = qosValue
 			}
 		}
