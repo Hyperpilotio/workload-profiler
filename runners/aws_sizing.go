@@ -84,7 +84,7 @@ func (run *AWSSizingRun) Run() error {
 		resultChans := make(map[string]chan SizeRunResults)
 		results := make(map[string]float32)
 		for _, instanceType := range instanceTypes {
-			newId := run.GetId() + instanceType
+			newId := run.GetId() + "-" + instanceType
 			singleRun, err := NewAWSSizingSingleRun(
 				newId,
 				instanceType,
