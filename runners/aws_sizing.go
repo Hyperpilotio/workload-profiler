@@ -78,8 +78,17 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 }
 
 func (run *AWSSizingRun) Run() error {
-	// TODO: Configure initial aws instance type(s) to start the process
-	instanceTypes := []string{"c4.xlarge"}
+	results := make(map[string]float32)
+	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(
+		run.ApplicationConfig.Name,
+		results,
+		run.ProfileLog.Logger)
+	if err != nil {
+		return errors.New("Unable to fetch initial instance types: " + err.Error())
+	}
+
+	run.ProfileLog.Logger.Infof("Received initial instance types: %+v", instanceTypes)
+
 	for len(instanceTypes) > 0 {
 		resultChans := make(map[string]chan SizeRunResults)
 		results := make(map[string]float32)
@@ -112,8 +121,10 @@ func (run *AWSSizingRun) Run() error {
 			}
 		}
 
-		instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.ApplicationConfig.Name,
-			results, run.ProfileLog.Logger)
+		instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(
+			run.ApplicationConfig.Name,
+			results,
+			run.ProfileLog.Logger)
 		if err != nil {
 			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
 		}
