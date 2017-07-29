@@ -107,7 +107,7 @@ func (run *AWSSizingRun) Run() error {
 				// TODO: Retry?
 			} else {
 				qosValue := result.QosValue.Value
-				run.ProfileLog.Logger.Infof("Received sizing run value %d with instance type %s", qosValue, instanceType)
+				run.ProfileLog.Logger.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
 				results[instanceType] = qosValue
 			}
 		}
@@ -208,12 +208,6 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 		return errors.New(message)
 	}
 
-	if b, err := json.MarshalIndent(runResults, "", "  "); err != nil {
-		run.ProfileLog.Logger.Errorf("Unable to indent run results: " + err.Error())
-	} else {
-		run.ProfileLog.Logger.Infof("Sizing results: %s", string(b))
-	}
-
 	// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
 	results.QosValue = models.SLO{
 		Metric: run.ApplicationConfig.SLO.Metric,
@@ -221,6 +215,21 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 		Type:   run.ApplicationConfig.SLO.Type,
 	}
 	results.Duration = time.Since(startTime).String()
+
+	run.ProfileLog.Logger.Infof("Storing sizing results for app %s: %+v", appName, results)
+	if err := run.MetricsDB.WriteMetrics("sizing", results); err != nil {
+		message := "Unable to store sizing results for app " + appName + ": " + err.Error()
+		run.ProfileLog.Logger.Warningf(message)
+		results.Error = message
+		run.ResultsChan <- results
+		return errors.New(message)
+	}
+
+	if b, err := json.MarshalIndent(runResults, "", "  "); err != nil {
+		run.ProfileLog.Logger.Errorf("Unable to indent run results: " + err.Error())
+	} else {
+		run.ProfileLog.Logger.Infof("Sizing results: %s", string(b))
+	}
 	run.ResultsChan <- results
 
 	return nil
@@ -274,7 +283,8 @@ func (run *AWSSizingSingleRun) runBenchmarkController(
 		}
 
 		result := &models.BenchmarkResult{
-			QosValue: qosValue,
+			Intensity: int(appIntensity),
+			QosValue:  qosValue,
 		}
 		results = append(results, result)
 	}
