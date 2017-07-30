@@ -39,7 +39,7 @@ type GetNextInstanceTypesRequest struct {
 
 type GetNextInstanceTypesResponse struct {
 	Status        string   `json:"status"`
-	InstanceTypes []string `json:"instanceTypes"`
+	InstanceTypes []string `json:"data"`
 }
 
 // GetNextInstanceTypes asks the analyzer if we should run more benchmark runs on different
