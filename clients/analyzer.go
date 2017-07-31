@@ -64,6 +64,7 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 	}
 
 	logger.Infof("Sending get next instance types request to analyzer %+v: ", request)
+	resty.SetTimeout(time.Duration(1 * time.Minute))
 	response, err := resty.R().SetBody(request).Post(requestUrl)
 	if err != nil {
 		return instanceTypes, errors.New("Unable to send analyzer request: " + err.Error())
