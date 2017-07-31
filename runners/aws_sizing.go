@@ -25,6 +25,13 @@ type SizeRunResults struct {
 	QosValue     models.SLO
 }
 
+type SizeRunFinalResults struct {
+	RunId        string
+	Duration     string
+	AppName      string
+	FinalResults []SizeRunResults
+}
+
 // AWSSizingRun is the overall app request for find best instance type in AWS.
 // It spawns multiple AWSSizingSingleRun based on analyzer recommendations.
 // Note that AWSSizingRun doesn't implement the job interface, and won't be queued
@@ -86,12 +93,17 @@ func (run *AWSSizingRun) Run() error {
 	if err != nil {
 		return errors.New("Unable to fetch initial instance types: " + err.Error())
 	}
-
 	run.ProfileLog.Logger.Infof("Received initial instance types: %+v", instanceTypes)
+
+	startTime := time.Now()
+	runResults := &SizeRunFinalResults{
+		RunId:        run.Id,
+		AppName:      run.ApplicationConfig.Name,
+		FinalResults: []SizeRunResults{},
+	}
 
 	for len(instanceTypes) > 0 {
 		resultChans := make(map[string]chan SizeRunResults)
-		results := make(map[string]float32)
 		for _, instanceType := range instanceTypes {
 			newId := run.GetId() + "-" + instanceType
 			singleRun, err := NewAWSSizingSingleRun(
@@ -117,20 +129,18 @@ func (run *AWSSizingRun) Run() error {
 			} else {
 				qosValue := result.QosValue.Value
 				run.ProfileLog.Logger.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
-				results[instanceType] = qosValue
+				runResults.FinalResults = append(runResults.FinalResults, result)
 			}
 		}
-
-		instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(
-			run.ApplicationConfig.Name,
-			results,
-			run.ProfileLog.Logger)
-		if err != nil {
-			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
-		}
-		run.ProfileLog.Logger.Infof("Received next instance types to run sizing: %s", instanceTypes)
 	}
+	runResults.Duration = time.Since(startTime).String()
 
+	run.ProfileLog.Logger.Infof("Storing sizing results for app %s: %+v", runResults.AppName, runResults)
+	if err := run.MetricsDB.WriteMetrics("sizing", runResults); err != nil {
+		message := "Unable to store sizing results for app " + runResults.AppName + ": " + err.Error()
+		run.ProfileLog.Logger.Warningf(message)
+		return errors.New(message)
+	}
 	run.ProfileLog.Logger.Infof("AWS Sizing run finished")
 
 	return nil
@@ -226,15 +236,6 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 		Type:   run.ApplicationConfig.SLO.Type,
 	}
 	results.Duration = time.Since(startTime).String()
-
-	run.ProfileLog.Logger.Infof("Storing sizing results for app %s: %+v", appName, results)
-	if err := run.MetricsDB.WriteMetrics("sizing", results); err != nil {
-		message := "Unable to store sizing results for app " + appName + ": " + err.Error()
-		run.ProfileLog.Logger.Warningf(message)
-		results.Error = message
-		run.ResultsChan <- results
-		return errors.New(message)
-	}
 
 	if b, err := json.MarshalIndent(runResults, "", "  "); err != nil {
 		run.ProfileLog.Logger.Errorf("Unable to indent run results: " + err.Error())
