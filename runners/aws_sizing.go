@@ -26,10 +26,10 @@ type SizeRunResults struct {
 }
 
 type AWSSizingRunResults struct {
-	RunId       string
-	Duration    string
-	AppName     string
-	TestResults map[string]float32
+	RunId       string             `bson:"runId" json:"runId"`
+	Duration    string             `bson:"duration" json:"duration"`
+	AppName     string             `bson:"appName" json:"appName"`
+	TestResults map[string]float32 `bson:"testResult" json:"testResult"`
 }
 
 // AWSSizingRun is the overall app request for find best instance type in AWS.
