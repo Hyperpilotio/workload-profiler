@@ -29,7 +29,7 @@ type SizeRunFinalResults struct {
 	RunId        string
 	Duration     string
 	AppName      string
-	FinalResults []SizeRunResults
+	FinalResults map[string]float32
 }
 
 // AWSSizingRun is the overall app request for find best instance type in AWS.
@@ -97,9 +97,8 @@ func (run *AWSSizingRun) Run() error {
 
 	startTime := time.Now()
 	runResults := &SizeRunFinalResults{
-		RunId:        run.Id,
-		AppName:      run.ApplicationConfig.Name,
-		FinalResults: []SizeRunResults{},
+		RunId:   run.Id,
+		AppName: run.ApplicationConfig.Name,
 	}
 
 	for len(instanceTypes) > 0 {
@@ -129,10 +128,22 @@ func (run *AWSSizingRun) Run() error {
 			} else {
 				qosValue := result.QosValue.Value
 				run.ProfileLog.Logger.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
-				runResults.FinalResults = append(runResults.FinalResults, result)
+				results[instanceType] = qosValue
 			}
 		}
+
+		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(
+			run.ApplicationConfig.Name,
+			results,
+			run.ProfileLog.Logger)
+		if err != nil {
+			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
+		}
+
+		run.ProfileLog.Logger.Infof("Received next instance types to run sizing: %s", sugggestInstanceTypes)
+		instanceTypes = sugggestInstanceTypes
 	}
+	runResults.FinalResults = results
 	runResults.Duration = time.Since(startTime).String()
 
 	run.ProfileLog.Logger.Infof("Storing sizing results for app %s: %+v", runResults.AppName, runResults)
