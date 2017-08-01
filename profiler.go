@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
+	"github.com/go-resty/resty"
 	"github.com/golang/glog"
-
 	"github.com/spf13/viper"
 )
 
@@ -29,6 +30,8 @@ func Run(fileConfig string) error {
 	if err != nil {
 		return err
 	}
+
+	resty.SetTimeout(time.Duration(3 * time.Minute))
 
 	server := NewServer(viper)
 	return server.StartServer()
