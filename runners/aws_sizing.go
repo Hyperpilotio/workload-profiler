@@ -25,11 +25,11 @@ type SizeRunResults struct {
 	QosValue     models.SLO
 }
 
-type SizeRunFinalResults struct {
-	RunId        string
-	Duration     string
-	AppName      string
-	FinalResults map[string]float32
+type AWSSizingRunResults struct {
+	RunId       string
+	Duration    string
+	AppName     string
+	TestResults map[string]float32
 }
 
 // AWSSizingRun is the overall app request for find best instance type in AWS.
@@ -85,6 +85,7 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 }
 
 func (run *AWSSizingRun) Run() error {
+	log := run.ProfileLog.Logger
 	results := make(map[string]float32)
 	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(
 		run.ApplicationConfig.Name,
@@ -93,14 +94,9 @@ func (run *AWSSizingRun) Run() error {
 	if err != nil {
 		return errors.New("Unable to fetch initial instance types: " + err.Error())
 	}
-	run.ProfileLog.Logger.Infof("Received initial instance types: %+v", instanceTypes)
+	log.Infof("Received initial instance types: %+v", instanceTypes)
 
 	startTime := time.Now()
-	runResults := &SizeRunFinalResults{
-		RunId:   run.Id,
-		AppName: run.ApplicationConfig.Name,
-	}
-
 	for len(instanceTypes) > 0 {
 		resultChans := make(map[string]chan SizeRunResults)
 		for _, instanceType := range instanceTypes {
@@ -122,12 +118,12 @@ func (run *AWSSizingRun) Run() error {
 		for instanceType, resultChan := range resultChans {
 			result := <-resultChan
 			if result.Error != "" {
-				run.ProfileLog.Logger.Warningf(
+				log.Warningf(
 					"Failed to aws single run with instance type %s: %s", instanceType, result.Error)
 				// TODO: Retry?
 			} else {
 				qosValue := result.QosValue.Value
-				run.ProfileLog.Logger.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
+				log.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
 				results[instanceType] = qosValue
 			}
 		}
@@ -140,19 +136,24 @@ func (run *AWSSizingRun) Run() error {
 			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
 		}
 
-		run.ProfileLog.Logger.Infof("Received next instance types to run sizing: %s", sugggestInstanceTypes)
+		log.Infof("Received next instance types to run sizing: %s", sugggestInstanceTypes)
 		instanceTypes = sugggestInstanceTypes
 	}
-	runResults.FinalResults = results
-	runResults.Duration = time.Since(startTime).String()
 
-	run.ProfileLog.Logger.Infof("Storing sizing results for app %s: %+v", runResults.AppName, runResults)
-	if err := run.MetricsDB.WriteMetrics("sizing", runResults); err != nil {
-		message := "Unable to store sizing results for app " + runResults.AppName + ": " + err.Error()
-		run.ProfileLog.Logger.Warningf(message)
+	awsSizingRunResults := &AWSSizingRunResults{
+		RunId:       run.Id,
+		AppName:     run.ApplicationConfig.Name,
+		Duration:    time.Since(startTime).String(),
+		TestResults: results,
+	}
+
+	log.Infof("Storing aws sizing results for app %s: %+v", run.ApplicationConfig.Name, awsSizingRunResults)
+	if err := run.MetricsDB.WriteMetrics("sizing", awsSizingRunResults); err != nil {
+		message := fmt.Sprintf("Unable to store aws sizing results for app %s: %s", run.ApplicationConfig.Name, err.Error())
+		log.Warningf(message)
 		return errors.New(message)
 	}
-	run.ProfileLog.Logger.Infof("AWS Sizing run finished")
+	log.Infof("AWS Sizing run finished")
 
 	return nil
 }
