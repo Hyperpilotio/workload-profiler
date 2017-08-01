@@ -86,11 +86,9 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 
 func (run *AWSSizingRun) Run() error {
 	log := run.ProfileLog.Logger
+	appName := run.ApplicationConfig.Name
 	results := make(map[string]float32)
-	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(
-		run.ApplicationConfig.Name,
-		results,
-		run.ProfileLog.Logger)
+	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(appName, results, log)
 	if err != nil {
 		return errors.New("Unable to fetch initial instance types: " + err.Error())
 	}
@@ -128,10 +126,7 @@ func (run *AWSSizingRun) Run() error {
 			}
 		}
 
-		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(
-			run.ApplicationConfig.Name,
-			results,
-			run.ProfileLog.Logger)
+		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(appName, results, log)
 		if err != nil {
 			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
 		}
@@ -142,14 +137,14 @@ func (run *AWSSizingRun) Run() error {
 
 	awsSizingRunResults := &AWSSizingRunResults{
 		RunId:       run.Id,
-		AppName:     run.ApplicationConfig.Name,
+		AppName:     appName,
 		Duration:    time.Since(startTime).String(),
 		TestResults: results,
 	}
 
-	log.Infof("Storing aws sizing results for app %s: %+v", run.ApplicationConfig.Name, awsSizingRunResults)
+	log.Infof("Storing aws sizing results for app %s: %+v", appName, awsSizingRunResults)
 	if err := run.MetricsDB.WriteMetrics("sizing", awsSizingRunResults); err != nil {
-		message := fmt.Sprintf("Unable to store aws sizing results for app %s: %s", run.ApplicationConfig.Name, err.Error())
+		message := fmt.Sprintf("Unable to store aws sizing results for app %s: %s", appName, err.Error())
 		log.Warningf(message)
 		return errors.New(message)
 	}
@@ -205,6 +200,7 @@ func (run *AWSSizingSingleRun) GetSummary() jobs.JobSummary {
 }
 
 func (run *AWSSizingSingleRun) Run(deploymentId string) error {
+	log := run.ProfileLog.Logger
 	run.DeploymentId = deploymentId
 	appName := run.ApplicationConfig.Name
 	results := SizeRunResults{
@@ -213,10 +209,10 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 		AppName:      appName,
 	}
 
-	run.ProfileLog.Logger.Infof("Reading calibration results for app %s", appName)
-	metric, err := run.MetricsDB.GetMetric("calibration", run.ApplicationConfig.Name, &models.CalibrationResults{})
+	log.Infof("Reading calibration results for app %s", appName)
+	metric, err := run.MetricsDB.GetMetric("calibration", appName, &models.CalibrationResults{})
 	if err != nil {
-		message := "Unable to get calibration results for app " + run.ApplicationConfig.Name + ": " + err.Error()
+		message := "Unable to get calibration results for app " + appName + ": " + err.Error()
 		results.Error = message
 		run.ResultsChan <- results
 		return errors.New(message)
@@ -250,9 +246,9 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 	results.Duration = time.Since(startTime).String()
 
 	if b, err := json.MarshalIndent(runResults, "", "  "); err != nil {
-		run.ProfileLog.Logger.Errorf("Unable to indent run results: " + err.Error())
+		log.Errorf("Unable to indent run results: " + err.Error())
 	} else {
-		run.ProfileLog.Logger.Infof("Sizing results: %s", string(b))
+		log.Infof("Sizing results: %s", string(b))
 	}
 	run.ResultsChan <- results
 
@@ -263,9 +259,7 @@ func (run *AWSSizingSingleRun) runApplicationLoadTest(
 	stageId string,
 	appIntensity float64) ([]*models.BenchmarkResult, error) {
 	loadTester := run.ApplicationConfig.LoadTester
-
 	run.ProfileLog.Logger.Infof("Starting app load test at intensity %.2f", appIntensity)
-
 	if loadTester.BenchmarkController != nil {
 		return run.runBenchmarkController(
 			stageId,
