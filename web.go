@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hyperpilotio/workload-profiler/jobs"
@@ -86,8 +87,11 @@ func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
 
 	filterStatus := c.Param("status")
 	for _, job := range server.JobManager.GetJobs() {
+		if job == nil {
+			continue
+		}
 		fileLog := job.GetSummary()
-		if filterStatus == fileLog.Status {
+		if strings.ToUpper(filterStatus) == fileLog.Status {
 			fileLogs = append(fileLogs, fileLog)
 		}
 	}

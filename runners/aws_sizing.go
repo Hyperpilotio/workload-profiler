@@ -103,8 +103,7 @@ func (run *AWSSizingRun) Run() error {
 				newId,
 				instanceType,
 				run.ApplicationConfig,
-				run.Config,
-				run.ProfileLog)
+				run.Config)
 			if err != nil {
 				// TODO: clean up
 				return errors.New("Unable to create AWS single run: " + err.Error())
@@ -157,11 +156,15 @@ func NewAWSSizingSingleRun(
 	id string,
 	instanceType string,
 	applicationConfig *models.ApplicationConfig,
-	config *viper.Viper,
-	log *log.FileLog) (*AWSSizingSingleRun, error) {
+	config *viper.Viper) (*AWSSizingSingleRun, error) {
 	deployerClient, deployerErr := clients.NewDeployerClient(config)
 	if deployerErr != nil {
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	}
+
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
 	}
 
 	return &AWSSizingSingleRun{
