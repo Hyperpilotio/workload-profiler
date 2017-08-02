@@ -32,6 +32,7 @@ func Run(fileConfig string) error {
 	}
 
 	resty.SetTimeout(time.Duration(3 * time.Minute))
+	resty.SetRedirectPolicy(resty.FlexibleRedirectPolicy(10))
 
 	server := NewServer(viper)
 	return server.StartServer()
