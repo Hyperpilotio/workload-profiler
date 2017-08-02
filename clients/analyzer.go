@@ -79,7 +79,6 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 			client.Url.Path, "api", "apps", appName, "get-optimizer-status")
 
 		response, err := resty.R().Get(requestUrl)
-		logger.Infof("get-optimizer-statusr response: %s", err)
 		if err != nil {
 			return false, nil
 		}
