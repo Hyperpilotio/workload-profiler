@@ -68,7 +68,6 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 	if err != nil {
 		return instanceTypes, errors.New("Unable to send analyzer request: " + err.Error())
 	}
-	logger.Infof("Received analyzer response: %+v", response)
 
 	if response.StatusCode() != 202 {
 		return nil, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
@@ -83,6 +82,8 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 		if err != nil {
 			return false, nil
 		}
+
+		logger.Infof("Polled analyzer response: %+v", response)
 
 		if response.StatusCode() != 200 {
 			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
