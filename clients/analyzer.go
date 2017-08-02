@@ -69,7 +69,7 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 		return instanceTypes, errors.New("Unable to send analyzer request: " + err.Error())
 	}
 
-	if response.StatusCode() != 202 {
+	if response.StatusCode() != 200 {
 		return nil, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
 	}
 
@@ -79,6 +79,7 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 			client.Url.Path, "api", "apps", appName, "get-optimizer-status")
 
 		response, err := resty.R().Get(requestUrl)
+		logger.Infof("get-optimizer-statusr response: %s", err)
 		if err != nil {
 			return false, nil
 		}
