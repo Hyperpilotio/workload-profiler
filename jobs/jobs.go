@@ -128,7 +128,7 @@ func NewJobManager(config *viper.Viper) (*JobManager, error) {
 
 	queue := make(chan Job, 100)
 	workers := []*Worker{}
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= 2; i++ {
 		worker := &Worker{
 			Id:       i,
 			Config:   config,
