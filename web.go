@@ -3,8 +3,6 @@ package main
 import (
 	"bufio"
 	"net/http"
-	"os"
-	"path"
 	"sort"
 	"strings"
 
@@ -45,27 +43,19 @@ func (server *Server) getFileLogList(c *gin.Context) {
 func (server *Server) getFileLogContent(c *gin.Context) {
 	fileName := c.Param("fileName")
 
-	run, err := server.JobManager.FindJob(fileName)
-	if err != nil {
+	server.mutex.Lock()
+	defer server.mutex.Unlock()
+
+	profilerLog, ok := server.ProfilerLogs[fileName]
+	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": true,
-			"data":  err,
+			"data":  "",
 		})
 		return
 	}
 
-	logPath := path.Join(server.Config.GetString("filesPath"), "log", fileName+".log")
-	file, err := os.Open(logPath)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": true,
-			"data":  "Unable to read deployment log: " + err.Error(),
-		})
-		return
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(profilerLog.LogFile)
 	scanner.Split(bufio.ScanLines)
 
 	lines := []string{}
@@ -74,20 +64,40 @@ func (server *Server) getFileLogContent(c *gin.Context) {
 		lines = append(lines, scanner.Text())
 	}
 
+	job, err := server.JobManager.FindJob(fileName)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"error": false,
+			"data":  lines,
+			"state": jobs.JOB_FAILED,
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"error":      false,
 		"data":       lines,
-		"deployment": run.GetSummary(),
-		"state":      run.GetState(),
+		"deployment": job.GetSummary(),
+		"state":      job.GetState(),
 	})
 }
 
 func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
+	server.mutex.Lock()
+	defer server.mutex.Unlock()
+
 	fileLogs := FileLogs{}
 
 	filterStatus := c.Param("status")
-	for _, job := range server.JobManager.GetJobs() {
-		if job == nil {
+	for runId, profilerLog := range server.ProfilerLogs {
+		job, err := server.JobManager.FindJob(runId)
+		if err != nil {
+			fileInfo, _ := profilerLog.LogFile.Stat()
+			fileLogs = append(fileLogs, jobs.JobSummary{
+				RunId:  runId,
+				Status: jobs.JOB_FAILED,
+				Create: fileInfo.ModTime(),
+			})
 			continue
 		}
 		fileLog := job.GetSummary()
