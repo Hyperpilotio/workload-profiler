@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-resty/resty"
@@ -50,7 +51,6 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 	appName string,
 	results map[string]float32,
 	logger *logging.Logger) ([]string, error) {
-	instanceTypes := []string{}
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "api", "apps", runId, "suggest-instance-types")
 
@@ -64,10 +64,15 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 		Data:    instanceResults,
 	}
 
-	logger.Infof("Sending get next instance types request to analyzer %+v: ", request)
-	response, err := resty.R().SetBody(request).Post(requestUrl)
+	body, err := json.Marshal(&request)
 	if err != nil {
-		return instanceTypes, errors.New("Unable to send analyzer request: " + err.Error())
+		return nil, errors.New("Unable to marshal request: " + err.Error())
+	}
+
+	logger.Infof("Sending get next instance types request to analyzer %s: %s", requestUrl, body)
+	response, err := resty.R().SetBody(body).Post(requestUrl)
+	if err != nil {
+		return nil, errors.New("Unable to send analyzer request: " + err.Error())
 	}
 
 	if response.StatusCode() >= 300 {
@@ -94,11 +99,14 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 			return false, errors.New("Unable to parse analyzer response: " + err.Error())
 		}
 
-		if nextInstanceResponse.Status != "running" {
+		switch strings.ToLower(nextInstanceResponse.Status) {
+		case "running":
 			return false, nil
+		case "done":
+			return true, nil
+		default:
+			return false, errors.New("Unexpected analyzer status: " + nextInstanceResponse.Status)
 		}
-
-		return true, nil
 	})
 
 	return nextInstanceResponse.InstanceTypes, nil
