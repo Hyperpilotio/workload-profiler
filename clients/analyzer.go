@@ -46,12 +46,13 @@ type GetNextInstanceTypesResponse struct {
 // vm instance types or not. If the return array is empty, then the analyzer has found the
 // optimal choice.
 func (client *AnalyzerClient) GetNextInstanceTypes(
+	runId string,
 	appName string,
 	results map[string]float32,
 	logger *logging.Logger) ([]string, error) {
 	instanceTypes := []string{}
 	requestUrl := UrlBasePath(client.Url) + path.Join(
-		client.Url.Path, "api", "apps", appName, "suggest-instance-types")
+		client.Url.Path, "api", "apps", runId, "suggest-instance-types")
 
 	instanceResults := []InstanceResult{}
 	for instanceType, result := range results {
@@ -76,14 +77,14 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 	var nextInstanceResponse GetNextInstanceTypesResponse
 	funcs.LoopUntil(time.Minute*10, time.Second*10, func() (bool, error) {
 		requestUrl := UrlBasePath(client.Url) + path.Join(
-			client.Url.Path, "api", "apps", appName, "get-optimizer-status")
+			client.Url.Path, "api", "apps", runId, "get-optimizer-status")
 
 		response, err := resty.R().Get(requestUrl)
 		if err != nil {
 			return false, nil
 		}
 
-		logger.Infof("Polled analyzer response: %+v", response)
+		logger.Infof("Polled analyzer response: %+v, status: %d", response, response.StatusCode())
 
 		if response.StatusCode() >= 300 {
 			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))

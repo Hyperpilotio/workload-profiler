@@ -88,7 +88,7 @@ func (run *AWSSizingRun) Run() error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
 	results := make(map[string]float32)
-	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(appName, results, log)
+	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
 	if err != nil {
 		return errors.New("Unable to fetch initial instance types: " + err.Error())
 	}
@@ -125,7 +125,7 @@ func (run *AWSSizingRun) Run() error {
 			}
 		}
 
-		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(appName, results, log)
+		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
 		if err != nil {
 			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
 		}
