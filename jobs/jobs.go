@@ -126,9 +126,14 @@ func NewJobManager(config *viper.Viper) (*JobManager, error) {
 		return nil, errors.New("Unable to reload cluster state: " + err.Error())
 	}
 
+	workerCount := config.GetInt("workerCount")
+	if workerCount == 0 {
+		workerCount = 2
+	}
+
 	queue := make(chan Job, 100)
 	workers := []*Worker{}
-	for i := 1; i <= 2; i++ {
+	for i := 1; i <= workerCount; i++ {
 		worker := &Worker{
 			Id:       i,
 			Config:   config,
