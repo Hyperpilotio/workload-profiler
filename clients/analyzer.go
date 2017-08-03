@@ -41,6 +41,7 @@ type GetNextInstanceTypesRequest struct {
 type GetNextInstanceTypesResponse struct {
 	Status        string   `json:"status"`
 	InstanceTypes []string `json:"data"`
+	Error         string   `json:"error"`
 }
 
 // GetNextInstanceTypes asks the analyzer if we should run more benchmark runs on different
@@ -64,13 +65,8 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 		Data:    instanceResults,
 	}
 
-	body, err := json.Marshal(&request)
-	if err != nil {
-		return nil, errors.New("Unable to marshal request: " + err.Error())
-	}
-
-	logger.Infof("Sending get next instance types request to analyzer %s: %s", requestUrl, body)
-	response, err := resty.R().SetBody(body).Post(requestUrl)
+	logger.Infof("Sending get next instance types request to analyzer %s: %s", requestUrl, request)
+	response, err := resty.R().SetBody(request).Post(requestUrl)
 	if err != nil {
 		return nil, errors.New("Unable to send analyzer request: " + err.Error())
 	}
@@ -84,26 +80,32 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 		requestUrl := UrlBasePath(client.Url) + path.Join(
 			client.Url.Path, "api", "apps", runId, "get-optimizer-status")
 
-		response, err := resty.R().Get(requestUrl)
+		logger.Infof("Sending analyzer poll request to %s", requestUrl)
+		pollResponse, err := resty.R().Get(requestUrl)
 		if err != nil {
+			logger.Infof("Retrying after error when polling analyzer: %s", err.Error())
 			return false, nil
 		}
 
-		logger.Infof("Polled analyzer response: %+v, status: %d", response, response.StatusCode())
+		logger.Infof("Polled analyzer response: %s, status: %d", pollResponse.Body(), pollResponse.StatusCode())
 
-		if response.StatusCode() >= 300 {
-			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+		if pollResponse.StatusCode() >= 300 {
+			return false, errors.New("Unexpected response code: " + strconv.Itoa(pollResponse.StatusCode()))
 		}
 
-		if err := json.Unmarshal(response.Body(), &nextInstanceResponse); err != nil {
+		if err := json.Unmarshal(pollResponse.Body(), &nextInstanceResponse); err != nil {
 			return false, errors.New("Unable to parse analyzer response: " + err.Error())
 		}
+
+		logger.Infof("Found analyzer job status: %s", nextInstanceResponse.Status)
 
 		switch strings.ToLower(nextInstanceResponse.Status) {
 		case "running":
 			return false, nil
 		case "done":
 			return true, nil
+		case "":
+			return false, nil
 		default:
 			return false, errors.New("Unexpected analyzer status: " + nextInstanceResponse.Status)
 		}

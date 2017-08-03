@@ -59,6 +59,8 @@ func (worker *Worker) Run() {
 			deploymentId := ""
 			runId := job.GetId()
 			log.Logger.Infof("Waiting until %s job is completed...", runId)
+			backOff := time.Duration(60)
+			maxBackOff := time.Duration(3600)
 			for {
 				result := <-worker.Clusters.ReserveDeployment(
 					worker.Config,
@@ -68,8 +70,13 @@ func (worker *Worker) Run() {
 					log.Logger)
 				if result.Err != "" {
 					log.Logger.Warningf("Unable to reserve deployment for job: " + result.Err)
+					log.Logger.Warningf("Sleeping %s seconds to retry...", backOff)
 					// Try reserving again after sleep
-					time.Sleep(60 * time.Second)
+					time.Sleep(backOff * time.Second)
+					backOff *= 2
+					if backOff > maxBackOff {
+						backOff = maxBackOff
+					}
 				} else {
 					deploymentId = result.DeploymentId
 					log.Logger.Infof("Deploying job %s with deploymentId is %s", runId, deploymentId)
