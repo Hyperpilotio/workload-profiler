@@ -6,11 +6,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
-	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/db"
 	"github.com/hyperpilotio/workload-profiler/jobs"
 	"github.com/hyperpilotio/workload-profiler/runners"
@@ -23,19 +21,13 @@ type Server struct {
 	ConfigDB *db.ConfigDB
 
 	JobManager *jobs.JobManager
-
-	// Maps run id to profiler running log
-	ProfilerLogs map[string]*log.FileLog
-
-	mutex sync.Mutex
 }
 
 // NewServer return an instance of Server struct.
 func NewServer(config *viper.Viper) *Server {
 	return &Server{
-		Config:       config,
-		ConfigDB:     db.NewConfigDB(config),
-		ProfilerLogs: make(map[string]*log.FileLog),
+		Config:   config,
+		ConfigDB: db.NewConfigDB(config),
 	}
 }
 
@@ -123,10 +115,6 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 	}
 
 	log := run.ProfileLog
-	server.mutex.Lock()
-	server.ProfilerLogs[run.GetId()] = log
-	server.mutex.Unlock()
-
 	log.Logger.Infof("Running aws sizing job %s for app %s...", run.Id, appName)
 	go func() {
 		run.Run()
@@ -193,10 +181,6 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	}
 
 	log := run.ProfileLog
-	server.mutex.Lock()
-	server.ProfilerLogs[run.GetId()] = log
-	server.mutex.Unlock()
-
 	log.Logger.Infof("Queueing benchmark job %s for app %s...", run.Id, appName)
 	server.JobManager.AddJob(run)
 
@@ -228,10 +212,6 @@ func (server *Server) runCalibration(c *gin.Context) {
 	}
 
 	log := run.ProfileLog
-	server.mutex.Lock()
-	server.ProfilerLogs[run.GetId()] = log
-	server.mutex.Unlock()
-
 	log.Logger.Infof("Running calibration job %s for app %s...", run.Id, appName)
 	server.JobManager.AddJob(run)
 
