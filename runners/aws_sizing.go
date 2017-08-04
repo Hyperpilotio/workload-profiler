@@ -84,10 +84,6 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 	}, nil
 }
 
-func (run *AWSSizingRun) GetId() string {
-	return run.Id
-}
-
 func (run *AWSSizingRun) Run() error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
