@@ -11,13 +11,13 @@ test:
 	${GO_EXECUTABLE} test ${PACKAGES}
 
 build:
-	CGO_ENABLED=0 go build -a -installsuffix cgo
+	go build .
 
-build-docker:
-	sudo docker build . -t hyperpilot/workload-profiler
+build-docker: build
+	docker build . -t hyperpilot/workload-profiler:william
 
 push:
-	sudo docker push hyperpilot/workload-profiler:latest
+	docker push hyperpilot/workload-profiler:william
 
 run:
 	./workload-profiler --config ./documents/deployed.config -logtostderr=true -v=2

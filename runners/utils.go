@@ -28,8 +28,14 @@ func min(a int, b int) int {
 }
 
 func replaceTargetingServiceAddress(controller *models.BenchmarkController, deployerClient *clients.DeployerClient, deploymentId string) error {
+	var serviceConfigs []models.ServiceConfig
 	if controller.Initialize.ServiceConfigs != nil {
-		for _, targetingService := range *controller.Initialize.ServiceConfigs {
+		serviceConfigs = *controller.Initialize.ServiceConfigs
+	} else if controller.Command.ServiceConfigs != nil {
+		serviceConfigs = *controller.Command.ServiceConfigs
+	}
+	if serviceConfigs != nil {
+		for _, targetingService := range serviceConfigs {
 			// NOTE we assume the targeting service is an unique one in this deployment process.
 			// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
 			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name)

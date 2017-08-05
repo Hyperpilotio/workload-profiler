@@ -88,10 +88,11 @@ func (run *AWSSizingRun) Run() error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
 	results := make(map[string]float32)
-	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
-	if err != nil {
-		return errors.New("Unable to fetch initial instance types: " + err.Error())
-	}
+	// instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(appName, results, log)
+	// if err != nil {
+	// 	return errors.New("Unable to fetch initial instance types: " + err.Error())
+	// }
+	instanceTypes := []string{"c4.xlarge"}
 	log.Infof("Received initial instance types: %+v", instanceTypes)
 
 	startTime := time.Now()
@@ -125,13 +126,14 @@ func (run *AWSSizingRun) Run() error {
 			}
 		}
 
-		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
-		if err != nil {
-			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
-		}
+		// sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(appName, results, log)
+		// if err != nil {
+		// 	return errors.New("Unable to get next instance types from analyzer: " + err.Error())
+		// }
 
-		log.Infof("Received next instance types to run sizing: %s", sugggestInstanceTypes)
-		instanceTypes = sugggestInstanceTypes
+		// log.Infof("Received next instance types to run sizing: %s", sugggestInstanceTypes)
+		// instanceTypes = sugggestInstanceTypes
+		instanceTypes = []string{}
 	}
 
 	awsSizingRunResults := &AWSSizingRunResults{

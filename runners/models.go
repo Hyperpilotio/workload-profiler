@@ -3,6 +3,7 @@ package runners
 import (
 	"time"
 
+	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/db"
@@ -53,7 +54,9 @@ func (run *ProfileRun) GetSummary() jobs.JobSummary {
 }
 
 func (run *ProfileRun) GetJobDeploymentConfig() jobs.JobDeploymentConfig {
-	return jobs.JobDeploymentConfig{}
+	return jobs.JobDeploymentConfig{
+		Nodes: []deployer.ClusterNode{},
+	}
 }
 
 type ProfileResults struct {
