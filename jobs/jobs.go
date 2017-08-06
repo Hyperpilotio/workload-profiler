@@ -59,6 +59,14 @@ type JobDeploymentConfig struct {
 	Nodes []deployer.ClusterNode
 }
 
+func (config JobDeploymentConfig) GetNodes() []deployer.ClusterNode {
+	if config.Nodes == nil {
+		return []deployer.ClusterNode{}
+	}
+
+	return config.Nodes
+}
+
 type Worker struct {
 	Id         int
 	Jobs       <-chan Job

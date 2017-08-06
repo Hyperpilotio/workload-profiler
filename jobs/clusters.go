@@ -385,7 +385,7 @@ func (clusters *Clusters) createDeployment(
 	log *logging.Logger) (*string, error) {
 	// TODO: We assume region is us-east-1 and we assume Kubernetes only.
 	clusterDefinition := &deployer.ClusterDefinition{
-		Nodes: jobDeploymentConfig.Nodes,
+		Nodes: jobDeploymentConfig.GetNodes(),
 	}
 
 	deployment := &deployer.Deployment{
