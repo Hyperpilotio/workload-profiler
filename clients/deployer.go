@@ -347,7 +347,7 @@ func (client *DeployerClient) CreateDeployment(
 		return nil, errors.New("Unable to waiting for deployment state to be available: " + err.Error())
 	}
 
-	log.Infof("Waiting for service urls to be available...")
+	log.Infof("Waiting for load tester %s service url to be available...", loadTesterName)
 	if err := client.waitUntilServiceUrlAvailable(deploymentId, loadTesterName, log); err != nil {
 		log.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
 	}
@@ -356,7 +356,9 @@ func (client *DeployerClient) CreateDeployment(
 }
 
 func (client *DeployerClient) waitUntilServiceUrlAvailable(
-	deploymentId string, serviceName string, log *logging.Logger) error {
+	deploymentId string,
+	serviceName string,
+	log *logging.Logger) error {
 	url, err := client.GetServiceUrl(deploymentId, serviceName)
 	if err != nil {
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", serviceName, err.Error())
