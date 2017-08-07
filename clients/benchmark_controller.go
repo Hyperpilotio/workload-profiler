@@ -66,18 +66,28 @@ func (client *BenchmarkControllerClient) RunCalibration(
 	if err := validateLoadTesterCommand(controller.Command); err != nil {
 		return nil, err
 	}
-	body["loadTest"] = controller.Command
 
+	body["loadTest"] = controller.Command
 	body["slo"] = slo
 	body["stageId"] = stageId
 
 	logger.Infof("Sending calibration request to benchmark controller for stage: " + stageId)
-	response, err := resty.R().SetBody(body).Post(u.String())
+	err = funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
+		response, err := resty.R().SetBody(body).Post(u.String())
+		if err != nil {
+			logger.Warningf("Unable to send calibrate request to controller: " + err.Error())
+			return false, nil
+		}
+
+		if response.StatusCode() >= 300 {
+			return false, fmt.Errorf("Unexpected response code: %d, body: %s", response.StatusCode(), response.String())
+		}
+
+		return true, nil
+	})
+
 	if err != nil {
-		return nil, errors.New("Unable to send calibrate request to controller: " + err.Error())
-	}
-	if response.StatusCode() >= 300 {
-		return nil, fmt.Errorf("Unexpected response code: %d, body: %s", response.StatusCode(), response.String())
+		return nil, errors.New("Unable to send calibration request to controller: " + err.Error())
 	}
 
 	results := &BenchmarkControllerCalibrationResponse{}
@@ -86,7 +96,8 @@ func (client *BenchmarkControllerClient) RunCalibration(
 	err = funcs.LoopUntil(time.Minute*240, time.Second*60, func() (bool, error) {
 		response, err := resty.R().Get(u.String() + "/" + stageId)
 		if err != nil {
-			return false, errors.New("Unable to send calibrate results request to controller: " + err.Error())
+			logger.Warningf("Unable to send calibrate results request to controller, retrying: " + err.Error())
+			return false, nil
 		}
 
 		if response.StatusCode() != 200 {
@@ -159,18 +170,29 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	if err := validateCommand(command); err != nil {
 		return nil, err
 	}
+
 	body["loadTest"] = command
 	body["intensity"] = intensity
 	body["stageId"] = stageId
 
 	logger.Infof("Sending benchmark request to benchmark controller for stage: " + stageId)
-	response, err := resty.R().SetBody(body).Post(u.String())
-	if err != nil {
-		return nil, errors.New("Unable to send calibrate request to controller: " + err.Error())
-	}
 
-	if response.StatusCode() >= 300 {
-		return nil, fmt.Errorf("Unexpected response code: %d, body: %s", response.StatusCode(), response.String())
+	err = funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
+		response, err := resty.R().SetBody(body).Post(u.String())
+		if err != nil {
+			logger.Warningf("Unable to send benchmark request to controller, retrying: " + err.Error())
+			return false, nil
+		}
+
+		if response.StatusCode() >= 300 {
+			return false, fmt.Errorf("Unexpected response code: %d, body: %s", response.StatusCode(), response.String())
+		}
+
+		return true, nil
+	})
+
+	if err != nil {
+		return nil, errors.New("Unable to send benchmark request to controller: " + err.Error())
 	}
 
 	results := &BenchmarkControllerBenchmarkResponse{}
