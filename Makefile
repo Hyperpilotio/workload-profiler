@@ -4,7 +4,7 @@ GO_EXECUTABLE ?= go
 PACKAGES=$(glide novendor)
 ORGANIZATION=hyperpilot
 IMAGE=workload-profiler
-TAG=swh
+TAG=latest
 
 init:
 	glide install
