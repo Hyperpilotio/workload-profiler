@@ -66,17 +66,26 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 	}
 
 	logger.Infof("Sending get next instance types request to analyzer %s: %s", requestUrl, request)
-	response, err := resty.R().SetBody(request).Post(requestUrl)
-	if err != nil {
-		return nil, errors.New("Unable to send analyzer request: " + err.Error())
-	}
+	err := funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
+		response, err := resty.R().SetBody(request).Post(requestUrl)
+		if err != nil {
+			logger.Warningf("Unable to send analyzer request: " + err.Error())
+			return false, nil
+		}
 
-	if response.StatusCode() >= 300 {
-		return nil, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+		if response.StatusCode() >= 300 {
+			return false, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+		}
+
+		return true, nil
+	})
+
+	if err != nil {
+		return nil, errors.New("Unable to send instance types request to analyzer: " + err.Error())
 	}
 
 	var nextInstanceResponse GetNextInstanceTypesResponse
-	funcs.LoopUntil(time.Minute*10, time.Second*10, func() (bool, error) {
+	err = funcs.LoopUntil(time.Minute*10, time.Second*10, func() (bool, error) {
 		requestUrl := UrlBasePath(client.Url) + path.Join(
 			client.Url.Path, "api", "apps", runId, "get-optimizer-status")
 
@@ -114,6 +123,10 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 			return false, errors.New("Unexpected analyzer status: " + nextInstanceResponse.Status)
 		}
 	})
+
+	if err != nil {
+		return nil, errors.New("Unable to wait for analyzer results: " + err.Error())
+	}
 
 	return nextInstanceResponse.InstanceTypes, nil
 }
