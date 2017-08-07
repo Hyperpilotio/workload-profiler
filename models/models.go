@@ -89,14 +89,13 @@ type Benchmark struct {
 }
 
 type ApplicationConfig struct {
-	Name               string `bson:"name" json:"name"`
-	DeploymentTemplate string `bson:"deploymentTemplate" json:"deploymentTemplate
-"`
-	TaskDefinitions []ApplicationTask `bson:"taskDefinitions" json:"taskDefinitions"`
-	ServiceNames    []string          `bson:"serviceNames" json:"serviceNames"`
-	LoadTester      LoadTester        `bson:"loadTester" json:"loadTester"`
-	Type            string            `bson:"type" json:"type"`
-	SLO             SLO               `bson:"slo" json:"slo"`
+	Name               string            `bson:"name" json:"name"`
+	DeploymentTemplate string            `bson:"deploymentTemplate" json:"deploymentTemplate"`
+	TaskDefinitions    []ApplicationTask `bson:"taskDefinitions" json:"taskDefinitions"`
+	ServiceNames       []string          `bson:"serviceNames" json:"serviceNames"`
+	LoadTester         LoadTester        `bson:"loadTester" json:"loadTester"`
+	Type               string            `bson:"type" json:"type"`
+	SLO                SLO               `bson:"slo" json:"slo"`
 }
 
 type IntensityArgument struct {
