@@ -72,6 +72,7 @@ type Worker struct {
 	Jobs                   <-chan Job
 	FailedJobs             *FailedJobs
 	SkipUnreserveOnFailure bool
+	RetryReservation       bool
 	Config                 *viper.Viper
 	Clusters               *Clusters
 }
@@ -94,8 +95,8 @@ func (worker *Worker) RunJob(job Job) error {
 	deploymentId := ""
 	runId := job.GetId()
 	log.Logger.Infof("Waiting until %s job is completed...", runId)
-	backOff := time.Duration(60)
-	maxBackOff := time.Duration(960)
+	backOff := time.Duration(60) * time.Second
+	maxBackOff := time.Duration(960) * time.Second
 	for {
 		result := <-worker.Clusters.ReserveDeployment(
 			worker.Config,
@@ -106,11 +107,15 @@ func (worker *Worker) RunJob(job Job) error {
 		if result.Err != "" {
 			log.Logger.Warningf("Unable to reserve deployment for job: " + result.Err)
 			log.Logger.Warningf("Sleeping %s seconds to retry...", backOff)
-			// Try reserving again after sleep
-			time.Sleep(backOff * time.Second)
-			backOff *= 2
-			if backOff > maxBackOff {
-				return errors.New("Unable to reserve deployment after retries: " + result.Err)
+			if worker.RetryReservation {
+				// Try reserving again after sleep
+				time.Sleep(backOff)
+				backOff *= 2
+				if backOff > maxBackOff {
+					return errors.New("Unable to reserve deployment after retries: " + result.Err)
+				}
+			} else {
+				return errors.New("Unable to reserve deployment: " + result.Err)
 			}
 		} else {
 			deploymentId = result.DeploymentId
@@ -178,6 +183,7 @@ func NewJobManager(config *viper.Viper) (*JobManager, error) {
 			Config:                 config,
 			Clusters:               clusters,
 			SkipUnreserveOnFailure: config.GetBool("skipUnreserveOnJobFailure"),
+			RetryReservation:       config.GetBool("retryReservation"),
 			FailedJobs:             failedJobs,
 			Jobs:                   queue,
 		}
