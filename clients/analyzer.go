@@ -106,6 +106,10 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 			return true, nil
 		case "":
 			return false, nil
+		case "bad_request":
+			return false, errors.New("Bad request sent to analyzer: " + nextInstanceResponse.Error)
+		case "server_error":
+			return false, errors.New("Internal server error in analyzer: " + nextInstanceResponse.Error)
 		default:
 			return false, errors.New("Unexpected analyzer status: " + nextInstanceResponse.Status)
 		}
