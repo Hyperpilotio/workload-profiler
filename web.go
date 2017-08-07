@@ -85,14 +85,21 @@ func (server *Server) getFileLogContent(c *gin.Context) {
 func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
 	fileLogs := FileLogs{}
 
-	filterStatus := c.Param("status")
+	filterStatus := strings.ToUpper(c.Param("status"))
 	for _, job := range server.JobManager.GetJobs() {
 		if job == nil {
 			continue
 		}
 		fileLog := job.GetSummary()
-		if strings.ToUpper(filterStatus) == fileLog.Status {
-			fileLogs = append(fileLogs, fileLog)
+		switch fileLog.Status {
+		case jobs.JOB_QUEUED, jobs.JOB_RESERVING, jobs.JOB_RUNNING, jobs.JOB_FINISHED:
+			if filterStatus == jobs.JOB_RUNNING {
+				fileLogs = append(fileLogs, fileLog)
+			}
+		case jobs.JOB_FAILED:
+			if filterStatus == jobs.JOB_FAILED {
+				fileLogs = append(fileLogs, fileLog)
+			}
 		}
 	}
 
