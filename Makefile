@@ -2,10 +2,12 @@ GLIDE=$(which glide)
 GO_EXECUTABLE ?= go
 # For windows developer, use $(go list ./... | grep -v /vendor/)
 PACKAGES=$(glide novendor)
+ORGANIZATION=hyperpilot
+IMAGE=workload-profiler
+TAG=latest
 
 init:
 	glide install
-	 rm -rf "vendor/k8s.io/client-go/vendor/github.com/golang/glog"
 
 test:
 	${GO_EXECUTABLE} test ${PACKAGES}
@@ -13,11 +15,14 @@ test:
 build:
 	CGO_ENABLED=0 go build -a -installsuffix cgo
 
-build-docker:
-	sudo docker build . -t hyperpilot/workload-profiler
+build-linux:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo
 
-push:
-	sudo docker push hyperpilot/workload-profiler:latest
+docker-build:
+	docker build . -t ${ORGANIZATION}/${IMAGE}:${TAG}
+
+docker-push:
+	docker push ${ORGANIZATION}/${IMAGE}:${TAG}
 
 run:
 	./workload-profiler --config ./documents/deployed.config -logtostderr=true -v=2
