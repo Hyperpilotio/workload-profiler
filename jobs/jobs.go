@@ -119,14 +119,12 @@ func (worker *Worker) RunJob(job Job) error {
 	}
 
 	job.SetState(JOB_RUNNING)
-	// TODO: Allow multiple jobs to run
 	log.Logger.Infof("Running %s job", job.GetId())
 	defer log.LogFile.Close()
-	if err := job.Run(deploymentId); err != nil {
-		// TODO: Store the error state in a map and display/return job status
-		log.Logger.Errorf("Unable to run %s job: %s", runId, err)
+	jobErr := job.Run(deploymentId)
+	if jobErr != nil {
+		log.Logger.Errorf("Unable to run %s job: %s", runId, jobErr)
 		job.SetState(JOB_FAILED)
-		return errors.New("Unable to run job: " + err.Error())
 	} else {
 		job.SetState(JOB_FINISHED)
 	}
@@ -136,7 +134,7 @@ func (worker *Worker) RunJob(job Job) error {
 		log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
 	}
 
-	return nil
+	return jobErr
 }
 
 type JobManager struct {
