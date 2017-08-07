@@ -71,8 +71,8 @@ func (client *BenchmarkControllerClient) RunCalibration(
 	body["slo"] = slo
 	body["stageId"] = stageId
 
-	logger.Infof("Sending calibration request to benchmark controller for stage: " + stageId)
 	err = funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
+		logger.Infof("Sending calibration request to benchmark controller for stage: " + stageId)
 		response, err := resty.R().SetBody(body).Post(u.String())
 		if err != nil {
 			logger.Warningf("Unable to send calibrate request to controller: " + err.Error())
@@ -175,9 +175,8 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	body["intensity"] = intensity
 	body["stageId"] = stageId
 
-	logger.Infof("Sending benchmark request to benchmark controller for stage: " + stageId)
-
 	err = funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
+		logger.Infof("Sending benchmark request to benchmark controller for stage: " + stageId)
 		response, err := resty.R().SetBody(body).Post(u.String())
 		if err != nil {
 			logger.Warningf("Unable to send benchmark request to controller, retrying: " + err.Error())

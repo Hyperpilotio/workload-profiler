@@ -65,11 +65,11 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 		Data:    instanceResults,
 	}
 
-	logger.Infof("Sending get next instance types request to analyzer %s: %s", requestUrl, request)
 	err := funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
+		logger.Infof("Sending get next instance types request to analyzer %s: %s", requestUrl, request)
 		response, err := resty.R().SetBody(request).Post(requestUrl)
 		if err != nil {
-			logger.Warningf("Unable to send analyzer request: " + err.Error())
+			logger.Warningf("Unable to send analyzer request, retrying: " + err.Error())
 			return false, nil
 		}
 
