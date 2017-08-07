@@ -102,7 +102,7 @@ func (client *DeployerClient) GetColocatedServiceUrl(deployment string, colocate
 	return "", fmt.Errorf("Unable to find service with prefix %s located at node id %d", servicePrefix, nodeId)
 }
 
-func (client *DeployerClient) GetServiceUrl(deployment string, service string) (string, error) {
+func (client *DeployerClient) GetServiceUrl(deployment string, service string, log *logging.Logger) (string, error) {
 	if url, ok := client.ServiceUrls[service]; ok {
 		return url, nil
 	}
@@ -110,6 +110,7 @@ func (client *DeployerClient) GetServiceUrl(deployment string, service string) (
 	requestUrl := UrlBasePath(client.Url) +
 		path.Join(client.Url.Path, "v1", "deployments", deployment, "services", service, "url")
 
+	log.Infof("Requesting service %s url with deployment %s to deployer %s", service, deployment, requestUrl)
 	response, err := resty.R().Get(requestUrl)
 	if err != nil {
 		return "", err
@@ -359,7 +360,7 @@ func (client *DeployerClient) waitUntilServiceUrlAvailable(
 	deploymentId string,
 	serviceName string,
 	log *logging.Logger) error {
-	url, err := client.GetServiceUrl(deploymentId, serviceName)
+	url, err := client.GetServiceUrl(deploymentId, serviceName, log)
 	if err != nil {
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", serviceName, err.Error())
 	}

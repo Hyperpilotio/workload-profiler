@@ -52,7 +52,7 @@ func NewCalibrationRun(applicationConfig *models.ApplicationConfig, config *vipe
 
 func (run *CalibrationRun) runBenchmarkController(runId string, controller *models.BenchmarkController) error {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
-	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName, run.ProfileLog.Logger)
 	if urlErr != nil {
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
@@ -111,7 +111,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 func (run *CalibrationRun) runSlowCookerController(runId string, controller *models.SlowCookerController) error {
 	glog.V(1).Infof("Running slow cooker with controller: %+v", controller)
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
-	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName, run.ProfileLog.Logger)
 	if urlErr != nil {
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
@@ -160,73 +160,11 @@ func (run *CalibrationRun) runSlowCookerController(runId string, controller *mod
 	return nil
 }
 
-func (run *CalibrationRun) runLocustController(runId string, controller *models.LocustController) error {
-	/*
-		waitTime, err := time.ParseDuration(controller.StepDuration)
-		if err != nil {
-			return fmt.Errorf("Unable to parse wait time %s: %s", controller.StepDuration, err.Error())
-		}
-
-		url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, "locust-master")
-		if urlErr != nil {
-			return fmt.Errorf("Unable to retrieve locust master url: %s", urlErr.Error())
-		}
-
-		lastUserCount := 0
-		nextUserCount := controller.StartCount
-
-		for lastUserCount < nextUserCount {
-			body := make(map[string]string)
-			body["locust_count"] = strconv.Itoa(nextUserCount)
-			body["hatch_rate"] = strconv.Itoa(nextUserCount)
-			body["stage_id"] = stageId
-
-			startRequest := HTTPRequest{
-				HTTPMethod: "POST",
-				UrlPath:    "/swarm",
-				FormData:   body,
-			}
-
-			glog.Infof("Starting locust run with id %s, count %d", stageId, nextUserCount)
-			if response, err := sendHTTPRequest(url, startRequest); err != nil {
-				return fmt.Errorf("Unable to send start request for locust test %v: %s", startRequest, err.Error())
-			} else if response.StatusCode() >= 300 {
-				return fmt.Errorf("Unexpected response code when starting locust: %d, body: %s",
-					response.StatusCode(), response.String())
-			}
-
-			glog.Infof("Waiting locust run for %s..", controller.StepDuration)
-			<-time.After(waitTime)
-
-			lastUserCount = nextUserCount
-			nextUserCount = min(nextUserCount+controller.StepCount, controller.EndCount)
-		}
-
-		stopRequest := HTTPRequest{
-			HTTPMethod: "GET",
-			UrlPath:    "/stop",
-		}
-
-		glog.Infof("Stopping locust run..")
-
-		if response, err := sendHTTPRequest(url, stopRequest); err != nil {
-			return fmt.Errorf("Unable to send stop request for locust test: %s", err.Error())
-		} else if response.StatusCode() >= 300 {
-			return fmt.Errorf("Unexpected response code when stopping locust: %d, body: %s",
-				response.StatusCode(), response.String())
-		}
-	*/
-
-	return errors.New("Unimplemented")
-}
-
 func (run *CalibrationRun) Run(deploymentId string) error {
 	run.DeploymentId = deploymentId
 	loadTester := run.ApplicationConfig.LoadTester
 	if loadTester.BenchmarkController != nil {
 		return run.runBenchmarkController(run.Id, loadTester.BenchmarkController)
-	} else if loadTester.LocustController != nil {
-		return run.runLocustController(run.Id, loadTester.LocustController)
 	} else if loadTester.SlowCookerController != nil {
 		return run.runSlowCookerController(run.Id, loadTester.SlowCookerController)
 	}

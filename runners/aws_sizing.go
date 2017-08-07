@@ -283,7 +283,7 @@ func (run *AWSSizingSingleRun) runBenchmarkController(
 	appIntensity float64,
 	controller *models.BenchmarkController) ([]*models.BenchmarkResult, error) {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
-	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName, run.ProfileLog.Logger)
 	if urlErr != nil {
 		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
@@ -318,7 +318,7 @@ func (run *AWSSizingSingleRun) runSlowCookerController(
 	appIntensity float64,
 	controller *models.SlowCookerController) ([]*models.BenchmarkResult, error) {
 	loadTesterName := run.ApplicationConfig.LoadTester.Name
-	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName)
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName, run.ProfileLog.Logger)
 	if urlErr != nil {
 		return nil, fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
