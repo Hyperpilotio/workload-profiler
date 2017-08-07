@@ -68,11 +68,12 @@ func (config JobDeploymentConfig) GetNodes() []deployer.ClusterNode {
 }
 
 type Worker struct {
-	Id         int
-	Jobs       <-chan Job
-	FailedJobs *FailedJobs
-	Config     *viper.Viper
-	Clusters   *Clusters
+	Id                     int
+	Jobs                   <-chan Job
+	FailedJobs             *FailedJobs
+	SkipUnreserveOnFailure bool
+	Config                 *viper.Viper
+	Clusters               *Clusters
 }
 
 func (worker *Worker) Run() {
@@ -129,9 +130,11 @@ func (worker *Worker) RunJob(job Job) error {
 		job.SetState(JOB_FINISHED)
 	}
 
-	unreserveResult := <-worker.Clusters.UnreserveDeployment(runId, log.Logger)
-	if unreserveResult.Err != "" {
-		log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
+	if jobErr == nil || !worker.SkipUnreserveOnFailure {
+		unreserveResult := <-worker.Clusters.UnreserveDeployment(runId, log.Logger)
+		if unreserveResult.Err != "" {
+			log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
+		}
 	}
 
 	return jobErr
@@ -171,11 +174,12 @@ func NewJobManager(config *viper.Viper) (*JobManager, error) {
 	workers := []*Worker{}
 	for i := 1; i <= workerCount; i++ {
 		worker := &Worker{
-			Id:         i,
-			Config:     config,
-			Clusters:   clusters,
-			FailedJobs: failedJobs,
-			Jobs:       queue,
+			Id:                     i,
+			Config:                 config,
+			Clusters:               clusters,
+			SkipUnreserveOnFailure: config.GetBool("skipUnreserveOnJobFailure"),
+			FailedJobs:             failedJobs,
+			Jobs:                   queue,
 		}
 		worker.Run()
 		workers = append(workers, worker)
