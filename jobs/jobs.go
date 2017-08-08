@@ -106,17 +106,17 @@ func (worker *Worker) RunJob(job Job) error {
 			runId,
 			log.Logger)
 		if result.Err != "" {
-			log.Logger.Warningf("Unable to reserve deployment for job: " + result.Err)
-			log.Logger.Warningf("Sleeping %s seconds to retry...", backOff)
-			if worker.RetryReservation {
-				// Try reserving again after sleep
-				time.Sleep(backOff)
-				backOff *= 2
-				if backOff > maxBackOff {
-					return errors.New("Unable to reserve deployment after retries: " + result.Err)
-				}
-			} else {
+			log.Logger.Warningf("Unable to reserve deployment for job: %s", result.Err)
+			if !worker.RetryReservation {
 				return errors.New("Unable to reserve deployment: " + result.Err)
+			}
+
+			log.Logger.Warningf("Sleeping %s seconds to retry...", backOff)
+			// Try reserving again after sleep
+			time.Sleep(backOff)
+			backOff *= 2
+			if backOff > maxBackOff {
+				return errors.New("Unable to reserve deployment after retries: " + result.Err)
 			}
 		} else {
 			deploymentId = result.DeploymentId
