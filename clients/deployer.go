@@ -33,27 +33,49 @@ type DeployerResponse struct {
 	Data  string `json:"data`
 }
 
-type DeployerClient struct {
+type DeploymentCache struct {
 	ServiceMapping   *ServiceMappingResponse
 	ServiceUrls      map[string]string
 	ServiceAddresses map[string]*ServiceAddress
-	Url              *url.URL
+}
+
+type DeployerClient struct {
+	Cache map[string]*DeploymentsCache
+
+	Url *url.URL
+}
+
+func (client *DeployerClient) getCache(deployment string) *DeploymentCache {
+	cache, ok := client.Cache[deployment]
+	if ok {
+		return cache
+	}
+
+	cache = &DeploymentCache{
+		ServiceUrls:      make(map[string]string),
+		ServiceAddresses: make(map[string]*ServiceAddress),
+	}
+
+	client.Cache[deployment] = cache
+
+	return cache
 }
 
 func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
 	if u, err := url.Parse(config.GetString("deployerUrl")); err != nil {
 		return nil, errors.New("Unable to parse deployer url: " + err.Error())
-	} else {
-		return &DeployerClient{
-			Url:         u,
-			ServiceUrls: make(map[string]string),
-		}, nil
 	}
+
+	return &DeployerClient{
+		Url:   u,
+		Cache: make(map[string]*DeploymentCache),
+	}, nil
 }
 
 func (client *DeployerClient) getServiceMappings(deployment string) (*ServiceMappingResponse, error) {
-	if client.ServiceMapping != nil {
-		return client.ServiceMapping, nil
+	cache := client.getCache(deployment)
+	if cache.ServiceMapping != nil {
+		return cache.ServiceMapping, nil
 	}
 
 	requestUrl := UrlBasePath(client.Url) +
@@ -73,8 +95,8 @@ func (client *DeployerClient) getServiceMappings(deployment string) (*ServiceMap
 		return nil, errors.New("Unable to parse service mapping response: " + err.Error())
 	}
 
-	client.ServiceMapping = &mappingResponse
-	return client.ServiceMapping, nil
+	cache.ServiceMapping = &mappingResponse
+	return cache.ServiceMapping, nil
 }
 
 // GetColocatedServiceUrl finds the service's url that's running on the same node where
@@ -103,7 +125,8 @@ func (client *DeployerClient) GetColocatedServiceUrl(deployment string, colocate
 }
 
 func (client *DeployerClient) GetServiceUrl(deployment string, service string, log *logging.Logger) (string, error) {
-	if url, ok := client.ServiceUrls[service]; ok {
+	cache := client.getCache(deployment)
+	if url, ok := cache.ServiceUrls[service]; ok {
 		return url, nil
 	}
 
@@ -121,7 +144,7 @@ func (client *DeployerClient) GetServiceUrl(deployment string, service string, l
 	}
 
 	url := "http://" + response.String()
-	client.ServiceUrls[service] = url
+	cache.ServiceUrls[service] = url
 
 	log.Infof("Service url for service %s and deployment %s is %s", service, deployment, url)
 
@@ -136,7 +159,8 @@ type ServiceAddress struct {
 
 // GetServiceAddress return the address object of service container
 func (client *DeployerClient) GetServiceAddress(deployment string, service string) (*ServiceAddress, error) {
-	if address, ok := client.ServiceAddresses[service]; ok {
+	cache := client.getCache(deployment)
+	if address, ok := cache.ServiceAddresses[service]; ok {
 		return address, nil
 	}
 
@@ -156,6 +180,8 @@ func (client *DeployerClient) GetServiceAddress(deployment string, service strin
 	if err = json.Unmarshal(response.Body(), &address); err != nil {
 		return nil, err
 	}
+
+	cache.ServiceAddresses[service] = &address
 
 	return &address, nil
 }
@@ -238,7 +264,9 @@ func (client *DeployerClient) waitUntilDeploymentStateAvailable(deploymentId str
 }
 
 func (client *DeployerClient) ResetTemplateDeployment(
-	deploymentTemplate string, deploymentId string, log *logging.Logger) error {
+	deploymentTemplate string,
+	deploymentId string,
+	log *logging.Logger) error {
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments", deploymentId, "reset")
 
@@ -345,7 +373,7 @@ func (client *DeployerClient) CreateDeployment(
 		return nil, errors.New("Unable to get deployment id")
 	}
 
-	log.Infof("Waiting for deployment to be available...")
+	log.Infof("Waiting for deployment %s to be available...", deploymentId)
 	if err := client.waitUntilDeploymentStateAvailable(deploymentId, log); err != nil {
 		return nil, errors.New("Unable to waiting for deployment state to be available: " + err.Error())
 	}
