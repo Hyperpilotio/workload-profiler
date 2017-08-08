@@ -293,6 +293,8 @@ func (client *DeployerClient) ResetTemplateDeployment(
 }
 
 func (client *DeployerClient) DeleteDeployment(deploymentId string, log *logging.Logger) error {
+	delete(client.Cache, deploymentId)
+
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "v1", "deployments", deploymentId)
 
