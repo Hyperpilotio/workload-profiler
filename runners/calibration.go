@@ -57,7 +57,7 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
-	if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId); err != nil {
+	if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId, run.ProfileLog.Logger); err != nil {
 		return fmt.Errorf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
 	}
 

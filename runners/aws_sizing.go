@@ -223,7 +223,7 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 	calibration := metric.(*models.CalibrationResults)
 
 	if controller := run.ApplicationConfig.LoadTester.BenchmarkController; controller != nil {
-		if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId); err != nil {
+		if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId, log); err != nil {
 			message := fmt.Sprintf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
 			results.Error = message
 			run.ResultsChan <- results

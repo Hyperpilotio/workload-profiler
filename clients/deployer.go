@@ -159,7 +159,7 @@ type ServiceAddress struct {
 }
 
 // GetServiceAddress return the address object of service container
-func (client *DeployerClient) GetServiceAddress(deployment string, service string) (*ServiceAddress, error) {
+func (client *DeployerClient) GetServiceAddress(deployment string, service string, log *logging.Logger) (*ServiceAddress, error) {
 	cache := client.getCache(deployment)
 	if address, ok := cache.ServiceAddresses[service]; ok {
 		return address, nil
@@ -168,6 +168,7 @@ func (client *DeployerClient) GetServiceAddress(deployment string, service strin
 	requestUrl := UrlBasePath(client.Url) +
 		path.Join(client.Url.Path, "v1", "deployments", deployment, "services", service, "address")
 
+	log.Infof("Getting service address from deployer for deployment %s, service %s with url %s", deployment, service, requestUrl)
 	response, err := resty.R().Get(requestUrl)
 	if err != nil {
 		return nil, err
@@ -182,6 +183,7 @@ func (client *DeployerClient) GetServiceAddress(deployment string, service strin
 		return nil, err
 	}
 
+	log.Infof("Service address returned from deployer for deployment %s, service %s: %+v", deployment, service, address)
 	cache.ServiceAddresses[service] = &address
 
 	return &address, nil

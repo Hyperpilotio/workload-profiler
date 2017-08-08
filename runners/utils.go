@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/golang/glog"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/nu7hatch/gouuid"
+	logging "github.com/op/go-logging"
 )
 
 func generateId(prefix string) (string, error) {
@@ -27,12 +27,16 @@ func min(a int, b int) int {
 	}
 }
 
-func replaceTargetingServiceAddress(controller *models.BenchmarkController, deployerClient *clients.DeployerClient, deploymentId string) error {
+func replaceTargetingServiceAddress(
+	controller *models.BenchmarkController,
+	deployerClient *clients.DeployerClient,
+	deploymentId string,
+	log *logging.Logger) error {
 	if controller.Initialize != nil && controller.Initialize.ServiceConfigs != nil {
 		for _, targetingService := range *controller.Initialize.ServiceConfigs {
 			// NOTE we assume the targeting service is an unique one in this deployment process.
 			// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
-			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name)
+			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name, log)
 			if err != nil {
 				return fmt.Errorf(
 					"Unable to get service %s address: %s",
@@ -56,14 +60,13 @@ func replaceTargetingServiceAddress(controller *models.BenchmarkController, depl
 					},
 					controller.Initialize.Args...)
 			}
-			glog.V(2).Infof("Arguments of Initialize command are %s", controller.Initialize.Args)
+			log.Infof("Arguments of Initialize command are %s", controller.Initialize.Args)
 		}
 	}
 
-	glog.V(3).Infof("func replaceTargetingServiceAddress: Command %+v", controller.Command)
 	if controller.Command.ServiceConfigs != nil {
 		for _, targetingService := range *controller.Command.ServiceConfigs {
-			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name)
+			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name, log)
 			if err != nil {
 				return fmt.Errorf(
 					"Unable to get service %s address: %s",
@@ -89,7 +92,7 @@ func replaceTargetingServiceAddress(controller *models.BenchmarkController, depl
 					controller.Command.Args...)
 			}
 
-			glog.V(2).Infof("Arguments of load testing command are %s", controller.Command.Args)
+			log.Infof("Arguments of load testing command are %s", controller.Command.Args)
 		}
 	}
 

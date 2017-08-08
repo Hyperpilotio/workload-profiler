@@ -323,7 +323,7 @@ func (run *BenchmarkRun) Run(deploymentId string) error {
 	// FIXME should support all the load tester includes slow cooker and locust
 	// For now, only benchmark controller works
 	if controller := run.ApplicationConfig.LoadTester.BenchmarkController; controller != nil {
-		if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId); err != nil {
+		if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId, run.ProfileLog.Logger); err != nil {
 			return fmt.Errorf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
 		}
 	}
