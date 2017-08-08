@@ -17,7 +17,6 @@ import (
 )
 
 type SizeRunResults struct {
-	Error        string
 	InstanceType string
 	RunId        string
 	Duration     string
@@ -51,7 +50,7 @@ type AWSSizingSingleRun struct {
 
 	InstanceType string
 
-	ResultsChan chan SizeRunResults
+	ResultsChan chan *jobs.JobResults
 }
 
 func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.ApplicationConfig, config *viper.Viper) (*AWSSizingRun, error) {
@@ -96,7 +95,7 @@ func (run *AWSSizingRun) Run() error {
 
 	startTime := time.Now()
 	for len(instanceTypes) > 0 {
-		resultChans := make(map[string]chan SizeRunResults)
+		jobs := []*AWSSizingSingleRun{}
 		for _, instanceType := range instanceTypes {
 			newId := run.GetId() + "-" + instanceType
 			newApplicationConfig := &models.ApplicationConfig{}
@@ -111,17 +110,20 @@ func (run *AWSSizingRun) Run() error {
 				return errors.New("Unable to create AWS single run: " + err.Error())
 			}
 			run.JobManager.AddJob(singleRun)
-			resultChans[instanceType] = singleRun.ResultsChan
+			jobs = append(jobs, singleRun)
 		}
 
-		for instanceType, resultChan := range resultChans {
-			result := <-resultChan
+		for _, job := range jobs {
+			result := <-job.GetResults()
 			if result.Error != "" {
 				log.Warningf(
-					"Failed to aws single run with instance type %s: %s", instanceType, result.Error)
-				// TODO: Retry?
+					"Failed to run aws single size run with id %s: %s",
+					job.GetId(),
+					result.Error)
 			} else {
-				qosValue := result.QosValue.Value
+				sizeRunResults := result.Data.(SizeRunResults)
+				qosValue := sizeRunResults.QosValue.Value
+				instanceType := sizeRunResults.InstanceType
 				log.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
 				results[instanceType] = qosValue
 			}
@@ -179,7 +181,7 @@ func NewAWSSizingSingleRun(
 			Created:           time.Now(),
 		},
 		InstanceType: instanceType,
-		ResultsChan:  make(chan SizeRunResults, 2),
+		ResultsChan:  make(chan *jobs.JobResults, 2),
 	}, nil
 }
 
@@ -204,11 +206,21 @@ func (run *AWSSizingSingleRun) GetSummary() jobs.JobSummary {
 	}
 }
 
+func (run *AWSSizingSingleRun) GetResults() <-chan *jobs.JobResults {
+	return run.ResultsChan
+}
+
+func (run *AWSSizingSingleRun) SetFailed(error string) {
+	run.ResultsChan <- &jobs.JobResults{
+		Error: error,
+	}
+}
+
 func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 	log := run.ProfileLog.Logger
 	run.DeploymentId = deploymentId
 	appName := run.ApplicationConfig.Name
-	results := SizeRunResults{
+	sizeResults := SizeRunResults{
 		RunId:        run.Id,
 		InstanceType: run.InstanceType,
 		AppName:      appName,
@@ -218,8 +230,7 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 	metric, err := run.MetricsDB.GetMetric("calibration", appName, &models.CalibrationResults{})
 	if err != nil {
 		message := "Unable to get calibration results for app " + appName + ": " + err.Error()
-		results.Error = message
-		run.ResultsChan <- results
+		run.SetFailed(message)
 		return errors.New(message)
 	}
 	calibration := metric.(*models.CalibrationResults)
@@ -227,8 +238,7 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 	if controller := run.ApplicationConfig.LoadTester.BenchmarkController; controller != nil {
 		if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId, log); err != nil {
 			message := fmt.Sprintf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
-			results.Error = message
-			run.ResultsChan <- results
+			run.SetFailed(message)
 			return errors.New(message)
 		}
 	}
@@ -237,23 +247,26 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 	runResults, err := run.runApplicationLoadTest(run.Id, calibration.FinalResult.LoadIntensity)
 	if err != nil {
 		message := "Unable to run app " + appName + ": " + err.Error()
-		results.Error = message
-		run.ResultsChan <- results
+		run.SetFailed(message)
 		return errors.New(message)
 	}
 
 	// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
-	results.QosValue = models.SLO{
+	sizeResults.QosValue = models.SLO{
 		Metric: run.ApplicationConfig.SLO.Metric,
 		Value:  float32(runResults[0].QosValue),
 		Type:   run.ApplicationConfig.SLO.Type,
 	}
-	results.Duration = time.Since(startTime).String()
+	sizeResults.Duration = time.Since(startTime).String()
 
 	if b, err := json.MarshalIndent(runResults, "", "  "); err != nil {
 		log.Errorf("Unable to indent run results: " + err.Error())
 	} else {
 		log.Infof("Sizing results: %s", string(b))
+	}
+
+	results := &jobs.JobResults{
+		Data: sizeResults,
 	}
 	run.ResultsChan <- results
 

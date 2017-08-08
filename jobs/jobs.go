@@ -27,6 +27,11 @@ type JobSummary struct {
 	Create       time.Time `json:"create"`
 }
 
+type JobResults struct {
+	Error string
+	Data  interface{}
+}
+
 type Job interface {
 	GetId() string
 	GetApplicationConfig() *models.ApplicationConfig
@@ -36,6 +41,8 @@ type Job interface {
 	GetState() string
 	SetState(state string)
 	GetSummary() JobSummary
+	SetFailed(error string)
+	GetResults() <-chan *JobResults
 }
 
 type FailedJobs struct {
@@ -108,7 +115,9 @@ func (worker *Worker) RunJob(job Job) error {
 		if result.Err != "" {
 			log.Logger.Warningf("Unable to reserve deployment for job: %s", result.Err)
 			if !worker.RetryReservation {
-				return errors.New("Unable to reserve deployment: " + result.Err)
+				message := "Unable to reserve deployment: " + result.Err
+				job.SetFailed(message)
+				return errors.New(message)
 			}
 
 			log.Logger.Warningf("Sleeping %s seconds to retry...", backOff)
@@ -116,7 +125,9 @@ func (worker *Worker) RunJob(job Job) error {
 			time.Sleep(backOff)
 			backOff *= 2
 			if backOff > maxBackOff {
-				return errors.New("Unable to reserve deployment after retries: " + result.Err)
+				message := "Unable to reserve deployment after retries: " + result.Err
+				job.SetFailed(message)
+				return errors.New(message)
 			}
 		} else {
 			deploymentId = result.DeploymentId

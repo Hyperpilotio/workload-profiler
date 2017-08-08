@@ -11,6 +11,7 @@ import (
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/db"
+	"github.com/hyperpilotio/workload-profiler/jobs"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/spf13/viper"
 )
@@ -82,6 +83,12 @@ func NewBenchmarkRun(
 
 	return run, nil
 }
+
+func (run *BenchmarkRun) GetResults() <-chan *jobs.JobResults {
+	return nil
+}
+
+func (run *BenchmarkRun) SetFailed(error string) {}
 
 func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchmark) error {
 	for _, config := range benchmark.Configs {

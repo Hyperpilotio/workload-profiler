@@ -10,6 +10,7 @@ import (
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/db"
+	"github.com/hyperpilotio/workload-profiler/jobs"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/spf13/viper"
 )
@@ -170,4 +171,11 @@ func (run *CalibrationRun) Run(deploymentId string) error {
 	}
 
 	return errors.New("No controller found in calibration request")
+}
+
+func (run *CalibrationRun) GetResults() <-chan *jobs.JobResults {
+	return nil
+}
+
+func (run *CalibrationRun) SetFailed(error string) {
 }
