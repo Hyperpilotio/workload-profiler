@@ -123,6 +123,8 @@ func (client *DeployerClient) GetServiceUrl(deployment string, service string, l
 	url := "http://" + response.String()
 	client.ServiceUrls[service] = url
 
+	log.Infof("Service url for service %s and deployment %s is %s", service, deployment, url)
+
 	return url, nil
 }
 
@@ -350,7 +352,7 @@ func (client *DeployerClient) CreateDeployment(
 
 	log.Infof("Waiting for load tester %s service url to be available...", loadTesterName)
 	if err := client.waitUntilServiceUrlAvailable(deploymentId, loadTesterName, log); err != nil {
-		log.Warningf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
+		return nil, fmt.Errorf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
 	}
 
 	return &deploymentId, nil
@@ -365,7 +367,8 @@ func (client *DeployerClient) waitUntilServiceUrlAvailable(
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", serviceName, err.Error())
 	}
 
-	return funcs.LoopUntil(time.Minute*5, time.Second*10, func() (bool, error) {
+	log.Infof("Waiting for service url %s to be available...", url)
+	return funcs.LoopUntil(time.Minute*10, time.Second*10, func() (bool, error) {
 		response, err := resty.R().Get(url)
 		if err != nil {
 			return false, nil

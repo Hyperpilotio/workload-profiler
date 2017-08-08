@@ -244,6 +244,7 @@ func (clusters *Clusters) ReserveDeployment(
 				return
 			}
 
+			glog.Infof("New cluster deployed successfully with deployment id %s", deploymentId)
 			selectedCluster.deploymentId = *deploymentId
 			selectedCluster.state = RESERVED
 
