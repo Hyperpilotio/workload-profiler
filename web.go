@@ -86,20 +86,24 @@ func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
 	fileLogs := FileLogs{}
 
 	filterStatus := strings.ToUpper(c.Param("status"))
-	for _, job := range server.JobManager.GetJobs() {
-		if job == nil {
-			continue
+	switch filterStatus {
+	case jobs.JOB_QUEUED, jobs.JOB_RESERVING, jobs.JOB_RUNNING, jobs.JOB_FINISHED:
+		for _, job := range server.JobManager.GetJobs() {
+			if job == nil {
+				continue
+			}
+			fileLog := job.GetSummary()
+			switch fileLog.Status {
+			case jobs.JOB_QUEUED, jobs.JOB_RESERVING, jobs.JOB_RUNNING, jobs.JOB_FINISHED:
+				fileLogs = append(fileLogs, job.GetSummary())
+			}
 		}
-		fileLog := job.GetSummary()
-		switch fileLog.Status {
-		case jobs.JOB_QUEUED, jobs.JOB_RESERVING, jobs.JOB_RUNNING, jobs.JOB_FINISHED:
-			if filterStatus == jobs.JOB_RUNNING {
-				fileLogs = append(fileLogs, fileLog)
+	case jobs.JOB_FAILED:
+		for _, job := range server.JobManager.GetFailedJobs() {
+			if job == nil {
+				continue
 			}
-		case jobs.JOB_FAILED:
-			if filterStatus == jobs.JOB_FAILED {
-				fileLogs = append(fileLogs, fileLog)
-			}
+			fileLogs = append(fileLogs, job.GetSummary())
 		}
 	}
 

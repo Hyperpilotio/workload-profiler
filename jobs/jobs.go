@@ -81,6 +81,7 @@ func (worker *Worker) Run() {
 	go func() {
 		for job := range worker.Jobs {
 			if err := worker.RunJob(job); err != nil {
+				job.SetState(JOB_FAILED)
 				worker.FailedJobs.AddJob(job)
 			}
 		}
@@ -126,7 +127,6 @@ func (worker *Worker) RunJob(job Job) error {
 
 	job.SetState(JOB_RUNNING)
 	log.Logger.Infof("Running %s job", job.GetId())
-	defer log.LogFile.Close()
 	jobErr := job.Run(deploymentId)
 	if jobErr != nil {
 		log.Logger.Errorf("Unable to run %s job: %s", runId, jobErr)
@@ -219,6 +219,15 @@ func (manager *JobManager) FindJob(id string) (Job, error) {
 func (manager *JobManager) GetJobs() []Job {
 	jobs := make([]Job, len(manager.Jobs))
 	for _, job := range manager.Jobs {
+		jobs = append(jobs, job)
+	}
+
+	return jobs
+}
+
+func (manager *JobManager) GetFailedJobs() []Job {
+	jobs := make([]Job, len(manager.FailedJobs.Jobs))
+	for _, job := range manager.FailedJobs.Jobs {
 		jobs = append(jobs, job)
 	}
 
