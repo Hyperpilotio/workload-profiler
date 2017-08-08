@@ -40,7 +40,7 @@ type DeploymentCache struct {
 }
 
 type DeployerClient struct {
-	Cache map[string]*DeploymentsCache
+	Cache map[string]*DeploymentCache
 
 	Url *url.URL
 }
@@ -62,7 +62,8 @@ func (client *DeployerClient) getCache(deployment string) *DeploymentCache {
 }
 
 func NewDeployerClient(config *viper.Viper) (*DeployerClient, error) {
-	if u, err := url.Parse(config.GetString("deployerUrl")); err != nil {
+	u, err := url.Parse(config.GetString("deployerUrl"))
+	if err != nil {
 		return nil, errors.New("Unable to parse deployer url: " + err.Error())
 	}
 
