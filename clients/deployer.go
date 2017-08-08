@@ -239,27 +239,38 @@ func (client *DeployerClient) DeployExtensions(
 	return nil
 }
 
+type DeploymentStateResponse struct {
+	State string `json:"state"`
+	Data  string `json:"data"`
+}
+
 func (client *DeployerClient) waitUntilDeploymentStateAvailable(deploymentId string, log *logging.Logger) error {
+	var stateResponse DeploymentStateResponse
 	return funcs.LoopUntil(time.Minute*30, time.Second*30, func() (bool, error) {
 		deploymentStateUrl := UrlBasePath(client.Url) +
 			path.Join(client.Url.Path, "v1", "deployments", deploymentId, "state")
 
 		response, err := resty.R().Get(deploymentStateUrl)
 		if err != nil {
-			return false, errors.New("Unable to send deployment state request to deployer: " + err.Error())
+			log.Infof("Unable to send deployment state request to deployer, retrying: " + err.Error())
+			return false, nil
 		}
 
 		if response.StatusCode() != 200 {
 			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 		}
 
-		deploymentState := string(response.Body())
-		switch deploymentState {
+		if err := json.Unmarshal(response.Body(), &stateResponse); err != nil {
+			return false, errors.New("Unable to serialize deployment state response: " + err.Error())
+		}
+
+		switch stateResponse.State {
 		case "Available":
-			log.Infof("%s state is available", deploymentId)
+			log.Infof("Deployment %s is now available", deploymentId)
 			return true, nil
 		case "Failed":
-			return false, fmt.Errorf("%s state is Failed", deploymentId)
+			log.Infof("Deployment %s failed with reason: %s", deploymentId, stateResponse.Data)
+			return false, fmt.Errorf("Deployment failed: ", stateResponse.Data)
 		}
 
 		return false, nil

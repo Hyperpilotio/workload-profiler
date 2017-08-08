@@ -1,6 +1,7 @@
 package runners
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -27,13 +28,31 @@ func min(a int, b int) int {
 	}
 }
 
+func deepCopy(from interface{}, to interface{}) error {
+	if from == nil {
+		return errors.New("Unable to find 'from' interface")
+	}
+	if to == nil {
+		return errors.New("Unable to find 'to' interface")
+	}
+	bytes, err := json.Marshal(from)
+	if err != nil {
+		return fmt.Errorf("Unable to marshal src: %s", err)
+	}
+	err = json.Unmarshal(bytes, to)
+	if err != nil {
+		return fmt.Errorf("Unable to unmarshal into dst: %s", err)
+	}
+	return nil
+}
+
 func replaceTargetingServiceAddress(
-	controller *models.BenchmarkController,
+	newController *models.BenchmarkController,
 	deployerClient *clients.DeployerClient,
 	deploymentId string,
 	log *logging.Logger) error {
-	if controller.Initialize != nil && controller.Initialize.ServiceConfigs != nil {
-		for _, targetingService := range *controller.Initialize.ServiceConfigs {
+	if newController.Initialize != nil && newController.Initialize.ServiceConfigs != nil {
+		for _, targetingService := range *newController.Initialize.ServiceConfigs {
 			// NOTE we assume the targeting service is an unique one in this deployment process.
 			// As a result, we should use GetServiceAddress function instead of GetColocatedServiceUrl
 			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name, log)
@@ -45,27 +64,27 @@ func replaceTargetingServiceAddress(
 			}
 			// Initialize
 			if targetingService.PortConfig != nil {
-				controller.Initialize.Args = append(
+				newController.Initialize.Args = append(
 					[]string{
 						targetingService.PortConfig.Arg,
 						strconv.FormatInt(serviceAddress.Port, 10),
 					},
-					controller.Initialize.Args...)
+					newController.Initialize.Args...)
 			}
 			if targetingService.HostConfig != nil {
-				controller.Initialize.Args = append(
+				newController.Initialize.Args = append(
 					[]string{
 						targetingService.HostConfig.Arg,
 						serviceAddress.Host,
 					},
-					controller.Initialize.Args...)
+					newController.Initialize.Args...)
 			}
-			log.Infof("Arguments of Initialize command are %s", controller.Initialize.Args)
+			log.Infof("Arguments of Initialize command are %s", newController.Initialize.Args)
 		}
 	}
 
-	if controller.Command.ServiceConfigs != nil {
-		for _, targetingService := range *controller.Command.ServiceConfigs {
+	if newController.Command.ServiceConfigs != nil {
+		for _, targetingService := range *newController.Command.ServiceConfigs {
 			serviceAddress, err := deployerClient.GetServiceAddress(deploymentId, targetingService.Name, log)
 			if err != nil {
 				return fmt.Errorf(
@@ -76,23 +95,23 @@ func replaceTargetingServiceAddress(
 
 			// LoadTesterCommand
 			if targetingService.PortConfig != nil {
-				controller.Command.Args = append(
+				newController.Command.Args = append(
 					[]string{
 						targetingService.PortConfig.Arg,
 						strconv.FormatInt(serviceAddress.Port, 10),
 					},
-					controller.Command.Args...)
+					newController.Command.Args...)
 			}
 			if targetingService.HostConfig != nil {
-				controller.Command.Args = append(
+				newController.Command.Args = append(
 					[]string{
 						targetingService.HostConfig.Arg,
 						serviceAddress.Host,
 					},
-					controller.Command.Args...)
+					newController.Command.Args...)
 			}
 
-			log.Infof("Arguments of load testing command are %s", controller.Command.Args)
+			log.Infof("Arguments of load testing command are %s", newController.Command.Args)
 		}
 	}
 

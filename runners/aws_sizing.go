@@ -99,10 +99,12 @@ func (run *AWSSizingRun) Run() error {
 		resultChans := make(map[string]chan SizeRunResults)
 		for _, instanceType := range instanceTypes {
 			newId := run.GetId() + "-" + instanceType
+			newApplicationConfig := &models.ApplicationConfig{}
+			deepCopy(run.ApplicationConfig, newApplicationConfig)
 			singleRun, err := NewAWSSizingSingleRun(
 				newId,
 				instanceType,
-				run.ApplicationConfig,
+				newApplicationConfig,
 				run.Config)
 			if err != nil {
 				// TODO: clean up
