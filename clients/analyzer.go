@@ -30,7 +30,7 @@ func NewAnalyzerClient(config *viper.Viper) (*AnalyzerClient, error) {
 
 type InstanceResult struct {
 	InstanceType string  `json:"instanceType"`
-	QosValue     float32 `json:"qosValue"`
+	QosValue     float64 `json:"qosValue"`
 }
 
 type GetNextInstanceTypesRequest struct {
@@ -50,7 +50,7 @@ type GetNextInstanceTypesResponse struct {
 func (client *AnalyzerClient) GetNextInstanceTypes(
 	runId string,
 	appName string,
-	results map[string]float32,
+	results map[string]float64,
 	logger *logging.Logger) ([]string, error) {
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "api", "apps", runId, "suggest-instance-types")

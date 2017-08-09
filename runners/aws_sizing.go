@@ -28,7 +28,7 @@ type AWSSizingRunResults struct {
 	RunId       string             `bson:"runId" json:"runId"`
 	Duration    string             `bson:"duration" json:"duration"`
 	AppName     string             `bson:"appName" json:"appName"`
-	TestResults map[string]float32 `bson:"testResult" json:"testResult"`
+	TestResults map[string]float64 `bson:"testResult" json:"testResult"`
 }
 
 // AWSSizingRun is the overall app request for find best instance type in AWS.
@@ -86,7 +86,7 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 func (run *AWSSizingRun) Run() error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
-	results := make(map[string]float32)
+	results := make(map[string]float64)
 	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
 	if err != nil {
 		return errors.New("Unable to fetch initial instance types: " + err.Error())
@@ -95,7 +95,7 @@ func (run *AWSSizingRun) Run() error {
 
 	startTime := time.Now()
 	for len(instanceTypes) > 0 {
-		results = make(map[string]float32)
+		results = make(map[string]float64)
 		jobs := map[string]*AWSSizingSingleRun{}
 		for _, instanceType := range instanceTypes {
 			newId := run.GetId() + "-" + instanceType
@@ -252,10 +252,16 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 		return errors.New(message)
 	}
 
+	// Report the average of the run results
+	var total float64
+	for _, result := range runResults {
+		total += result.QosValue
+	}
+
 	// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
 	sizeResults.QosValue = models.SLO{
 		Metric: run.ApplicationConfig.SLO.Metric,
-		Value:  float32(runResults[0].QosValue),
+		Value:  total / float64(len(runResults)),
 		Type:   run.ApplicationConfig.SLO.Type,
 	}
 	sizeResults.Duration = time.Since(startTime).String()

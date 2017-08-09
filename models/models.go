@@ -55,7 +55,7 @@ type LocustController struct {
 
 type SLO struct {
 	Metric string  `bson:"metric" json:"metric"`
-	Value  float32 `bson:"value" json:"value"`
+	Value  float64 `bson:"value" json:"value"`
 	Type   string  `bson:"type" json:"type"`
 }
 
