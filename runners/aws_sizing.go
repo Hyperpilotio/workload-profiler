@@ -95,6 +95,7 @@ func (run *AWSSizingRun) Run() error {
 
 	startTime := time.Now()
 	for len(instanceTypes) > 0 {
+		results = make(map[string]float32)
 		jobs := []*AWSSizingSingleRun{}
 		for _, instanceType := range instanceTypes {
 			newId := run.GetId() + "-" + instanceType
@@ -106,9 +107,9 @@ func (run *AWSSizingRun) Run() error {
 				newApplicationConfig,
 				run.Config)
 			if err != nil {
-				// TODO: clean up
 				return errors.New("Unable to create AWS single run: " + err.Error())
 			}
+
 			run.JobManager.AddJob(singleRun)
 			jobs = append(jobs, singleRun)
 		}
