@@ -65,9 +65,10 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 		Data:    instanceResults,
 	}
 
+	restClient := resty.New()
 	err := funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
 		logger.Infof("Sending get next instance types request to analyzer %s: %s", requestUrl, request)
-		response, err := resty.R().SetBody(request).Post(requestUrl)
+		response, err := restClient.R().SetBody(request).Post(requestUrl)
 		if err != nil {
 			logger.Warningf("Unable to send analyzer request, retrying: " + err.Error())
 			return false, nil
@@ -90,7 +91,7 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 			client.Url.Path, "api", "apps", runId, "get-optimizer-status")
 
 		logger.Infof("Sending analyzer poll request to %s", requestUrl)
-		pollResponse, err := resty.R().Get(requestUrl)
+		pollResponse, err := restClient.R().Get(requestUrl)
 		if err != nil {
 			logger.Infof("Retrying after error when polling analyzer: %s", err.Error())
 			return false, nil

@@ -379,7 +379,6 @@ func (client *DeployerClient) CreateDeployment(
 	}
 
 	log.Debugf("Received deployer response: %+v", createResponse)
-
 	if createResponse.Error {
 		return nil, errors.New("Unable to create deployment: " + createResponse.Data)
 	}
@@ -411,9 +410,10 @@ func (client *DeployerClient) waitUntilServiceUrlAvailable(
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", serviceName, err.Error())
 	}
 
+	restClient := resty.New()
 	log.Infof("Waiting for service url %s to be available...", url)
 	return funcs.LoopUntil(time.Minute*10, time.Second*10, func() (bool, error) {
-		response, err := resty.R().Get(url)
+		response, err := restClient.R().Get(url)
 		if err != nil {
 			return false, nil
 		}
