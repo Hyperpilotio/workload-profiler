@@ -96,7 +96,7 @@ func (run *AWSSizingRun) Run() error {
 	startTime := time.Now()
 	for len(instanceTypes) > 0 {
 		results = make(map[string]float32)
-		jobs := []*AWSSizingSingleRun{}
+		jobs := map[string]*AWSSizingSingleRun{}
 		for _, instanceType := range instanceTypes {
 			newId := run.GetId() + "-" + instanceType
 			newApplicationConfig := &models.ApplicationConfig{}
@@ -111,20 +111,20 @@ func (run *AWSSizingRun) Run() error {
 			}
 
 			run.JobManager.AddJob(singleRun)
-			jobs = append(jobs, singleRun)
+			jobs[instanceType] = singleRun
 		}
 
-		for _, job := range jobs {
+		for instanceType, job := range jobs {
 			result := <-job.GetResults()
 			if result.Error != "" {
 				log.Warningf(
 					"Failed to run aws single size run with id %s: %s",
 					job.GetId(),
 					result.Error)
+				results[instanceType] = 0.0
 			} else {
 				sizeRunResults := result.Data.(SizeRunResults)
 				qosValue := sizeRunResults.QosValue.Value
-				instanceType := sizeRunResults.InstanceType
 				log.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
 				results[instanceType] = qosValue
 			}
