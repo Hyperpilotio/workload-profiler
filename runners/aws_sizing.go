@@ -49,8 +49,8 @@ type AWSSizingSingleRun struct {
 	ProfileRun
 
 	InstanceType string
-
-	ResultsChan chan *jobs.JobResults
+	Calibration  *models.CalibrationResults
+	ResultsChan  chan *jobs.JobResults
 }
 
 func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.ApplicationConfig, config *viper.Viper) (*AWSSizingRun, error) {
@@ -86,6 +86,14 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 func (run *AWSSizingRun) Run() error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
+
+	log.Infof("Reading calibration results for app %s", appName)
+	metric, err := run.MetricsDB.GetMetric("calibration", appName, &models.CalibrationResults{})
+	if err != nil {
+		return errors.New("Unable to get calibration results for app " + appName + ": " + err.Error())
+	}
+	calibration := metric.(*models.CalibrationResults)
+
 	results := make(map[string]float64)
 	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
 	if err != nil {
@@ -104,6 +112,7 @@ func (run *AWSSizingRun) Run() error {
 			singleRun, err := NewAWSSizingSingleRun(
 				newId,
 				instanceType,
+				calibration,
 				newApplicationConfig,
 				run.Config)
 			if err != nil {
@@ -160,6 +169,7 @@ func (run *AWSSizingRun) Run() error {
 func NewAWSSizingSingleRun(
 	id string,
 	instanceType string,
+	calibration *models.CalibrationResults,
 	applicationConfig *models.ApplicationConfig,
 	config *viper.Viper) (*AWSSizingSingleRun, error) {
 	deployerClient, deployerErr := clients.NewDeployerClient(config)
@@ -182,6 +192,7 @@ func NewAWSSizingSingleRun(
 			Created:           time.Now(),
 		},
 		InstanceType: instanceType,
+		Calibration:  calibration,
 		ResultsChan:  make(chan *jobs.JobResults, 2),
 	}, nil
 }
@@ -227,15 +238,6 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 		AppName:      appName,
 	}
 
-	log.Infof("Reading calibration results for app %s", appName)
-	metric, err := run.MetricsDB.GetMetric("calibration", appName, &models.CalibrationResults{})
-	if err != nil {
-		message := "Unable to get calibration results for app " + appName + ": " + err.Error()
-		run.SetFailed(message)
-		return errors.New(message)
-	}
-	calibration := metric.(*models.CalibrationResults)
-
 	if controller := run.ApplicationConfig.LoadTester.BenchmarkController; controller != nil {
 		if err := replaceTargetingServiceAddress(controller, run.DeployerClient, run.DeploymentId, log); err != nil {
 			message := fmt.Sprintf("Unable to replace service address [%v]: %s", run.ApplicationConfig.ServiceNames, err.Error())
@@ -245,7 +247,7 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 	}
 
 	startTime := time.Now()
-	runResults, err := run.runApplicationLoadTest(run.Id, calibration.FinalResult.LoadIntensity)
+	runResults, err := run.runApplicationLoadTest(run.Id, run.Calibration.FinalResult.LoadIntensity)
 	if err != nil {
 		message := "Unable to run app " + appName + ": " + err.Error()
 		run.SetFailed(message)
