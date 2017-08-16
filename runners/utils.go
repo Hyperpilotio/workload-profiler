@@ -50,8 +50,10 @@ func addCommandParameter(parameter *models.CommandParameter, args []string, valu
 	if parameter.Arg != "" {
 		args = append([]string{parameter.Arg, value}, args...)
 	} else {
-		args = append(args[:parameter.Position],
-			append([]string{value}, args[parameter.Position:]...)...)
+		args = append(args, "")
+		i := parameter.Position
+		copy(args[i+1:], args[i:])
+		args[i] = value
 	}
 
 	return args
