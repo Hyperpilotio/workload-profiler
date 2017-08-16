@@ -66,6 +66,7 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 	}
 
 	restClient := resty.New()
+	restClient.SetCloseConnection(true)
 	err := funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
 		logger.Infof("Sending get next instance types request to analyzer %s: %s", requestUrl, request)
 		response, err := restClient.R().SetBody(request).Post(requestUrl)
