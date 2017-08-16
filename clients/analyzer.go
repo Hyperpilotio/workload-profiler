@@ -91,12 +91,12 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 		return nil, errors.New("Unable to send instance types request to analyzer: " + err.Error())
 	}
 
-	submitStatus = strings.ToLower(submitResponse.Status)
+	submitStatus := strings.ToLower(submitResponse.Status)
 	if submitStatus == "done" {
 		logger.Infof("Analyzer status is done in submit request, returning empty instance types")
 		return []string{}, nil
-	} else if submitStatus != "submitted" {
-		return nil, errors.New("Unable to have analyzer process submit request: " + submitStatus.Error)
+	} else if submitResponse.Error != "" {
+		return nil, errors.New("Unable to have analyzer process submit request: " + submitResponse.Error)
 	}
 
 	var nextInstanceResponse GetNextInstanceTypesResponse
