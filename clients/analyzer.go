@@ -67,6 +67,7 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 
 	restClient := resty.New()
 	restClient.SetCloseConnection(true)
+	var submitResponse GetNextInstanceTypesResponse
 	err := funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
 		logger.Infof("Sending get next instance types request to analyzer %s: %s", requestUrl, request)
 		response, err := restClient.R().SetBody(request).Post(requestUrl)
@@ -79,11 +80,23 @@ func (client *AnalyzerClient) GetNextInstanceTypes(
 			return false, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
 		}
 
+		if err := json.Unmarshal(response.Body(), &submitResponse); err != nil {
+			return false, errors.New("Unable to parse analyzer submit response: " + err.Error())
+		}
+
 		return true, nil
 	})
 
 	if err != nil {
 		return nil, errors.New("Unable to send instance types request to analyzer: " + err.Error())
+	}
+
+	submitStatus = strings.ToLower(submitResponse.Status)
+	if submitStatus == "done" {
+		logger.Infof("Analyzer status is done in submit request, returning empty instance types")
+		return []string{}, nil
+	} else if submitStatus != "submitted" {
+		return nil, errors.New("Unable to have analyzer process submit request: " + submitStatus.Error)
 	}
 
 	var nextInstanceResponse GetNextInstanceTypesResponse
