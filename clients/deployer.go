@@ -420,7 +420,7 @@ func (client *DeployerClient) waitUntilServiceUrlAvailable(
 
 	restClient := resty.New()
 	log.Infof("Waiting for service url %s to be available...", url)
-	return funcs.LoopUntil(time.Minute*10, time.Second*10, func() (bool, error) {
+	return funcs.LoopUntil(time.Minute*30, time.Second*10, func() (bool, error) {
 		response, err := restClient.R().Get(url)
 		if err != nil {
 			return false, nil
