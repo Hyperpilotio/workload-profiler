@@ -46,6 +46,17 @@ func deepCopy(from interface{}, to interface{}) error {
 	return nil
 }
 
+func addCommandParameter(parameter *models.CommandParameter, args []string, value string) []string {
+	if parameter.Arg != "" {
+		args = append([]string{parameter.Arg, value}, args...)
+	} else {
+		args = append(args[:parameter.Position],
+			append([]string{value}, args[parameter.Position:]...)...)
+	}
+
+	return args
+}
+
 func replaceTargetingServiceAddress(
 	newController *models.BenchmarkController,
 	deployerClient *clients.DeployerClient,
@@ -64,20 +75,17 @@ func replaceTargetingServiceAddress(
 			}
 			// Initialize
 			if targetingService.PortConfig != nil {
-				newController.Initialize.Args = append(
-					[]string{
-						targetingService.PortConfig.Arg,
-						strconv.FormatInt(serviceAddress.Port, 10),
-					},
-					newController.Initialize.Args...)
+				newController.Initialize.Args = addCommandParameter(
+					targetingService.PortConfig,
+					newController.Initialize.Args,
+					strconv.FormatInt(serviceAddress.Port, 10))
 			}
+
 			if targetingService.HostConfig != nil {
-				newController.Initialize.Args = append(
-					[]string{
-						targetingService.HostConfig.Arg,
-						serviceAddress.Host,
-					},
-					newController.Initialize.Args...)
+				newController.Initialize.Args = addCommandParameter(
+					targetingService.HostConfig,
+					newController.Initialize.Args,
+					serviceAddress.Host)
 			}
 			log.Infof("Arguments of Initialize command are %s", newController.Initialize.Args)
 		}
@@ -95,20 +103,17 @@ func replaceTargetingServiceAddress(
 
 			// LoadTesterCommand
 			if targetingService.PortConfig != nil {
-				newController.Command.Args = append(
-					[]string{
-						targetingService.PortConfig.Arg,
-						strconv.FormatInt(serviceAddress.Port, 10),
-					},
-					newController.Command.Args...)
+				newController.Command.Args = addCommandParameter(
+					targetingService.PortConfig,
+					newController.Command.Args,
+					strconv.FormatInt(serviceAddress.Port, 10))
 			}
+
 			if targetingService.HostConfig != nil {
-				newController.Command.Args = append(
-					[]string{
-						targetingService.HostConfig.Arg,
-						serviceAddress.Host,
-					},
-					newController.Command.Args...)
+				newController.Command.Args = addCommandParameter(
+					targetingService.HostConfig,
+					newController.Command.Args,
+					serviceAddress.Host)
 			}
 
 			log.Infof("Arguments of load testing command are %s", newController.Command.Args)
