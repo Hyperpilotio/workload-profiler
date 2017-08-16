@@ -21,6 +21,7 @@ type ProfileRun struct {
 	ProfileLog                *log.FileLog
 	State                     string
 	Created                   time.Time
+	SkipUnreserveOnFailure    bool
 }
 
 func (run *ProfileRun) GetId() string {
@@ -54,6 +55,10 @@ func (run *ProfileRun) GetSummary() jobs.JobSummary {
 
 func (run *ProfileRun) GetJobDeploymentConfig() jobs.JobDeploymentConfig {
 	return jobs.JobDeploymentConfig{}
+}
+
+func (run *ProfileRun) IsSkipUnreserveOnFailure() bool {
+	return run.SkipUnreserveOnFailure
 }
 
 type ProfileResults struct {

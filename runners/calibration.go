@@ -19,7 +19,10 @@ type CalibrationRun struct {
 	ProfileRun
 }
 
-func NewCalibrationRun(applicationConfig *models.ApplicationConfig, config *viper.Viper) (*CalibrationRun, error) {
+func NewCalibrationRun(
+	applicationConfig *models.ApplicationConfig,
+	config *viper.Viper,
+	skipUnreserveOnFailure bool) (*CalibrationRun, error) {
 	id, err := generateId("calibrate")
 	if err != nil {
 		return nil, errors.New("Unable to generate calibration Id: " + err.Error())
@@ -45,6 +48,7 @@ func NewCalibrationRun(applicationConfig *models.ApplicationConfig, config *vipe
 			ProfileLog:                log,
 			State:                     "Queued",
 			Created:                   time.Now(),
+			SkipUnreserveOnFailure:    skipUnreserveOnFailure,
 		},
 	}
 

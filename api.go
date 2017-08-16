@@ -202,7 +202,8 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	run, runErr := runners.NewCalibrationRun(applicationConfig, server.Config)
+	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false")
+	run, runErr := runners.NewCalibrationRun(applicationConfig, server.Config, skipFlag != "true")
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
