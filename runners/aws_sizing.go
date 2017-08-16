@@ -130,6 +130,12 @@ func (run *AWSSizingRun) Run() error {
 					"Failed to run aws single size run with id %s: %s",
 					job.GetId(),
 					result.Error)
+				if !clients.IsAWSDeploymentError(result.Error) {
+					// TODO: Report analyzer that we have a critical error and cannot move on
+					log.Warningf("Stopping aws sizing run as we hit a non-aws error")
+					return errors.New(result.Error)
+				}
+
 				results[instanceType] = 0.0
 			} else {
 				sizeRunResults := result.Data.(SizeRunResults)

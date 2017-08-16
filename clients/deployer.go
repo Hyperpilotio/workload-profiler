@@ -17,6 +17,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	ErrAWSError = "Unable to run ec2"
+)
+
 type ServiceMapping struct {
 	NodeId    int    `json:"nodeId"`
 	NodeName  string `json:"nodeName"`
@@ -43,6 +47,10 @@ type DeployerClient struct {
 	Cache map[string]*DeploymentCache
 
 	Url *url.URL
+}
+
+func IsAWSDeploymentError(error string) bool {
+	return strings.Contains(error, ErrAWSError)
 }
 
 func (client *DeployerClient) getCache(deployment string) *DeploymentCache {
