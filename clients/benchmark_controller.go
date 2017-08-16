@@ -63,13 +63,10 @@ func (client *BenchmarkControllerClient) RunCalibration(
 		body["initializeType"] = controller.InitializeType
 	}
 
-	if err := validateLoadTesterCommand(controller.Command); err != nil {
-		return nil, err
-	}
-
 	body["loadTest"] = controller.Command
 	body["slo"] = slo
 	body["stageId"] = stageId
+	body["parserUrl"] = controller.ParserUrl
 
 	err = funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
 		logger.Infof("Sending calibration request to benchmark controller for stage: " + stageId)
@@ -161,19 +158,15 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	// TODO: Intensity arguments might be differnet types, we assume it's all int at the moment
 	args = append(args, strconv.Itoa(int(intensity)))
 	command := models.Command{
-		Image:     loadTesterCommand.Image,
-		Path:      loadTesterCommand.Path,
-		Args:      args,
-		ParserURL: loadTesterCommand.ParserURL,
-	}
-
-	if err := validateCommand(command); err != nil {
-		return nil, err
+		Image: loadTesterCommand.Image,
+		Path:  loadTesterCommand.Path,
+		Args:  args,
 	}
 
 	body["loadTest"] = command
 	body["intensity"] = intensity
 	body["stageId"] = stageId
+	body["parserUrl"] = controller.ParserUrl
 
 	err = funcs.LoopUntil(time.Minute*5, time.Second*5, func() (bool, error) {
 		logger.Infof("Sending benchmark request to benchmark controller for stage: " + stageId)
@@ -230,18 +223,4 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 	}
 
 	return results, nil
-}
-
-func validateCommand(command models.Command) error {
-	if command.ParserURL == nil || *command.ParserURL == "" {
-		return fmt.Errorf("parser field is missing in the Command. Please check your application.json in the database")
-	}
-	return nil
-}
-
-func validateLoadTesterCommand(command models.LoadTesterCommand) error {
-	if command.ParserURL == nil || *command.ParserURL == "" {
-		return fmt.Errorf("parser field is missing in the LoadTesterCommand. Please check your application.json in the database")
-	}
-	return nil
 }

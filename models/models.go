@@ -14,7 +14,6 @@ type ServiceConfig struct {
 
 type Command struct {
 	Image          string           `bson:"image" json:"image"`
-	ParserURL      *string          `bson:"parserUrl,omitempty" json:"parserUrl,omitempty"`
 	Path           string           `bson:"path" json:"path"`
 	Args           []string         `bson:"args" json:"args"`
 	ServiceConfigs *[]ServiceConfig `bson:"serviceConfigs,omitempty" json:"serviceConfigs,omitempty"`
@@ -24,6 +23,7 @@ type BenchmarkController struct {
 	InitializeType string            `bson:"initializeType" json:"initializeType"`
 	Initialize     *Command          `bson:"initialize" json:"initialize"`
 	Command        LoadTesterCommand `bson:"command" json:"command"`
+	ParserUrl      *string           `bson:"parserUrl,omitempty" json:"parserUrl,omitempty"`
 }
 
 type SlowCookerAppLoad struct {
@@ -107,7 +107,6 @@ type IntensityArgument struct {
 
 type LoadTesterCommand struct {
 	Image          string              `bson:"image" json:"image"`
-	ParserURL      *string             `bson:"parserUrl,omitempty" json:"parserUrl,omitempty"`
 	Path           string              `bson:"path" json:"path"`
 	Args           []string            `bson:"args" json:"args"`
 	ServiceConfigs *[]ServiceConfig    `bson:"serviceConfigs,omitempty" json:"serviceConfigs,omitempty"`
