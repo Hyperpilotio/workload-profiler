@@ -105,9 +105,9 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 
 	// TODO: We assume region is us-east-1
 	region := "us-east-1"
-	allInstances := c.DefaultQuery("allInstances", "false")
+	allInstances := c.DefaultQuery("allInstances", "false") == "true"
 	previousGenerations := []string{}
-	if allInstances == "true" {
+	if allInstances {
 		previousGeneration, err := server.ConfigDB.GetPreviousGenerationInstanceType(region)
 		if err != nil {
 			message := fmt.Sprintf("Unable to get previous generation for %s: %s", region, err.Error())
@@ -118,13 +118,18 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 			})
 			return
 		}
+
 		for _, awsNodeType := range previousGeneration.Data {
 			previousGenerations = append(previousGenerations, awsNodeType.Name)
 		}
 	}
 
-	run, err := runners.NewAWSSizingRun(server.JobManager, applicationConfig,
-		server.Config, previousGenerations, allInstances == "true")
+	run, err := runners.NewAWSSizingRun(
+		server.JobManager,
+		applicationConfig,
+		server.Config,
+		previousGenerations,
+		allInstances)
 	if err != nil {
 		message := fmt.Sprintf("Unable to create aws sizing run: " + err.Error())
 		glog.Infof(message)
