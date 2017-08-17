@@ -103,8 +103,9 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 		return
 	}
 
+	allInstances := c.DefaultQuery("allInstances", "false") == "true"
 	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
-	run, err := runners.NewAWSSizingRun(server.JobManager, applicationConfig, server.Config, skipFlag)
+	run, err := runners.NewAWSSizingRun(server.JobManager, applicationConfig, server.Config, allInstances, skipFlag)
 	if err != nil {
 		message := fmt.Sprintf("Unable to create aws sizing run: " + err.Error())
 		glog.Infof(message)
