@@ -115,6 +115,7 @@ func (run *AWSSizingRun) Run() error {
 	results := make(map[string]float64)
 	instanceTypes := []string{}
 	if run.AllInstances {
+		log.Infof("Running through all instances for this sizing run " + run.GetId())
 		// TODO: We assume region is us-east-1
 		region := "us-east-1"
 		availabilityZone := "us-east-1a"
@@ -123,8 +124,8 @@ func (run *AWSSizingRun) Run() error {
 			return errors.New("Unable to fetch initial instance types: " + err.Error())
 		}
 
-		glog.V(1).Infof("Supported %s EC2 instance types: %+v", availabilityZone, supportedInstanceTypes)
-		glog.V(1).Infof("Filter previous generations EC2 instance type: %+v", run.PreviousGenerations)
+		log.Infof("Supported %s EC2 instance types: %+v", availabilityZone, supportedInstanceTypes)
+		log.Infof("Filter previous generations EC2 instance type: %+v", run.PreviousGenerations)
 		filterInstanceTypes := []string{}
 		for _, instanceTypeName := range supportedInstanceTypes {
 			hasPreviousGeneration := false
@@ -138,6 +139,7 @@ func (run *AWSSizingRun) Run() error {
 				filterInstanceTypes = append(filterInstanceTypes, instanceTypeName)
 			}
 		}
+
 		instanceTypes = filterInstanceTypes
 	} else {
 		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)

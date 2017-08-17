@@ -118,6 +118,7 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 			})
 			return
 		}
+
 		for _, awsNodeType := range previousGeneration.Data {
 			previousGenerations = append(previousGenerations, awsNodeType.Name)
 		}
