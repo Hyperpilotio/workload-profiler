@@ -41,6 +41,7 @@ type AWSSizingRun struct {
 	Config         *viper.Viper
 	JobManager     *jobs.JobManager
 	AnalyzerClient *clients.AnalyzerClient
+	AllInstances   bool
 }
 
 // AWSSizingSingleRun represents a single benchmark run for a particular
@@ -53,7 +54,11 @@ type AWSSizingSingleRun struct {
 	ResultsChan  chan *jobs.JobResults
 }
 
-func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.ApplicationConfig, config *viper.Viper) (*AWSSizingRun, error) {
+func NewAWSSizingRun(
+	jobManager *jobs.JobManager,
+	applicationConfig *models.ApplicationConfig,
+	config *viper.Viper,
+	allInstances bool) (*AWSSizingRun, error) {
 	id, err := generateId("awssizing")
 	if err != nil {
 		return nil, errors.New("Unable to generate id: " + err.Error())
@@ -80,6 +85,7 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 		AnalyzerClient: analyzerClient,
 		JobManager:     jobManager,
 		Config:         config,
+		AllInstances:   allInstances,
 	}, nil
 }
 

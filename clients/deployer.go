@@ -434,3 +434,30 @@ func (client *DeployerClient) waitUntilServiceUrlAvailable(
 		return true, nil
 	})
 }
+
+type GetSupportedAWSInstancesResponse struct {
+	Instances []string `json:"instances"`
+	Error     bool     `json:"error"`
+	Data      string   `json:"data"`
+}
+
+func (client *DeployerClient) getSupportedAWSInstances(region stirng, availabilityZone string) ([]string, error) {
+	requestUrl := UrlBasePath(client.Url) +
+		path.Join(client.Url.Path, "v1", "aws", "regions", region, "availabilityZones", availabilityZone)
+
+	response, err := resty.R().Get(requestUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	instanceResponse := GetSupportedAWSInstancesResponse{}
+	if err := json.Unmarshal(response.Body(), &instanceResponse); err != nil {
+		return nil, errors.New("Unable to parse aws instances response: " + err.Error())
+	}
+
+	if instanceResponse.Error {
+		return nil, errors.New("Unable to get supported aws instances: " + err.Error())
+	}
+
+	return instanceRepsonse.Instances, nil
+}
