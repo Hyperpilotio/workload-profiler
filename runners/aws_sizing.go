@@ -41,7 +41,9 @@ type AWSSizingRun struct {
 	Config         *viper.Viper
 	JobManager     *jobs.JobManager
 	AnalyzerClient *clients.AnalyzerClient
-	AllInstances   bool
+
+	PreviousGenerations []string
+	AllInstances        bool
 }
 
 // AWSSizingSingleRun represents a single benchmark run for a particular
@@ -58,6 +60,7 @@ func NewAWSSizingRun(
 	jobManager *jobs.JobManager,
 	applicationConfig *models.ApplicationConfig,
 	config *viper.Viper,
+	previousGenerations []string,
 	allInstances bool,
 	skipUnreserveOnFailure bool) (*AWSSizingRun, error) {
 	id, err := generateId("awssizing")
@@ -70,6 +73,11 @@ func NewAWSSizingRun(
 		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
 	}
 
+	deployerClient, deployerErr := clients.NewDeployerClient(config)
+	if deployerErr != nil {
+		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	}
+
 	analyzerClient, err := clients.NewAnalyzerClient(config)
 	if err != nil {
 		return nil, errors.New("Unable to create analyzer client: " + err.Error())
@@ -79,15 +87,17 @@ func NewAWSSizingRun(
 		ProfileRun: ProfileRun{
 			Id:                     id,
 			ApplicationConfig:      applicationConfig,
+			DeployerClient:         deployerClient,
 			MetricsDB:              db.NewMetricsDB(config),
 			ProfileLog:             log,
 			Created:                time.Now(),
 			SkipUnreserveOnFailure: skipUnreserveOnFailure,
 		},
-		AnalyzerClient: analyzerClient,
-		JobManager:     jobManager,
-		Config:         config,
-		AllInstances:   allInstances,
+		AnalyzerClient:      analyzerClient,
+		JobManager:          jobManager,
+		Config:              config,
+		PreviousGenerations: previousGenerations,
+		AllInstances:        allInstances,
 	}, nil
 }
 
@@ -103,9 +113,38 @@ func (run *AWSSizingRun) Run() error {
 	calibration := metric.(*models.CalibrationResults)
 
 	results := make(map[string]float64)
-	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
-	if err != nil {
-		return errors.New("Unable to fetch initial instance types: " + err.Error())
+	instanceTypes := []string{}
+	if run.AllInstances {
+		// TODO: We assume region is us-east-1
+		region := "us-east-1"
+		availabilityZone := "us-east-1a"
+		supportedInstanceTypes, err := run.DeployerClient.GetSupportedAWSInstances(region, availabilityZone)
+		if err != nil {
+			return errors.New("Unable to fetch initial instance types: " + err.Error())
+		}
+
+		glog.V(1).Infof("Supported %s EC2 instance types: %+v", availabilityZone, supportedInstanceTypes)
+		glog.V(1).Infof("Filter previous generations EC2 instance type: %+v", run.PreviousGenerations)
+		filterInstanceTypes := []string{}
+		for _, instanceTypeName := range supportedInstanceTypes {
+			hasPreviousGeneration := false
+			for _, previousInstanceTypeName := range run.PreviousGenerations {
+				if instanceTypeName == previousInstanceTypeName {
+					hasPreviousGeneration = true
+					break
+				}
+			}
+			if !hasPreviousGeneration {
+				filterInstanceTypes = append(filterInstanceTypes, instanceTypeName)
+			}
+		}
+		instanceTypes = filterInstanceTypes
+	} else {
+		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
+		if err != nil {
+			return errors.New("Unable to fetch initial instance types: " + err.Error())
+		}
+		instanceTypes = sugggestInstanceTypes
 	}
 	log.Infof("Received initial instance types: %+v", instanceTypes)
 
@@ -153,13 +192,17 @@ func (run *AWSSizingRun) Run() error {
 			}
 		}
 
-		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
-		if err != nil {
-			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
-		}
+		if run.AllInstances {
+			instanceTypes = []string{}
+		} else {
+			sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
+			if err != nil {
+				return errors.New("Unable to get next instance types from analyzer: " + err.Error())
+			}
 
-		log.Infof("Received next instance types to run sizing: %s", sugggestInstanceTypes)
-		instanceTypes = sugggestInstanceTypes
+			log.Infof("Received next instance types to run sizing: %s", sugggestInstanceTypes)
+			instanceTypes = sugggestInstanceTypes
+		}
 	}
 
 	log.Infof("AWS Sizing run finished for " + run.Id)

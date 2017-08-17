@@ -65,3 +65,8 @@ type SizingResults struct {
 	AppName   string `bson:"appName" json:"appName", binding:"required"`
 	SloResult SLO    `bson:"sloResult" json:"sloResult", binding:"required"`
 }
+
+type PreviousGenerationInstanceType struct {
+	Data   []AWSNodeType `bson:"data" json:"data"`
+	Region string        `bson:"region" json:"region"`
+}

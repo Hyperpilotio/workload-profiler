@@ -13,12 +13,13 @@ import (
 )
 
 type ConfigDB struct {
-	Url                    string
-	User                   string
-	Password               string
-	Database               string
-	ApplicationsCollection string
-	BenchmarksCollection   string
+	Url                          string
+	User                         string
+	Password                     string
+	Database                     string
+	ApplicationsCollection       string
+	BenchmarksCollection         string
+	PreviousGenerationCollection string
 }
 
 type MetricsDB struct {
@@ -33,12 +34,13 @@ type MetricsDB struct {
 
 func NewConfigDB(config *viper.Viper) *ConfigDB {
 	return &ConfigDB{
-		Url:                    config.GetString("database.url"),
-		User:                   config.GetString("database.user"),
-		Password:               config.GetString("database.password"),
-		Database:               config.GetString("database.configDatabase"),
-		ApplicationsCollection: config.GetString("database.applicationCollection"),
-		BenchmarksCollection:   config.GetString("database.benchmarkCollection"),
+		Url:                          config.GetString("database.url"),
+		User:                         config.GetString("database.user"),
+		Password:                     config.GetString("database.password"),
+		Database:                     config.GetString("database.configDatabase"),
+		ApplicationsCollection:       config.GetString("database.applicationCollection"),
+		BenchmarksCollection:         config.GetString("database.benchmarkCollection"),
+		PreviousGenerationCollection: config.GetString("database.previousGenerationCollection"),
 	}
 }
 
@@ -72,6 +74,23 @@ func (configDb *ConfigDB) GetApplicationConfig(name string) (*models.Application
 	}
 
 	return &appConfig, nil
+}
+
+func (configDb *ConfigDB) GetPreviousGenerationInstanceType(region string) (*models.PreviousGenerationInstanceType, error) {
+	session, sessionErr := connectMongo(configDb.Url, configDb.Database, configDb.User, configDb.Password)
+	if sessionErr != nil {
+		return nil, errors.New("Unable to create mongo session: " + sessionErr.Error())
+	}
+	glog.V(1).Infof("Successfully connected to the config DB for region %s", region)
+	defer session.Close()
+
+	collection := session.DB(configDb.Database).C(configDb.PreviousGenerationCollection)
+	var previousGeneration models.PreviousGenerationInstanceType
+	if err := collection.Find(bson.M{"region": region}).One(&previousGeneration); err != nil {
+		return nil, errors.New("Unable to find previous generation from db: " + err.Error())
+	}
+
+	return &previousGeneration, nil
 }
 
 func (configDb *ConfigDB) GetBenchmarks() ([]models.Benchmark, error) {
