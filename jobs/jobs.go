@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -146,6 +147,10 @@ func (worker *Worker) RunJob(job Job) error {
 		job.SetState(JOB_FINISHED)
 	}
 
+	log.Logger.Infof(
+		"Job %s skip unreserve on failure is set to %s",
+		job.GetId(),
+		strconv.FormatBool(job.IsSkipUnreserveOnFailure()))
 	if jobErr == nil || !job.IsSkipUnreserveOnFailure() {
 		unreserveResult := <-worker.Clusters.UnreserveDeployment(runId, log.Logger)
 		if unreserveResult.Err != "" {
