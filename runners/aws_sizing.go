@@ -53,7 +53,11 @@ type AWSSizingSingleRun struct {
 	ResultsChan  chan *jobs.JobResults
 }
 
-func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.ApplicationConfig, config *viper.Viper) (*AWSSizingRun, error) {
+func NewAWSSizingRun(
+	jobManager *jobs.JobManager,
+	applicationConfig *models.ApplicationConfig,
+	config *viper.Viper,
+	skipUnreserveOnFailure bool) (*AWSSizingRun, error) {
 	id, err := generateId("awssizing")
 	if err != nil {
 		return nil, errors.New("Unable to generate id: " + err.Error())
@@ -71,11 +75,12 @@ func NewAWSSizingRun(jobManager *jobs.JobManager, applicationConfig *models.Appl
 
 	return &AWSSizingRun{
 		ProfileRun: ProfileRun{
-			Id:                id,
-			ApplicationConfig: applicationConfig,
-			MetricsDB:         db.NewMetricsDB(config),
-			ProfileLog:        log,
-			Created:           time.Now(),
+			Id:                     id,
+			ApplicationConfig:      applicationConfig,
+			MetricsDB:              db.NewMetricsDB(config),
+			ProfileLog:             log,
+			Created:                time.Now(),
+			SkipUnreserveOnFailure: skipUnreserveOnFailure,
 		},
 		AnalyzerClient: analyzerClient,
 		JobManager:     jobManager,
@@ -113,7 +118,8 @@ func (run *AWSSizingRun) Run() error {
 				instanceType,
 				calibration,
 				newApplicationConfig,
-				run.Config)
+				run.Config,
+				run.IsSkipUnreserveOnFailure())
 			if err != nil {
 				return errors.New("Unable to create AWS single run: " + err.Error())
 			}
@@ -163,7 +169,8 @@ func NewAWSSizingSingleRun(
 	instanceType string,
 	calibration *models.CalibrationResults,
 	applicationConfig *models.ApplicationConfig,
-	config *viper.Viper) (*AWSSizingSingleRun, error) {
+	config *viper.Viper,
+	SkipUnreserveOnFailure bool) (*AWSSizingSingleRun, error) {
 	deployerClient, deployerErr := clients.NewDeployerClient(config)
 	if deployerErr != nil {
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
@@ -176,12 +183,13 @@ func NewAWSSizingSingleRun(
 
 	return &AWSSizingSingleRun{
 		ProfileRun: ProfileRun{
-			Id:                id,
-			ApplicationConfig: applicationConfig,
-			DeployerClient:    deployerClient,
-			MetricsDB:         db.NewMetricsDB(config),
-			ProfileLog:        log,
-			Created:           time.Now(),
+			Id:                     id,
+			ApplicationConfig:      applicationConfig,
+			DeployerClient:         deployerClient,
+			MetricsDB:              db.NewMetricsDB(config),
+			ProfileLog:             log,
+			Created:                time.Now(),
+			SkipUnreserveOnFailure: SkipUnreserveOnFailure,
 		},
 		InstanceType: instanceType,
 		Calibration:  calibration,

@@ -141,16 +141,16 @@ func (worker *Worker) RunJob(job Job) error {
 	log.Logger.Infof("Running %s job", job.GetId())
 	jobErr := job.Run(deploymentId)
 	if jobErr != nil {
-		log.Logger.Errorf("Unable to run %s job: %s", runId, jobErr)
+		log.Logger.Errorf(
+			"Unable to run %s job: %s, skip unreserve on failure: %s",
+			runId,
+			jobErr,
+			strconv.FormatBool(job.IsSkipUnreserveOnFailure()))
 		job.SetState(JOB_FAILED)
 	} else {
 		job.SetState(JOB_FINISHED)
 	}
 
-	log.Logger.Infof(
-		"Job %s skip unreserve on failure is set to %s",
-		job.GetId(),
-		strconv.FormatBool(job.IsSkipUnreserveOnFailure()))
 	if jobErr == nil || !job.IsSkipUnreserveOnFailure() {
 		unreserveResult := <-worker.Clusters.UnreserveDeployment(runId, log.Logger)
 		if unreserveResult.Err != "" {

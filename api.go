@@ -103,7 +103,8 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 		return
 	}
 
-	run, err := runners.NewAWSSizingRun(server.JobManager, applicationConfig, server.Config)
+	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
+	run, err := runners.NewAWSSizingRun(server.JobManager, applicationConfig, server.Config, skipFlag)
 	if err != nil {
 		message := fmt.Sprintf("Unable to create aws sizing run: " + err.Error())
 		glog.Infof(message)
@@ -202,8 +203,8 @@ func (server *Server) runCalibration(c *gin.Context) {
 		return
 	}
 
-	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false")
-	run, runErr := runners.NewCalibrationRun(applicationConfig, server.Config, skipFlag == "true")
+	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
+	run, runErr := runners.NewCalibrationRun(applicationConfig, server.Config, skipFlag)
 	if runErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
