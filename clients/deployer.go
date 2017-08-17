@@ -441,9 +441,9 @@ type GetSupportedAWSInstancesResponse struct {
 	Data      string   `json:"data"`
 }
 
-func (client *DeployerClient) getSupportedAWSInstances(region stirng, availabilityZone string) ([]string, error) {
+func (client *DeployerClient) GetSupportedAWSInstances(region string, availabilityZone string) ([]string, error) {
 	requestUrl := UrlBasePath(client.Url) +
-		path.Join(client.Url.Path, "v1", "aws", "regions", region, "availabilityZones", availabilityZone)
+		path.Join(client.Url.Path, "v1", "aws", "regions", region, "availabilityZones", availabilityZone, "instances")
 
 	response, err := resty.R().Get(requestUrl)
 	if err != nil {
@@ -459,5 +459,5 @@ func (client *DeployerClient) getSupportedAWSInstances(region stirng, availabili
 		return nil, errors.New("Unable to get supported aws instances: " + err.Error())
 	}
 
-	return instanceRepsonse.Instances, nil
+	return instanceResponse.Instances, nil
 }
