@@ -101,7 +101,6 @@ func (run *AWSSizingRun) Run() error {
 	}
 	log.Infof("Received initial instance types: %+v", instanceTypes)
 
-	startTime := time.Now()
 	for len(instanceTypes) > 0 {
 		results = make(map[string]float64)
 		jobs := map[string]*AWSSizingSingleRun{}
@@ -154,20 +153,7 @@ func (run *AWSSizingRun) Run() error {
 		instanceTypes = sugggestInstanceTypes
 	}
 
-	awsSizingRunResults := &AWSSizingRunResults{
-		RunId:       run.Id,
-		AppName:     appName,
-		Duration:    time.Since(startTime).String(),
-		TestResults: results,
-	}
-
-	log.Infof("Storing aws sizing results for app %s: %+v", appName, awsSizingRunResults)
-	if err := run.MetricsDB.WriteMetrics("sizing", awsSizingRunResults); err != nil {
-		message := fmt.Sprintf("Unable to store aws sizing results for app %s: %s", appName, err.Error())
-		log.Warningf(message)
-		return errors.New(message)
-	}
-	log.Infof("AWS Sizing run finished")
+	log.Infof("AWS Sizing run finished for " + run.Id)
 
 	return nil
 }
