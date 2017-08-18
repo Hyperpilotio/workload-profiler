@@ -6,22 +6,30 @@ ORGANIZATION=hyperpilot
 IMAGE=workload-profiler
 TAG=latest
 
-init:
+glide-check:
+	@if [ "X$(GLIDE)" = "X"	]; then \
+		echo "glide doesn't exist."; \
+		curl https://glide.sh/get | sh ; \
+	else \
+		echo "glide installed"; \
+	fi
+
+init: glide-check
 	glide install
 
 test:
 	${GO_EXECUTABLE} test ${PACKAGES}
 
-build:
+build: init
 	CGO_ENABLED=0 go build -a -installsuffix cgo
 
-build-linux:
+build-linux: init
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo
 
 docker-build:
-	docker build . -t ${ORGANIZATION}/${IMAGE}:${TAG}
+	docker build --no-cache . -t ${ORGANIZATION}/${IMAGE}:${TAG}
 
-docker-push:
+docker-push: docker-build
 	docker push ${ORGANIZATION}/${IMAGE}:${TAG}
 
 run:

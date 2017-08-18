@@ -1,0 +1,33 @@
+---
+type: workflow
+name: workflow
+description: build workflow
+inputs:
+  parameters:
+    commit:
+      default: "%%session.commit%%"
+    repo:
+      default: "%%session.repo%%"
+    docker_username:
+      default: "hyperpilotuser"
+    docker_password:
+      default: "hyper123"
+    version:
+      default: "test"
+    git_username:
+      default: "%%secrets.==$1$key=default$text$AFI/ixlURYS4Qo1hqfGpLzyJMtrcH5BqlHkdo15S44IZ8lvFozvSGqsYxle9y2sba9Z3p+CUl3sGVkWCfwvaLBlTF+a8JskGTiCdHBUjD84r7byK8rEmgimRYhg2Y8ZYS4RA+Bkx53QhY7UGdG2s+i/eWZ6+FbpB+Gpp1KnNU1iyCLWJJCQTRh2RKgDbJebdeo4RTQU4uQakEZz03WpYN7V9GAHsbkjCj8mY9mlBBunrVBgGFrrn/dOtbKyZ5CNUlN6z/eSybv7mCMbg7jpYDontOVCIxmnYJOlxkI3RTLbjAcf8b1MLjyTA5AXzzQYR7fdFKhiPj28ddrWWJW2Qb5O3bcb2RLTegNIoZHk6NFSLLJYCrMnacF4tPYog3+EDBm3800BEPPvXT+v3XTQ/DN9HY3LSNA5oSt07Dk1eWvxHpQ====%%"
+    git_password:
+      default: "%%secrets.==$1$key=default$text$AAzR/dzmp9HCQV/BS6qdy56xyDf8BssrokijiwDcsnHEKhMtRToMmeFH+Axim1ICXSsn7Kyfwb1IAcVWLkdMzkJjxMFgCXbidpmvV56nvHm4l6ewL08lhqz/vp8Tqf8R/OxFtx75penbO+J/Mj5/qapAr91dm7NALnnFlSZ29JkR4ccO7P1PfbJ3wHOuAt/KZ8q5Ro+T0nHM1go/5JQF8lFVzFrs4JcbsUbZinzdW+EUNu/bxTz6k7KLD8BXB9EDYfTMzXXLJxLv0j2Rl0Za9eBDK6+bOTP7hJa6hJHrAOIcvPHQP6+zYkbRN8g/JAmxg0N+VHUQfQ0Rq494szP3o/Agmfmpgj3SCM3p/i9ZNPrwpwo+zYz6MAaxNbaItz71XKH1Dvj7UUqFd7D171ojxCIcK7ySHzGrhpWKquMOYG7rJg====%%"
+steps:
+- checkout:
+    template: checkout
+- build_binary:
+    template: build_binary
+    parameters:
+      code: "%%steps.checkout.code%%"
+-
+  publish_image:
+      template: docker_image_build_container
+      parameters:
+        code: "%%steps.build_binary.code%%"
+        tag: "test"
