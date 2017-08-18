@@ -19,6 +19,7 @@ type ConfigDB struct {
 	Database                     string
 	ApplicationsCollection       string
 	BenchmarksCollection         string
+	NodeTypeCollection           string
 	PreviousGenerationCollection string
 }
 
@@ -40,6 +41,7 @@ func NewConfigDB(config *viper.Viper) *ConfigDB {
 		Database:                     config.GetString("database.configDatabase"),
 		ApplicationsCollection:       config.GetString("database.applicationCollection"),
 		BenchmarksCollection:         config.GetString("database.benchmarkCollection"),
+		NodeTypeCollection:           config.GetString("database.nodeTypeCollection"),
 		PreviousGenerationCollection: config.GetString("database.previousGenerationCollection"),
 	}
 }
@@ -76,7 +78,24 @@ func (configDb *ConfigDB) GetApplicationConfig(name string) (*models.Application
 	return &appConfig, nil
 }
 
-func (configDb *ConfigDB) GetPreviousGenerationInstanceType(region string) (*models.PreviousGenerationInstanceType, error) {
+func (configDb *ConfigDB) GetNodeTypeConfig(region string) (*models.AWSRegionNodeTypeConfig, error) {
+	session, sessionErr := connectMongo(configDb.Url, configDb.Database, configDb.User, configDb.Password)
+	if sessionErr != nil {
+		return nil, errors.New("Unable to create mongo session: " + sessionErr.Error())
+	}
+	glog.V(1).Infof("Successfully connected to the config DB for region %s", region)
+	defer session.Close()
+
+	collection := session.DB(configDb.Database).C(configDb.NodeTypeCollection)
+	var nodeTypeConfig models.AWSRegionNodeTypeConfig
+	if err := collection.Find(bson.M{"region": region}).One(&nodeTypeConfig); err != nil {
+		return nil, errors.New("Unable to find node type from db: " + err.Error())
+	}
+
+	return &nodeTypeConfig, nil
+}
+
+func (configDb *ConfigDB) GetPreviousGenerationConfig(region string) (*models.AWSRegionNodeTypeConfig, error) {
 	session, sessionErr := connectMongo(configDb.Url, configDb.Database, configDb.User, configDb.Password)
 	if sessionErr != nil {
 		return nil, errors.New("Unable to create mongo session: " + sessionErr.Error())
@@ -85,12 +104,12 @@ func (configDb *ConfigDB) GetPreviousGenerationInstanceType(region string) (*mod
 	defer session.Close()
 
 	collection := session.DB(configDb.Database).C(configDb.PreviousGenerationCollection)
-	var previousGeneration models.PreviousGenerationInstanceType
-	if err := collection.Find(bson.M{"region": region}).One(&previousGeneration); err != nil {
+	var nodeTypeConfig models.AWSRegionNodeTypeConfig
+	if err := collection.Find(bson.M{"region": region}).One(&nodeTypeConfig); err != nil {
 		return nil, errors.New("Unable to find previous generation from db: " + err.Error())
 	}
 
-	return &previousGeneration, nil
+	return &nodeTypeConfig, nil
 }
 
 func (configDb *ConfigDB) GetBenchmarks() ([]models.Benchmark, error) {

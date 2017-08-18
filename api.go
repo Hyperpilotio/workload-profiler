@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/hyperpilotio/workload-profiler/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/workload-profiler/db"
@@ -106,9 +108,22 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 	// TODO: We assume region is us-east-1
 	region := "us-east-1"
 	allInstances := c.DefaultQuery("allInstances", "false") == "true"
+	var awsRegionNodeTypeConfig *models.AWSRegionNodeTypeConfig
 	previousGenerations := []string{}
 	if allInstances {
-		previousGeneration, err := server.ConfigDB.GetPreviousGenerationInstanceType(region)
+		nodeTypeConfig, err := server.ConfigDB.GetNodeTypeConfig(region)
+		if err != nil {
+			message := fmt.Sprintf("Unable to get node type for %s: %s", region, err.Error())
+			glog.Infof(message)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": true,
+				"data":  message,
+			})
+			return
+		}
+		awsRegionNodeTypeConfig = nodeTypeConfig
+
+		previousGeneration, err := server.ConfigDB.GetPreviousGenerationConfig(region)
 		if err != nil {
 			message := fmt.Sprintf("Unable to get previous generation for %s: %s", region, err.Error())
 			glog.Infof(message)
@@ -129,6 +144,7 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 		server.JobManager,
 		applicationConfig,
 		server.Config,
+		awsRegionNodeTypeConfig,
 		previousGenerations,
 		allInstances,
 		skipFlag)

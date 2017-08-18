@@ -13,6 +13,7 @@ import (
 	"github.com/hyperpilotio/workload-profiler/db"
 	"github.com/hyperpilotio/workload-profiler/jobs"
 	"github.com/hyperpilotio/workload-profiler/models"
+
 	"github.com/spf13/viper"
 )
 
@@ -42,6 +43,7 @@ type AWSSizingRun struct {
 	JobManager     *jobs.JobManager
 	AnalyzerClient *clients.AnalyzerClient
 
+	NodeTypeConfig      *models.AWSRegionNodeTypeConfig
 	PreviousGenerations []string
 	AllInstances        bool
 }
@@ -60,6 +62,7 @@ func NewAWSSizingRun(
 	jobManager *jobs.JobManager,
 	applicationConfig *models.ApplicationConfig,
 	config *viper.Viper,
+	nodeTypeConfig *models.AWSRegionNodeTypeConfig,
 	previousGenerations []string,
 	allInstances bool,
 	skipUnreserveOnFailure bool) (*AWSSizingRun, error) {
@@ -96,6 +99,7 @@ func NewAWSSizingRun(
 		AnalyzerClient:      analyzerClient,
 		JobManager:          jobManager,
 		Config:              config,
+		NodeTypeConfig:      nodeTypeConfig,
 		PreviousGenerations: previousGenerations,
 		AllInstances:        allInstances,
 	}, nil

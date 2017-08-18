@@ -66,7 +66,7 @@ type SizingResults struct {
 	SloResult SLO    `bson:"sloResult" json:"sloResult", binding:"required"`
 }
 
-type PreviousGenerationInstanceType struct {
+type AWSRegionNodeTypeConfig struct {
 	Data   []AWSNodeType `bson:"data" json:"data"`
 	Region string        `bson:"region" json:"region"`
 }
