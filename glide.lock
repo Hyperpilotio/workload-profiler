@@ -1,5 +1,5 @@
-hash: 8f9f4979ad649037a48ebd5887621e72037130b7d966c0ac8bdfecb7eb1277c4
-updated: 2017-07-20T16:32:31.891921299+08:00
+hash: 78038458ec7be0bd13258f318f5204df725a2f49d2c1e79adcd45203396dc06a
+updated: 2017-08-18T17:16:12.365920467+08:00
 imports:
 - name: github.com/aws/aws-sdk-go
   version: 00fb2125993965df739fa3398b03bef3eb2e198f
@@ -21,6 +21,7 @@ imports:
   - aws/session
   - aws/signer/v4
   - private/protocol
+  - private/protocol/ec2query
   - private/protocol/json/jsonutil
   - private/protocol/jsonrpc
   - private/protocol/query
@@ -48,7 +49,6 @@ imports:
   version: 09691a3b6378b740595c1002f40c34dd5f218a22
   subpackages:
   - log
-  - swagger
 - name: github.com/fsnotify/fsnotify
   version: a904159b9206978bb6d53fcc7a769e5cd726c737
 - name: github.com/ghodss/yaml
@@ -95,17 +95,17 @@ imports:
   - json/scanner
   - json/token
 - name: github.com/hyperpilotio/blobstore
-  version: 2d9f571d349328c90844d537818adeafa29f53d4
+  version: 1d8686626448c5d44b63ca2afcc05b2e05db3acb
 - name: github.com/hyperpilotio/container-benchmarks
   version: 48941bd34193dba242f27d4eb6ac0efd657a9d10
   subpackages:
   - benchmark-agent/apis
 - name: github.com/hyperpilotio/deployer
-  version: f5f1817270bfe4c7c83d5a5d9eff77059e5bd4ec
+  version: 700bbeeb437b63f649cad1d7d038551521d4b876
   subpackages:
   - apis
 - name: github.com/hyperpilotio/go-utils
-  version: a70ef282e0c46cda89969ae6adbf70025f63ea4d
+  version: f3d0f91a772385bddcc78bfc4a9cbf6bea4829d2
   subpackages:
   - funcs
   - log
@@ -194,8 +194,6 @@ imports:
 - name: k8s.io/apimachinery
   version: 75b8dd260ef0469d96d578705a87cffd0e09dab8
   subpackages:
-  - pkg/api/equality
-  - pkg/api/errors
   - pkg/api/meta
   - pkg/api/resource
   - pkg/apimachinery
@@ -214,29 +212,22 @@ imports:
   - pkg/runtime/serializer/json
   - pkg/runtime/serializer/protobuf
   - pkg/runtime/serializer/recognizer
-  - pkg/runtime/serializer/streaming
   - pkg/runtime/serializer/versioning
   - pkg/selection
   - pkg/types
-  - pkg/util/diff
   - pkg/util/errors
   - pkg/util/framer
-  - pkg/util/httpstream
   - pkg/util/intstr
   - pkg/util/json
-  - pkg/util/mergepatch
   - pkg/util/net
   - pkg/util/rand
   - pkg/util/runtime
   - pkg/util/sets
-  - pkg/util/strategicpatch
   - pkg/util/validation
   - pkg/util/validation/field
   - pkg/util/wait
   - pkg/util/yaml
-  - pkg/version
   - pkg/watch
-  - third_party/forked/golang/json
   - third_party/forked/golang/reflect
 - name: k8s.io/client-go
   version: 3627aeb7d4f6ade38f995d2c923e459146493c7e
