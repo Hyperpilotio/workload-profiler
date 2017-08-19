@@ -7,7 +7,7 @@ IMAGE=workload-profiler
 TAG=latest
 
 glide-check:
-	@if [ "X$(GLIDE)" = "X"	]; then \
+	@if [ -z $GLIDE ]; then \
 		echo "glide doesn't exist."; \
 		curl https://glide.sh/get | sh ; \
 	else \
