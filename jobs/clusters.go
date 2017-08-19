@@ -159,7 +159,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 			}
 
 			go func() {
-				unreserveResult := <-clusters.unreserveCluster(deployment, log.Logger)
+				unreserveResult := <-clusters.unreserveCluster(deployment, true, log.Logger)
 				if unreserveResult.Err != "" {
 					glog.Warningf("Unable to unreserve %s deployment: %s", deployment.runId, unreserveResult.Err)
 				}
@@ -311,7 +311,7 @@ func (clusters *Clusters) ReserveDeployment(
 	return reserveResult
 }
 
-func (clusters *Clusters) unreserveCluster(cluster *cluster, log *logging.Logger) <-chan UnreserveResult {
+func (clusters *Clusters) unreserveCluster(cluster *cluster, deleteCluster bool, log *logging.Logger) <-chan UnreserveResult {
 	unreserveResult := make(chan UnreserveResult, 2)
 
 	if cluster == nil {
@@ -327,6 +327,18 @@ func (clusters *Clusters) unreserveCluster(cluster *cluster, log *logging.Logger
 	}
 
 	cluster.state = UNRESERVING
+
+	if !deleteCluster {
+		clusters.removeDeployment(cluster.runId)
+		unreserveResult <- UnreserveResult{
+			RunId: cluster.runId,
+		}
+
+		if err := clusters.Store.Delete(cluster.runId); err != nil {
+			glog.Errorf("Unable to delete profiler cluster: %s", err.Error())
+		}
+		return unreserveResult
+	}
 
 	go func() {
 		// TODO: Cache deployments and only reset deployment
@@ -350,7 +362,7 @@ func (clusters *Clusters) unreserveCluster(cluster *cluster, log *logging.Logger
 	return unreserveResult
 }
 
-func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger) <-chan UnreserveResult {
+func (clusters *Clusters) UnreserveDeployment(runId string, deleteCluster bool, log *logging.Logger) <-chan UnreserveResult {
 	// TODO: Unreserve a deployment. After certain time also try to delete deployments.
 	clusters.mutex.Lock()
 
@@ -363,7 +375,7 @@ func (clusters *Clusters) UnreserveDeployment(runId string, log *logging.Logger)
 	}
 	clusters.mutex.Unlock()
 
-	return clusters.unreserveCluster(selectedCluster, log)
+	return clusters.unreserveCluster(selectedCluster, deleteCluster, log)
 }
 
 func (clusters *Clusters) storeCluster(cluster *cluster) error {

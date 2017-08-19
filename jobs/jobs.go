@@ -151,11 +151,10 @@ func (worker *Worker) RunJob(job Job) error {
 		job.SetState(JOB_FINISHED)
 	}
 
-	if jobErr == nil || !job.IsSkipUnreserveOnFailure() {
-		unreserveResult := <-worker.Clusters.UnreserveDeployment(runId, log.Logger)
-		if unreserveResult.Err != "" {
-			log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
-		}
+	deleteCluster := jobErr == nil || !job.IsSkipUnreserveOnFailure()
+	unreserveResult := <-worker.Clusters.UnreserveDeployment(runId, deleteCluster, log.Logger)
+	if unreserveResult.Err != "" {
+		log.Logger.Errorf("Unable to unreserve %s deployment: %s", runId, unreserveResult.Err)
 	}
 
 	return jobErr
