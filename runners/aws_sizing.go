@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	"github.com/aws/aws-sdk-go/aws/session"
 	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
@@ -114,15 +116,24 @@ func (run *AWSSizingRun) Run() error {
 	if err != nil {
 		return errors.New("Unable to get calibration results for app " + appName + ": " + err.Error())
 	}
-	calibration := metric.(*models.CalibrationResults)
 
+	calibration := metric.(*models.CalibrationResults)
 	results := make(map[string]float64)
 	instanceTypes := []string{}
+
 	if run.AllInstances {
 		log.Infof("Running through all instances for this sizing run " + run.GetId())
-		// TODO: We assume region is us-east-1
-		region := "us-east-1"
-		availabilityZone := "us-east-1a"
+
+		metadataSvc := ec2metadata.New(session.New())
+		identity, err := metadataSvc.GetInstanceIdentityDocument()
+		if err != nil {
+			return errors.New("Unable to get identity document from ec2 metadata: " + err.Error())
+		}
+
+		// TODO: We assume region is us-east-1a
+		region := identity.Region
+		availabilityZone := identity.AvailabilityZone
+		log.Infof("Detected region %s and az %s", region, availabilityZone)
 		supportedInstanceTypes, err := run.DeployerClient.GetSupportedAWSInstances(region, availabilityZone)
 		if err != nil {
 			return errors.New("Unable to fetch initial instance types: " + err.Error())
