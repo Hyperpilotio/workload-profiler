@@ -60,8 +60,8 @@ type SLO struct {
 }
 
 type ApplicationTask struct {
-	NodeMapping    interface{} `bson:"nodeMapping" json:"nodeMapping"`
-	TaskDefinition interface{} `bson:"taskDefinition" json:"taskDefinition"`
+	NodeMapping    deployer.NodeMapping    `bson:"nodeMapping" json:"nodeMapping"`
+	TaskDefinition deployer.KubernetesTask `bson:"taskDefinition" json:"taskDefinition"`
 }
 
 type TaskDefinitions struct {

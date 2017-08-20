@@ -130,7 +130,6 @@ func (run *AWSSizingRun) Run() error {
 			return errors.New("Unable to get identity document from ec2 metadata: " + err.Error())
 		}
 
-		// TODO: We assume region is us-east-1a
 		region := identity.Region
 		availabilityZone := identity.AvailabilityZone
 		log.Infof("Detected region %s and az %s", region, availabilityZone)
@@ -142,17 +141,33 @@ func (run *AWSSizingRun) Run() error {
 		log.Infof("Supported %s EC2 instance types: %+v", availabilityZone, supportedInstanceTypes)
 		log.Infof("Filter previous generations EC2 instance type: %+v", run.PreviousGenerations)
 		filterInstanceTypes := []string{}
-		for _, instanceTypeName := range supportedInstanceTypes {
-			hasPreviousGeneration := false
-			for _, previousInstanceTypeName := range run.PreviousGenerations {
-				if instanceTypeName == previousInstanceTypeName {
-					hasPreviousGeneration = true
-					break
+		// TODO: We assume a single service for now.
+		serviceName := run.ApplicationConfig.ServiceNames[0]
+		var memoryRequirement int64
+		var cpuRequirement int64
+		for _, task := range run.ApplicationConfig.TaskDefinitions {
+			if task.TaskDefinition.Family == serviceName {
+				for _, containerSpec := range task.TaskDefinition.Deployment.Spec.Template.Spec.Containers {
+					cpuRequirement += containerSpec.Resources.Requests.Cpu().MilliValue()
+					memoryRequirement += containerSpec.Resources.Requests.Memory().MilliValue()
 				}
 			}
-			if !hasPreviousGeneration {
-				filterInstanceTypes = append(filterInstanceTypes, instanceTypeName)
+		}
+		for _, instanceTypeName := range supportedInstanceTypes {
+			// TODO: Remove this when we properly filter lower resource
+			if instanceTypeName == "t2.nano" || instanceTypeName == "t2.micro" {
+				log.Infof("Skipping known unfit node %s", instanceTypeName)
+				continue
 			}
+
+			for _, previousInstanceTypeName := range run.PreviousGenerations {
+				if instanceTypeName == previousInstanceTypeName {
+					log.Infof("Skipping previous generation %s", instanceTypeName)
+					continue
+				}
+			}
+
+			filterInstanceTypes = append(filterInstanceTypes, instanceTypeName)
 		}
 
 		instanceTypes = filterInstanceTypes
@@ -163,8 +178,8 @@ func (run *AWSSizingRun) Run() error {
 		}
 		instanceTypes = sugggestInstanceTypes
 	}
-	log.Infof("Received initial instance types: %+v", instanceTypes)
 
+	log.Infof("Received initial instance types: %+v", instanceTypes)
 	for len(instanceTypes) > 0 {
 		results = make(map[string]float64)
 		jobs := map[string]*AWSSizingSingleRun{}
