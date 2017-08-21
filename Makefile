@@ -1,4 +1,3 @@
-GLIDE=$(which glide)
 GO_EXECUTABLE ?= go
 # For windows developer, use $(go list ./... | grep -v /vendor/)
 PACKAGES=$(glide novendor)
@@ -7,12 +6,12 @@ IMAGE=workload-profiler
 TAG=latest
 
 glide-check:
-	@if [ -z $GLIDE ]; then \
+	@if [ -z $(which glide) ]; then \
 		echo "glide doesn't exist."; \
 		curl https://glide.sh/get | sh ; \
 	else \
 		echo "glide installed"; \
-	fi
+	fi \
 
 init: glide-check
 	glide install

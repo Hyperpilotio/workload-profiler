@@ -80,6 +80,8 @@ func (server *Server) StartServer() error {
 		sizingGroup.POST("/aws/:appName", server.runAWSSizing)
 	}
 
+	router.GET("/state/:runId", server.state)
+
 	jobManager, err := jobs.NewJobManager(server.Config)
 	if err != nil {
 		return errors.New("Unable to create job manager: " + err.Error())
@@ -218,7 +220,8 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
-		"data":  response,
+		"data":  "",
+		"runId": run.Id,
 	})
 }
 
@@ -283,6 +286,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
 		"data":  "",
+		"runId": run.Id,
 	})
 }
 
@@ -315,5 +319,23 @@ func (server *Server) runCalibration(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
 		"data":  "",
+		"runId": run.Id,
 	})
+}
+
+func (server *Server) state(c *gin.Context) {
+	job, err := server.JobManager.FindJob(c.Param("runId"))
+	if err != nil || job == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"data":  "Unable find job state: " + err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{
+		"error": false,
+		"data":  "",
+		"state": job.GetState(),
+	})
+
 }
