@@ -8,13 +8,18 @@ type AWSCost struct {
 }
 
 type AWSCPUConfig struct {
-	VCPU       int     `bson:"vcpu" json:"vcpu", binding:"required"`
+	VCPU       int     `bson:"vCPU" json:"vCPU", binding:"required"`
 	CpuType    string  `bson:"cpuType" json:"cpuType", binding:"required"`
 	ClockSpeed float32 `bson:"clockSpeed" json:"clockSpeed", binding:"required"`
 }
 
+type AWSMemorySize struct {
+	Value float32 `bson:"value" json:"value", binding:"required"`
+	Unit  string  `bson:"unit" json:"unit", binding:"required"`
+}
+
 type AWSMemoryConfig struct {
-	Size float32 `bson:"size" json:"size", binding:"required"`
+	Size AWSMemorySize `bson:"size" json:"size", binding:"required"`
 }
 
 type AWSNetworkConfig struct {
