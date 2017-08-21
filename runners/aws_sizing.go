@@ -421,7 +421,7 @@ func (run *AWSSizingRun) runWithAllInstances(calibration *models.CalibrationResu
 	allInstanceRunResults.Duration = time.Since(startTime).String()
 
 	log.Infof("Storing sizing all instance results for app %s: %+v", allInstanceRunResults.AppName, allInstanceRunResults)
-	if err := run.MetricsDB.WriteMetrics("sizing", allInstanceRunResults); err != nil {
+	if err := run.MetricsDB.WriteMetrics("allinstance", allInstanceRunResults); err != nil {
 		message := "Unable to store sizing results for app " + allInstanceRunResults.AppName + ": " + err.Error()
 		log.Warningf(message)
 	}
