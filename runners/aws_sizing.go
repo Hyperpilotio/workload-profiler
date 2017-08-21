@@ -364,18 +364,19 @@ func (run *AWSSizingRun) runWithAllInstances(calibration *models.CalibrationResu
 			continue
 		}
 
-		if memoryRequirement > (maxMemory.MilliValue() + benchmarkAgentMemory.MilliValue()) {
+		if (memoryRequirement + benchmarkAgentMemory.MilliValue()) > maxMemory.MilliValue() {
+			log.Infof("Skip sizing run on instance type %s: ", instanceType, GetStateString(LOW_MEMORY))
 			instanceResults.State = GetStateString(LOW_MEMORY)
 			allInstanceRunResults.TestResults[instanceType] = instanceResults
 			continue
 		}
-		if cpuRequirement > (maxCpu.MilliValue() + benchmarkAgentCpu.MilliValue()) {
+		if (cpuRequirement + benchmarkAgentCpu.MilliValue()) > maxCpu.MilliValue() {
+			log.Infof("Skip sizing run on instance type %s: ", instanceType, GetStateString(LOW_CPU))
 			instanceResults.State = GetStateString(LOW_CPU)
 			allInstanceRunResults.TestResults[instanceType] = instanceResults
 			continue
 		}
 
-		log.Infof("Supported %s EC2 instance types: %+v", availabilityZone, supportedInstanceTypes)
 		newId := run.GetId() + "-" + instanceType
 		newApplicationConfig := &models.ApplicationConfig{}
 		deepCopy(run.ApplicationConfig, newApplicationConfig)
