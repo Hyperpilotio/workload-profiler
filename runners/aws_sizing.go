@@ -211,7 +211,7 @@ func (run *AWSSizingRun) runWithAnalyzer(calibration *models.CalibrationResults)
 					"Failed to run aws single size run with id %s: %s",
 					job.GetId(),
 					result.Error)
-				if !clients.IsAWSDeploymentError(result.Error) {
+				if !clients.IsAWSDeploymentError(result.Error) && !run.AllInstances {
 					// TODO: Report analyzer that we have a critical error and cannot move on
 					log.Warningf("Stopping aws sizing run as we hit a non-aws error")
 					return errors.New(result.Error)
