@@ -289,12 +289,6 @@ func (run *AWSSizingRun) runWithAllInstances(calibration *models.CalibrationResu
 		var memoryRequirement int64
 		var cpuRequirement int64
 		for _, task := range run.ApplicationConfig.TaskDefinitions {
-			nodeMapping := &deployer.NodeMapping{}
-			if err := deepCopy(task.NodeMapping, nodeMapping); err != nil {
-				log.Warningf("Unable to convert to nodeMapping: " + err.Error())
-				instanceResults.State = GetStateString(FAILED)
-				break
-			}
 			kubernetesTask := &deployer.KubernetesTask{}
 			if err := deepCopy(task.TaskDefinition, kubernetesTask); err != nil {
 				log.Warningf("Unable to convert to kubernetesTask: " + err.Error())
