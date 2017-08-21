@@ -212,16 +212,16 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 
 	}
 
-	response := struct {
-		Id string `json:"id"`
-	}{
-		Id: id,
-	}
+	// response := struct {
+	// 	Id string `json:"id"`
+	// }{
+	// 	Id: id,
+	// }
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
 		"data":  "",
-		"runId": run.Id,
+		"runId": id,
 	})
 }
 
@@ -324,14 +324,24 @@ func (server *Server) runCalibration(c *gin.Context) {
 }
 
 func (server *Server) state(c *gin.Context) {
-	job, err := server.JobManager.FindJob(c.Param("runId"))
-	if err != nil || job == nil {
+	runId := c.Param("runId")
+	job, err := server.JobManager.FindJob(runId)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
 			"data":  "Unable find job state: " + err.Error(),
 		})
 		return
 	}
+
+	if job == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": true,
+			"data":  fmt.Sprintf("Job %s not found", runId),
+		})
+		return
+	}
+
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
 		"data":  "",
