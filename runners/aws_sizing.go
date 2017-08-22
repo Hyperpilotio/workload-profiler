@@ -25,19 +25,15 @@ type instanceRunState int
 
 // Possible all instance run states
 const (
-	AVAILABLE           = 0
-	PREVIOUS_GENERATION = 1
-	LOW_MEMORY          = 2
-	LOW_CPU             = 3
-	FAILED              = 4
+	RUNNING  = 0
+	FAILED   = 1
+	FINISHED = 2
 )
 
 var instanceRunStates = map[instanceRunState]string{
-	AVAILABLE:           "Available",
-	PREVIOUS_GENERATION: "PreviousGeneration",
-	LOW_MEMORY:          "LowMemory",
-	LOW_CPU:             "LowCpu",
-	FAILED:              "Failed",
+	RUNNING:  "Running",
+	FAILED:   "Failed",
+	FINISHED: "Finished",
 }
 
 func GetStateString(state instanceRunState) string {
@@ -72,10 +68,10 @@ type InstanceResults struct {
 }
 
 type AllInstanceRunResults struct {
-	RunId       string                     `bson:"runId" json:"runId"`
-	Duration    string                     `bson:"duration" json:"duration"`
-	AppName     string                     `bson:"appName" json:"appName"`
-	TestResults map[string]InstanceResults `bson:"testResult" json:"testResult"`
+	RunId       string                      `bson:"runId" json:"runId"`
+	Duration    string                      `bson:"duration" json:"duration"`
+	AppName     string                      `bson:"appName" json:"appName"`
+	TestResults map[string]*InstanceResults `bson:"testResult" json:"testResult"`
 }
 
 // AWSSizingRun is the overall app request for find best instance type in AWS.
@@ -238,6 +234,82 @@ func (run *AWSSizingRun) runWithAnalyzer(calibration *models.CalibrationResults)
 	return nil
 }
 
+func (run *AWSSizingRun) isInstanceTypeSupported(instanceType string) bool {
+	log := run.ProfileLog.Logger
+
+	// TODO: Remove this when filtering lower resource actually works
+	if instanceType == "t2.nano" || instanceType == "t2.micro" {
+		log.Infof("Skipping known bad types for mysql")
+		return false
+	}
+
+	for _, previousInstanceTypeName := range run.PreviousGenerations {
+		if instanceType == previousInstanceTypeName {
+			log.Infof("Skipping previous generation %s", instanceType)
+			return false
+		}
+	}
+
+	// Filter lower resource
+	serviceName := run.ApplicationConfig.ServiceNames[0]
+	var memoryRequirement int64
+	var cpuRequirement int64
+	for _, task := range run.ApplicationConfig.TaskDefinitions {
+		kubernetesTask := &deployer.KubernetesTask{}
+		if err := deepCopy(task.TaskDefinition, kubernetesTask); err != nil {
+			log.Warningf("Unable to convert to kubernetesTask: " + err.Error())
+			return false
+		}
+
+		if kubernetesTask.Family == serviceName {
+			for _, containerSpec := range kubernetesTask.Deployment.Spec.Template.Spec.Containers {
+				cpuRequirement += containerSpec.Resources.Requests.Cpu().MilliValue()
+				memoryRequirement += containerSpec.Resources.Requests.Memory().MilliValue()
+			}
+		}
+	}
+
+	memoryConfig := ""
+	cpuConfig := ""
+	for _, node := range run.NodeTypeConfig.Data {
+		if node.Name == instanceType && node.MemoryConfig.Size.Unit == "GiB" {
+			if node.MemoryConfig.Size.Unit == "GiB" {
+				memoryConfig = fmt.Sprintf("%0.0fMi", node.MemoryConfig.Size.Value*1024)
+			} else {
+				log.Warningf("Unsupport memory config format %s: ", node.MemoryConfig.Size.Unit)
+				return false
+			}
+			cpuConfig = fmt.Sprintf("%dm", node.CpuConfig.VCPU*1024)
+		}
+	}
+
+	log.Infof("%s memoryConfig: %s", instanceType, memoryConfig)
+	log.Infof("%s cpuConfig: %s", instanceType, cpuConfig)
+
+	maxMemory, err := resource.ParseQuantity(memoryConfig)
+	if err != nil {
+		log.Warningf("Unable to parse memory quantity: " + err.Error())
+		return false
+	}
+
+	maxCpu, err := resource.ParseQuantity(cpuConfig)
+	if err != nil {
+		log.Warningf("Unable to parse cpu quantity: " + err.Error())
+		return false
+	}
+
+	if memoryRequirement > maxMemory.MilliValue() {
+		log.Infof("Skip sizing run on instance type %s: Low memory", instanceType)
+		return false
+	}
+	if cpuRequirement > maxCpu.MilliValue() {
+		log.Infof("Skip sizing run on instance type %s: Low Cpu", instanceType)
+		return false
+	}
+
+	return true
+}
+
 func (run *AWSSizingRun) runWithAllInstances(calibration *models.CalibrationResults) error {
 	log := run.ProfileLog.Logger
 	log.Infof("Running through all instances for this sizing run " + run.GetId())
@@ -256,119 +328,33 @@ func (run *AWSSizingRun) runWithAllInstances(calibration *models.CalibrationResu
 		return errors.New("Unable to fetch initial instance types: " + err.Error())
 	}
 
-	startTime := time.Now()
-	allInstanceRunResults := &AllInstanceRunResults{
-		RunId:       run.GetId(),
-		AppName:     run.ApplicationConfig.Name,
-		TestResults: make(map[string]InstanceResults),
+	var allInstanceRunResults *AllInstanceRunResults
+	results, err := run.MetricsDB.GetMetric("allInstance", run.ApplicationConfig.Name, &AllInstanceRunResults{})
+	if err != nil {
+		allInstanceRunResults = &AllInstanceRunResults{
+			RunId:       run.GetId(),
+			AppName:     run.ApplicationConfig.Name,
+			TestResults: make(map[string]*InstanceResults),
+		}
+	} else {
+		allInstanceRunResults = results.(*AllInstanceRunResults)
 	}
 
 	log.Infof("Supported %s EC2 instance types: %+v", availabilityZone, supportedInstanceTypes)
 	jobs := map[string]*AWSSizingSingleRun{}
 	for _, instanceType := range supportedInstanceTypes {
-		skipPreviousGeneration := false
-		for _, previousInstanceTypeName := range run.PreviousGenerations {
-			if instanceType == previousInstanceTypeName {
-				log.Infof("Skipping previous generation %s", instanceType)
-				skipPreviousGeneration = true
-				break
-			}
-		}
-		if skipPreviousGeneration {
-			allInstanceRunResults.TestResults[instanceType] = InstanceResults{
-				State: GetStateString(PREVIOUS_GENERATION),
-			}
+		if !run.isInstanceTypeSupported(instanceType) {
 			continue
 		}
 
-		// Filter lower resource
-		instanceResults := InstanceResults{
-			State: GetStateString(AVAILABLE),
-		}
-		serviceName := run.ApplicationConfig.ServiceNames[0]
-		var memoryRequirement int64
-		var cpuRequirement int64
-		for _, task := range run.ApplicationConfig.TaskDefinitions {
-			kubernetesTask := &deployer.KubernetesTask{}
-			if err := deepCopy(task.TaskDefinition, kubernetesTask); err != nil {
-				log.Warningf("Unable to convert to kubernetesTask: " + err.Error())
-				instanceResults.State = GetStateString(FAILED)
-				break
-			}
-
-			if kubernetesTask.Family == serviceName {
-				for _, containerSpec := range kubernetesTask.Deployment.Spec.Template.Spec.Containers {
-					cpuRequirement += containerSpec.Resources.Requests.Cpu().MilliValue()
-					memoryRequirement += containerSpec.Resources.Requests.Memory().MilliValue()
-				}
-			}
-		}
-		if ParseStateString(instanceResults.State) != AVAILABLE {
-			allInstanceRunResults.TestResults[instanceType] = instanceResults
+		existingResults, ok := allInstanceRunResults.TestResults[instanceType]
+		if ok && existingResults.State == GetStateString(FINISHED) {
+			log.Infof("Skipping to run instance %s as we already have finished results", instanceType)
 			continue
 		}
 
-		memoryConfig := ""
-		cpuConfig := ""
-		for _, node := range run.NodeTypeConfig.Data {
-			if node.Name == instanceType && node.MemoryConfig.Size.Unit == "GiB" {
-				if node.MemoryConfig.Size.Unit == "GiB" {
-					memoryConfig = fmt.Sprintf("%0.0fMi", node.MemoryConfig.Size.Value*1024)
-				} else {
-					log.Warningf("Unsupport memory config format %s: ", node.MemoryConfig.Size.Unit)
-					instanceResults.State = GetStateString(FAILED)
-					break
-				}
-				cpuConfig = fmt.Sprintf("%dm", node.CpuConfig.VCPU*1024)
-			}
-		}
-		if ParseStateString(instanceResults.State) != AVAILABLE {
-			allInstanceRunResults.TestResults[instanceType] = instanceResults
-			continue
-		}
-		log.Infof("%s memoryConfig: %s", instanceType, memoryConfig)
-		log.Infof("%s cpuConfig: %s", instanceType, cpuConfig)
-
-		maxMemory, err := resource.ParseQuantity(memoryConfig)
-		if err != nil {
-			instanceResults.State = GetStateString(FAILED)
-			allInstanceRunResults.TestResults[instanceType] = instanceResults
-			continue
-		}
-		maxCpu, err := resource.ParseQuantity(cpuConfig)
-		if err != nil {
-			instanceResults.State = GetStateString(FAILED)
-			allInstanceRunResults.TestResults[instanceType] = instanceResults
-			continue
-		}
-
-		// TODO: We assume benchmark-agent use cpu:1024m, memory:512Mi
-		benchmarkAgentMemConfig := "512Mi"
-		benchmarkAgentCpuConfig := "1024m"
-		benchmarkAgentMemory, err := resource.ParseQuantity(benchmarkAgentMemConfig)
-		if err != nil {
-			instanceResults.State = GetStateString(FAILED)
-			allInstanceRunResults.TestResults[instanceType] = instanceResults
-			continue
-		}
-		benchmarkAgentCpu, err := resource.ParseQuantity(benchmarkAgentCpuConfig)
-		if err != nil {
-			instanceResults.State = GetStateString(FAILED)
-			allInstanceRunResults.TestResults[instanceType] = instanceResults
-			continue
-		}
-
-		if (memoryRequirement + benchmarkAgentMemory.MilliValue()) > maxMemory.MilliValue() {
-			log.Infof("Skip sizing run on instance type %s: ", instanceType, GetStateString(LOW_MEMORY))
-			instanceResults.State = GetStateString(LOW_MEMORY)
-			allInstanceRunResults.TestResults[instanceType] = instanceResults
-			continue
-		}
-		if (cpuRequirement + benchmarkAgentCpu.MilliValue()) > maxCpu.MilliValue() {
-			log.Infof("Skip sizing run on instance type %s: ", instanceType, GetStateString(LOW_CPU))
-			instanceResults.State = GetStateString(LOW_CPU)
-			allInstanceRunResults.TestResults[instanceType] = instanceResults
-			continue
+		instanceResults := &InstanceResults{
+			State: GetStateString(RUNNING),
 		}
 
 		newId := run.GetId() + "-" + instanceType
@@ -383,20 +369,18 @@ func (run *AWSSizingRun) runWithAllInstances(calibration *models.CalibrationResu
 			run.IsSkipUnreserveOnFailure())
 		if err != nil {
 			log.Warningf("Unable to create AWS single run: " + err.Error())
-			instanceResults.State = GetStateString(FAILED)
-			allInstanceRunResults.TestResults[instanceType] = instanceResults
 			continue
 		}
 
+		allInstanceRunResults.TestResults[instanceType] = instanceResults
 		run.JobManager.AddJob(singleRun)
 		jobs[instanceType] = singleRun
 	}
 
+	startTime := time.Now()
 	for instanceType, job := range jobs {
 		result := <-job.GetResults()
-		instanceResults := InstanceResults{
-			State: GetStateString(AVAILABLE),
-		}
+		instanceResults := allInstanceRunResults.TestResults[instanceType]
 		if result.Error != "" {
 			log.Warningf(
 				"Failed to run aws single size run with id %s: %s",
@@ -405,19 +389,20 @@ func (run *AWSSizingRun) runWithAllInstances(calibration *models.CalibrationResu
 			instanceResults.State = GetStateString(FAILED)
 			instanceResults.QosValue = 0.0
 		} else {
+			instanceResults.State = GetStateString(FINISHED)
 			sizeRunResults := result.Data.(SizeRunResults)
 			qosValue := sizeRunResults.QosValue.Value
 			log.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
 			instanceResults.QosValue = qosValue
-		}
-		allInstanceRunResults.TestResults[instanceType] = instanceResults
-	}
-	allInstanceRunResults.Duration = time.Since(startTime).String()
+			allInstanceRunResults.Duration = time.Since(startTime).String()
 
-	log.Infof("Storing sizing all instance results for app %s: %+v", allInstanceRunResults.AppName, allInstanceRunResults)
-	if err := run.MetricsDB.WriteMetrics("allInstance", allInstanceRunResults); err != nil {
-		message := "Unable to store sizing results for app " + allInstanceRunResults.AppName + ": " + err.Error()
-		log.Warningf(message)
+			// Store each successful run metric
+			log.Infof("Storing sizing all instance results for app %sv", allInstanceRunResults.AppName)
+			if err := run.MetricsDB.WriteMetrics("allInstance", allInstanceRunResults); err != nil {
+				message := "Unable to store sizing results for app " + allInstanceRunResults.AppName + ": " + err.Error()
+				log.Warningf(message)
+			}
+		}
 	}
 
 	return nil
