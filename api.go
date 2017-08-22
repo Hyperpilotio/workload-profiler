@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/hyperpilotio/workload-profiler/models"
 
@@ -107,10 +108,13 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 
 	// TODO: We assume region is us-east-1
 	region := "us-east-1"
+	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
 	allInstances := c.DefaultQuery("allInstances", "false") == "true"
-	var awsRegionNodeTypeConfig *models.AWSRegionNodeTypeConfig
-	previousGenerations := []string{}
+	instances := strings.Split(c.DefaultQuery("instances", ""), ",")
+	id := ""
 	if allInstances {
+		var awsRegionNodeTypeConfig *models.AWSRegionNodeTypeConfig
+		previousGenerations := []string{}
 		nodeTypeConfig, err := server.ConfigDB.GetNodeTypeConfig(region)
 		if err != nil {
 			message := fmt.Sprintf("Unable to get node type for %s: %s", region, err.Error())
@@ -122,7 +126,6 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 			return
 		}
 		awsRegionNodeTypeConfig = nodeTypeConfig
-
 		previousGeneration, err := server.ConfigDB.GetPreviousGenerationConfig(region)
 		if err != nil {
 			message := fmt.Sprintf("Unable to get previous generation for %s: %s", region, err.Error())
@@ -137,36 +140,79 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 		for _, awsNodeType := range previousGeneration.Data {
 			previousGenerations = append(previousGenerations, awsNodeType.Name)
 		}
+
+		run, err := runners.NewAWSSizingAllInstancesRun(
+			server.JobManager,
+			applicationConfig,
+			server.Config,
+			awsRegionNodeTypeConfig,
+			previousGenerations,
+			allInstances,
+			skipFlag)
+		if err != nil {
+			message := fmt.Sprintf("Unable to create aws sizing all instances run: " + err.Error())
+			glog.Infof(message)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": true,
+				"data":  message,
+			})
+			return
+		}
+		id = run.GetId()
+		go func() {
+			run.Run()
+		}()
+	} else if len(instances) > 0 {
+		run, err := runners.NewAWSSizingInstancesRun(
+			server.JobManager,
+			applicationConfig,
+			server.Config,
+			instances,
+			skipFlag)
+		if err != nil {
+			message := fmt.Sprintf("Unable to create aws sizing instances run: " + err.Error())
+			glog.Infof(message)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": true,
+				"data":  message,
+			})
+			return
+		}
+		id = run.GetId()
+		go func() {
+			run.Run()
+		}()
+	} else {
+		run, err := runners.NewAWSSizingRun(
+			server.JobManager,
+			applicationConfig,
+			server.Config,
+			skipFlag)
+		if err != nil {
+			message := fmt.Sprintf("Unable to create aws sizing run: " + err.Error())
+			glog.Infof(message)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": true,
+				"data":  message,
+			})
+			return
+		}
+		id = run.GetId()
+		go func() {
+			run.Run()
+		}()
+
 	}
 
-	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
-	run, err := runners.NewAWSSizingRun(
-		server.JobManager,
-		applicationConfig,
-		server.Config,
-		awsRegionNodeTypeConfig,
-		previousGenerations,
-		allInstances,
-		skipFlag)
-	if err != nil {
-		message := fmt.Sprintf("Unable to create aws sizing run: " + err.Error())
-		glog.Infof(message)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  message,
-		})
-		return
+	response := struct {
+		Id string `json:"id"`
+	}{
+		Id: id,
 	}
-
-	log := run.ProfileLog
-	log.Logger.Infof("Running aws sizing job %s for app %s...", run.Id, appName)
-	go func() {
-		run.Run()
-	}()
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
-		"data":  "",
+		"data":  response,
 	})
 }
 

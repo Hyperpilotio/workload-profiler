@@ -178,6 +178,27 @@ func (metricsDb *MetricsDB) WriteMetrics(dataType string, obj interface{}) error
 	return nil
 }
 
+func (metricsDb *MetricsDB) UpsertMetrics(dataType string, appName string, obj interface{}) error {
+	collectionName, collectionErr := metricsDb.getCollection(dataType)
+	if collectionErr != nil {
+		return collectionErr
+	}
+
+	session, sessionErr := connectMongo(metricsDb.Url, metricsDb.Database, metricsDb.User, metricsDb.Password)
+	if sessionErr != nil {
+		return errors.New("Unable to create mongo session: " + sessionErr.Error())
+	}
+
+	defer session.Close()
+
+	collection := session.DB(metricsDb.Database).C(collectionName)
+	if _, err := collection.Upsert(bson.M{"appName": appName}, obj); err != nil {
+		return fmt.Errorf("Unable to upsert %s into metrics db: %s", dataType, err.Error())
+	}
+
+	return nil
+}
+
 // TODO: Need to support use of filter when one collection contains multiple documents
 func (metricsDb *MetricsDB) GetMetric(dataType string, appName string, metric interface{}) (interface{}, error) {
 	collectionName, collectionErr := metricsDb.getCollection(dataType)

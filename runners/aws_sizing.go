@@ -84,10 +84,19 @@ type AWSSizingRun struct {
 	Config         *viper.Viper
 	JobManager     *jobs.JobManager
 	AnalyzerClient *clients.AnalyzerClient
+}
+
+type AWSSizingAllInstancesRun struct {
+	AWSSizingRun
 
 	NodeTypeConfig      *models.AWSRegionNodeTypeConfig
 	PreviousGenerations []string
-	AllInstances        bool
+}
+
+type AWSSizingInstancesRun struct {
+	AWSSizingRun
+
+	Instances []string
 }
 
 // AWSSizingSingleRun represents a single benchmark run for a particular
@@ -100,15 +109,15 @@ type AWSSizingSingleRun struct {
 	ResultsChan  chan *jobs.JobResults
 }
 
-func NewAWSSizingRun(
+func NewAWSSizingAllInstancesRun(
 	jobManager *jobs.JobManager,
 	applicationConfig *models.ApplicationConfig,
 	config *viper.Viper,
 	nodeTypeConfig *models.AWSRegionNodeTypeConfig,
 	previousGenerations []string,
 	allInstances bool,
-	skipUnreserveOnFailure bool) (*AWSSizingRun, error) {
-	id, err := generateId("awssizing")
+	skipUnreserveOnFailure bool) (*AWSSizingAllInstancesRun, error) {
+	id, err := generateId("awssizingall")
 	if err != nil {
 		return nil, errors.New("Unable to generate id: " + err.Error())
 	}
@@ -128,26 +137,28 @@ func NewAWSSizingRun(
 		return nil, errors.New("Unable to create analyzer client: " + err.Error())
 	}
 
-	return &AWSSizingRun{
-		ProfileRun: ProfileRun{
-			Id:                     id,
-			ApplicationConfig:      applicationConfig,
-			DeployerClient:         deployerClient,
-			MetricsDB:              db.NewMetricsDB(config),
-			ProfileLog:             log,
-			Created:                time.Now(),
-			SkipUnreserveOnFailure: skipUnreserveOnFailure,
+	return &AWSSizingAllInstancesRun{
+		AWSSizingRun: AWSSizingRun{
+			ProfileRun: ProfileRun{
+				Id:                     id,
+				ApplicationConfig:      applicationConfig,
+				DeployerClient:         deployerClient,
+				MetricsDB:              db.NewMetricsDB(config),
+				ProfileLog:             log,
+				Created:                time.Now(),
+				SkipUnreserveOnFailure: skipUnreserveOnFailure,
+			},
+
+			AnalyzerClient: analyzerClient,
+			JobManager:     jobManager,
+			Config:         config,
 		},
-		AnalyzerClient:      analyzerClient,
-		JobManager:          jobManager,
-		Config:              config,
 		NodeTypeConfig:      nodeTypeConfig,
 		PreviousGenerations: previousGenerations,
-		AllInstances:        allInstances,
 	}, nil
 }
 
-func (run *AWSSizingRun) Run() error {
+func (run *AWSSizingAllInstancesRun) Run() error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
 
@@ -158,160 +169,7 @@ func (run *AWSSizingRun) Run() error {
 	}
 
 	calibration := metric.(*models.CalibrationResults)
-	if run.AllInstances {
-		run.runWithAllInstances(calibration)
-	} else {
-		run.runWithAnalyzer(calibration)
-	}
-	log.Infof("AWS Sizing run finished for " + run.Id)
 
-	return nil
-}
-
-func (run *AWSSizingRun) runWithAnalyzer(calibration *models.CalibrationResults) error {
-	log := run.ProfileLog.Logger
-	appName := run.ApplicationConfig.Name
-	results := make(map[string]float64)
-	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
-	if err != nil {
-		return errors.New("Unable to fetch initial instance types: " + err.Error())
-	}
-
-	log.Infof("Received initial instance types: %+v", instanceTypes)
-	for len(instanceTypes) > 0 {
-		results = make(map[string]float64)
-		jobs := map[string]*AWSSizingSingleRun{}
-		for _, instanceType := range instanceTypes {
-			newId := run.GetId() + "-" + instanceType
-			newApplicationConfig := &models.ApplicationConfig{}
-			deepCopy(run.ApplicationConfig, newApplicationConfig)
-			singleRun, err := NewAWSSizingSingleRun(
-				newId,
-				instanceType,
-				calibration,
-				newApplicationConfig,
-				run.Config,
-				run.IsSkipUnreserveOnFailure())
-			if err != nil {
-				return errors.New("Unable to create AWS single run: " + err.Error())
-			}
-
-			run.JobManager.AddJob(singleRun)
-			jobs[instanceType] = singleRun
-		}
-
-		for instanceType, job := range jobs {
-			result := <-job.GetResults()
-			if result.Error != "" {
-				log.Warningf(
-					"Failed to run aws single size run with id %s: %s",
-					job.GetId(),
-					result.Error)
-				if !clients.IsAWSDeploymentError(result.Error) && !run.AllInstances {
-					// TODO: Report analyzer that we have a critical error and cannot move on
-					log.Warningf("Stopping aws sizing run as we hit a non-aws error")
-					return errors.New(result.Error)
-				}
-
-				results[instanceType] = 0.0
-			} else {
-				sizeRunResults := result.Data.(SizeRunResults)
-				qosValue := sizeRunResults.QosValue.Value
-				log.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
-				results[instanceType] = qosValue
-			}
-		}
-
-		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
-		if err != nil {
-			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
-		}
-
-		log.Infof("Received next instance types to run sizing: %s", sugggestInstanceTypes)
-		instanceTypes = sugggestInstanceTypes
-	}
-
-	return nil
-}
-
-func (run *AWSSizingRun) isInstanceTypeSupported(instanceType string) bool {
-	log := run.ProfileLog.Logger
-
-	// TODO: Remove this when filtering lower resource actually works
-	if instanceType == "t2.nano" || instanceType == "t2.micro" {
-		log.Infof("Skipping known bad types for mysql")
-		return false
-	}
-
-	for _, previousInstanceTypeName := range run.PreviousGenerations {
-		if instanceType == previousInstanceTypeName {
-			log.Infof("Skipping previous generation %s", instanceType)
-			return false
-		}
-	}
-
-	// Filter lower resource
-	serviceName := run.ApplicationConfig.ServiceNames[0]
-	var memoryRequirement int64
-	var cpuRequirement int64
-	for _, task := range run.ApplicationConfig.TaskDefinitions {
-		kubernetesTask := &deployer.KubernetesTask{}
-		if err := deepCopy(task.TaskDefinition, kubernetesTask); err != nil {
-			log.Warningf("Unable to convert to kubernetesTask: " + err.Error())
-			return false
-		}
-
-		if kubernetesTask.Family == serviceName {
-			for _, containerSpec := range kubernetesTask.Deployment.Spec.Template.Spec.Containers {
-				cpuRequirement += containerSpec.Resources.Requests.Cpu().MilliValue()
-				memoryRequirement += containerSpec.Resources.Requests.Memory().MilliValue()
-			}
-		}
-	}
-
-	memoryConfig := ""
-	cpuConfig := ""
-	for _, node := range run.NodeTypeConfig.Data {
-		if node.Name == instanceType && node.MemoryConfig.Size.Unit == "GiB" {
-			if node.MemoryConfig.Size.Unit == "GiB" {
-				memoryConfig = fmt.Sprintf("%0.0fMi", node.MemoryConfig.Size.Value*1024)
-			} else {
-				log.Warningf("Unsupport memory config format %s: ", node.MemoryConfig.Size.Unit)
-				return false
-			}
-			cpuConfig = fmt.Sprintf("%dm", node.CpuConfig.VCPU*1024)
-		}
-	}
-
-	log.Infof("%s memoryConfig: %s", instanceType, memoryConfig)
-	log.Infof("%s cpuConfig: %s", instanceType, cpuConfig)
-
-	maxMemory, err := resource.ParseQuantity(memoryConfig)
-	if err != nil {
-		log.Warningf("Unable to parse memory quantity: " + err.Error())
-		return false
-	}
-
-	maxCpu, err := resource.ParseQuantity(cpuConfig)
-	if err != nil {
-		log.Warningf("Unable to parse cpu quantity: " + err.Error())
-		return false
-	}
-
-	if memoryRequirement > maxMemory.MilliValue() {
-		log.Infof("Skip sizing run on instance type %s: Low memory", instanceType)
-		return false
-	}
-	if cpuRequirement > maxCpu.MilliValue() {
-		log.Infof("Skip sizing run on instance type %s: Low Cpu", instanceType)
-		return false
-	}
-
-	return true
-}
-
-func (run *AWSSizingRun) runWithAllInstances(calibration *models.CalibrationResults) error {
-	log := run.ProfileLog.Logger
 	log.Infof("Running through all instances for this sizing run " + run.GetId())
 
 	metadataSvc := ec2metadata.New(session.New())
@@ -397,13 +255,305 @@ func (run *AWSSizingRun) runWithAllInstances(calibration *models.CalibrationResu
 			allInstanceRunResults.Duration = time.Since(startTime).String()
 
 			// Store each successful run metric
-			log.Infof("Storing sizing all instance results for app %sv", allInstanceRunResults.AppName)
-			if err := run.MetricsDB.WriteMetrics("allInstance", allInstanceRunResults); err != nil {
+			log.Infof("Storing sizing all instance results for app %s", allInstanceRunResults.AppName)
+			if err := run.MetricsDB.UpsertMetrics("allInstance", allInstanceRunResults.AppName, allInstanceRunResults); err != nil {
 				message := "Unable to store sizing results for app " + allInstanceRunResults.AppName + ": " + err.Error()
 				log.Warningf(message)
 			}
 		}
 	}
+
+	return nil
+}
+
+func NewAWSSizingInstancesRun(
+	jobManager *jobs.JobManager,
+	applicationConfig *models.ApplicationConfig,
+	config *viper.Viper,
+	instances []string,
+	skipUnreserveOnFailure bool) (*AWSSizingInstancesRun, error) {
+	if len(instances) == 0 {
+		return nil, errors.New("Empty instances found")
+	}
+
+	id, err := generateId("awssizinginstances")
+	if err != nil {
+		return nil, errors.New("Unable to generate id: " + err.Error())
+	}
+
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
+	}
+
+	deployerClient, deployerErr := clients.NewDeployerClient(config)
+	if deployerErr != nil {
+		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	}
+
+	analyzerClient, err := clients.NewAnalyzerClient(config)
+	if err != nil {
+		return nil, errors.New("Unable to create analyzer client: " + err.Error())
+	}
+
+	return &AWSSizingInstancesRun{
+		AWSSizingRun: AWSSizingRun{
+			ProfileRun: ProfileRun{
+				Id:                     id,
+				ApplicationConfig:      applicationConfig,
+				DeployerClient:         deployerClient,
+				MetricsDB:              db.NewMetricsDB(config),
+				ProfileLog:             log,
+				Created:                time.Now(),
+				SkipUnreserveOnFailure: skipUnreserveOnFailure,
+			},
+			AnalyzerClient: analyzerClient,
+			JobManager:     jobManager,
+			Config:         config,
+		},
+		Instances: instances,
+	}, nil
+}
+
+func (run *AWSSizingInstancesRun) Run() error {
+	log := run.ProfileLog.Logger
+	appName := run.ApplicationConfig.Name
+
+	log.Infof("Reading calibration results for app %s", appName)
+	metric, err := run.MetricsDB.GetMetric("calibration", appName, &models.CalibrationResults{})
+	if err != nil {
+		return errors.New("Unable to get calibration results for app " + appName + ": " + err.Error())
+	}
+
+	calibration := metric.(*models.CalibrationResults)
+	results := make(map[string]float64)
+	log.Infof("Instance types to run: %+v", run.Instances)
+
+	results = make(map[string]float64)
+	jobs := map[string]*AWSSizingSingleRun{}
+	for _, instanceType := range run.Instances {
+		newId := run.GetId() + "-" + instanceType
+		newApplicationConfig := &models.ApplicationConfig{}
+		deepCopy(run.ApplicationConfig, newApplicationConfig)
+		singleRun, err := NewAWSSizingSingleRun(
+			newId,
+			instanceType,
+			calibration,
+			newApplicationConfig,
+			run.Config,
+			run.IsSkipUnreserveOnFailure())
+		if err != nil {
+			return errors.New("Unable to create AWS single run: " + err.Error())
+		}
+
+		run.JobManager.AddJob(singleRun)
+		jobs[instanceType] = singleRun
+	}
+
+	for instanceType, job := range jobs {
+		result := <-job.GetResults()
+		if result.Error != "" {
+			log.Warningf(
+				"Failed to run aws single size run with id %s: %s",
+				job.GetId(),
+				result.Error)
+			results[instanceType] = 0.0
+		} else {
+			sizeRunResults := result.Data.(SizeRunResults)
+			qosValue := sizeRunResults.QosValue.Value
+			log.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
+			results[instanceType] = qosValue
+		}
+	}
+
+	log.Infof("AWS Sizing instances run finished for %s, results: %+v", run.Id, results)
+
+	return nil
+}
+
+func NewAWSSizingRun(
+	jobManager *jobs.JobManager,
+	applicationConfig *models.ApplicationConfig,
+	config *viper.Viper,
+	skipUnreserveOnFailure bool) (*AWSSizingRun, error) {
+	id, err := generateId("awssizing")
+	if err != nil {
+		return nil, errors.New("Unable to generate id: " + err.Error())
+	}
+
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
+	}
+
+	deployerClient, deployerErr := clients.NewDeployerClient(config)
+	if deployerErr != nil {
+		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	}
+
+	analyzerClient, err := clients.NewAnalyzerClient(config)
+	if err != nil {
+		return nil, errors.New("Unable to create analyzer client: " + err.Error())
+	}
+
+	return &AWSSizingRun{
+		ProfileRun: ProfileRun{
+			Id:                     id,
+			ApplicationConfig:      applicationConfig,
+			DeployerClient:         deployerClient,
+			MetricsDB:              db.NewMetricsDB(config),
+			ProfileLog:             log,
+			Created:                time.Now(),
+			SkipUnreserveOnFailure: skipUnreserveOnFailure,
+		},
+		AnalyzerClient: analyzerClient,
+		JobManager:     jobManager,
+		Config:         config,
+	}, nil
+}
+
+func (run *AWSSizingAllInstancesRun) isInstanceTypeSupported(instanceType string) bool {
+	log := run.ProfileLog.Logger
+
+	for _, previousInstanceTypeName := range run.PreviousGenerations {
+		if instanceType == previousInstanceTypeName {
+			log.Infof("Skipping previous generation %s", instanceType)
+			return false
+		}
+	}
+
+	// Filter lower resource
+	serviceName := run.ApplicationConfig.ServiceNames[0]
+	var memoryRequirement int64
+	var cpuRequirement int64
+	for _, task := range run.ApplicationConfig.TaskDefinitions {
+		kubernetesTask := &deployer.KubernetesTask{}
+		if err := deepCopy(task.TaskDefinition, kubernetesTask); err != nil {
+			log.Warningf("Unable to convert to kubernetesTask: " + err.Error())
+			return false
+		}
+
+		if kubernetesTask.Family == serviceName {
+			for _, containerSpec := range kubernetesTask.Deployment.Spec.Template.Spec.Containers {
+				cpuRequirement += containerSpec.Resources.Requests.Cpu().MilliValue()
+				memoryRequirement += containerSpec.Resources.Requests.Memory().MilliValue()
+			}
+		}
+	}
+
+	memoryConfig := ""
+	cpuConfig := ""
+	for _, node := range run.NodeTypeConfig.Data {
+		if node.Name == instanceType && node.MemoryConfig.Size.Unit == "GiB" {
+			if node.MemoryConfig.Size.Unit == "GiB" {
+				memoryConfig = fmt.Sprintf("%0.0fMi", node.MemoryConfig.Size.Value*1024)
+			} else {
+				log.Warningf("Unsupport memory config format %s: ", node.MemoryConfig.Size.Unit)
+				return false
+			}
+			cpuConfig = fmt.Sprintf("%dm", node.CpuConfig.VCPU*1024)
+		}
+	}
+
+	log.Infof("%s memoryConfig: %s", instanceType, memoryConfig)
+	log.Infof("%s cpuConfig: %s", instanceType, cpuConfig)
+
+	maxMemory, err := resource.ParseQuantity(memoryConfig)
+	if err != nil {
+		log.Warningf("Unable to parse memory quantity: " + err.Error())
+		return false
+	}
+
+	maxCpu, err := resource.ParseQuantity(cpuConfig)
+	if err != nil {
+		log.Warningf("Unable to parse cpu quantity: " + err.Error())
+		return false
+	}
+
+	if memoryRequirement > maxMemory.MilliValue() {
+		log.Infof("Skip sizing run on instance type %s: Low memory", instanceType)
+		return false
+	}
+	if cpuRequirement > maxCpu.MilliValue() {
+		log.Infof("Skip sizing run on instance type %s: Low Cpu", instanceType)
+		return false
+	}
+
+	return true
+}
+
+func (run *AWSSizingRun) Run() error {
+	log := run.ProfileLog.Logger
+	appName := run.ApplicationConfig.Name
+
+	log.Infof("Reading calibration results for app %s", appName)
+	metric, err := run.MetricsDB.GetMetric("calibration", appName, &models.CalibrationResults{})
+	if err != nil {
+		return errors.New("Unable to get calibration results for app " + appName + ": " + err.Error())
+	}
+
+	calibration := metric.(*models.CalibrationResults)
+	results := make(map[string]float64)
+	instanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
+	if err != nil {
+		return errors.New("Unable to fetch initial instance types: " + err.Error())
+	}
+
+	log.Infof("Received initial instance types: %+v", instanceTypes)
+	for len(instanceTypes) > 0 {
+		results = make(map[string]float64)
+		jobs := map[string]*AWSSizingSingleRun{}
+		for _, instanceType := range instanceTypes {
+			newId := run.GetId() + "-" + instanceType
+			newApplicationConfig := &models.ApplicationConfig{}
+			deepCopy(run.ApplicationConfig, newApplicationConfig)
+			singleRun, err := NewAWSSizingSingleRun(
+				newId,
+				instanceType,
+				calibration,
+				newApplicationConfig,
+				run.Config,
+				run.IsSkipUnreserveOnFailure())
+			if err != nil {
+				return errors.New("Unable to create AWS single run: " + err.Error())
+			}
+
+			run.JobManager.AddJob(singleRun)
+			jobs[instanceType] = singleRun
+		}
+
+		for instanceType, job := range jobs {
+			result := <-job.GetResults()
+			if result.Error != "" {
+				log.Warningf(
+					"Failed to run aws single size run with id %s: %s",
+					job.GetId(),
+					result.Error)
+				if !clients.IsAWSDeploymentError(result.Error) {
+					// TODO: Report analyzer that we have a critical error and cannot move on
+					log.Warningf("Stopping aws sizing run as we hit a non-aws error")
+					return errors.New(result.Error)
+				}
+
+				results[instanceType] = 0.0
+			} else {
+				sizeRunResults := result.Data.(SizeRunResults)
+				qosValue := sizeRunResults.QosValue.Value
+				log.Infof("Received sizing run value %0.2f with instance type %s", qosValue, instanceType)
+				results[instanceType] = qosValue
+			}
+		}
+
+		sugggestInstanceTypes, err := run.AnalyzerClient.GetNextInstanceTypes(run.Id, appName, results, log)
+		if err != nil {
+			return errors.New("Unable to get next instance types from analyzer: " + err.Error())
+		}
+
+		log.Infof("Received next instance types to run sizing: %s", sugggestInstanceTypes)
+		instanceTypes = sugggestInstanceTypes
+	}
+
+	log.Infof("AWS Sizing run finished for " + run.Id)
 
 	return nil
 }
