@@ -11,7 +11,7 @@ glide-check:
 		curl https://glide.sh/get | sh ; \
 	else \
 		echo "glide installed"; \
-	fi \
+	fi
 
 init: glide-check
 	glide install

@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"errors"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -228,6 +229,23 @@ func (manager *JobManager) FindJob(id string) (Job, error) {
 	} else {
 		return job, nil
 	}
+}
+
+func (manager *JobManager) FindJobsMatches(regex string) ([]Job, error) {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	jobs := make([]Job, 0)
+	for id, job := range manager.Jobs {
+		result, err := regexp.MatchString(regex, id)
+		if err != nil {
+			return nil, err
+		}
+		if result {
+			jobs = append(jobs, job)
+		}
+	}
+	return jobs, nil
+
 }
 
 func (manager *JobManager) GetJobs() []Job {
