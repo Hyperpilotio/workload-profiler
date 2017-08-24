@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
+	"strings"
 	"time"
-
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -17,8 +17,8 @@ import (
 	"github.com/hyperpilotio/workload-profiler/db"
 	"github.com/hyperpilotio/workload-profiler/jobs"
 	"github.com/hyperpilotio/workload-profiler/models"
-
 	"github.com/spf13/viper"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type instanceRunState int
@@ -158,6 +158,10 @@ func NewAWSSizingAllInstancesRun(
 	}, nil
 }
 
+func instanceTypeDbName(instanceType string) string {
+	return strings.Replace(instanceType, ".", "-", -1)
+}
+
 func (run *AWSSizingAllInstancesRun) Run() error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
@@ -205,7 +209,7 @@ func (run *AWSSizingAllInstancesRun) Run() error {
 			continue
 		}
 
-		existingResults, ok := allInstanceRunResults.TestResults[instanceType]
+		existingResults, ok := allInstanceRunResults.TestResults[instanceTypeDbName(instanceType)]
 		if ok && existingResults.State == GetStateString(FINISHED) {
 			log.Infof("Skipping to run instance %s as we already have finished results", instanceType)
 			continue
@@ -230,7 +234,7 @@ func (run *AWSSizingAllInstancesRun) Run() error {
 			continue
 		}
 
-		allInstanceRunResults.TestResults[instanceType] = instanceResults
+		allInstanceRunResults.TestResults[instanceTypeDbName(instanceType)] = instanceResults
 		run.JobManager.AddJob(singleRun)
 		jobs[instanceType] = singleRun
 	}
@@ -238,7 +242,7 @@ func (run *AWSSizingAllInstancesRun) Run() error {
 	startTime := time.Now()
 	for instanceType, job := range jobs {
 		result := <-job.GetResults()
-		instanceResults := allInstanceRunResults.TestResults[instanceType]
+		instanceResults := allInstanceRunResults.TestResults[instanceTypeDbName(instanceType)]
 		if result.Error != "" {
 			log.Warningf(
 				"Failed to run aws single size run with id %s: %s",
@@ -650,14 +654,27 @@ func (run *AWSSizingSingleRun) Run(deploymentId string) error {
 
 	// Report the average of the run results
 	var total float64
+	var min float64 = math.MaxFloat64
+	var max float64 = math.SmallestNonzeroFloat64
 	for _, result := range runResults {
 		total += result.QosValue
+		if result.QosValue < min {
+			min = result.QosValue
+		}
+		if result.QosValue > max {
+			max = result.QosValue
+		}
 	}
+
+	result := total / float64(len(runResults))
+
+	diff := (max - min) / min
+	log.Infof("Run results min: %f, max: %f, avg: %f, max to min diff ratio: %f", min, max, result, diff)
 
 	// And return data results via ResultChan to AWSSizingRun, for it to report to the analyzer.
 	sizeResults.QosValue = models.SLO{
 		Metric: run.ApplicationConfig.SLO.Metric,
-		Value:  total / float64(len(runResults)),
+		Value:  result,
 		Type:   run.ApplicationConfig.SLO.Type,
 	}
 	sizeResults.Duration = time.Since(startTime).String()

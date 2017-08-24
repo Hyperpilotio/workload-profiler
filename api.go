@@ -110,7 +110,13 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 	region := "us-east-1"
 	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
 	allInstances := c.DefaultQuery("allInstances", "false") == "true"
-	instances := strings.Split(c.DefaultQuery("instances", ""), ",")
+	instances := []string{}
+	for _, instance := range strings.Split(c.DefaultQuery("instances", ""), ",") {
+		if instance != "" {
+			instances = append(instances, instance)
+		}
+	}
+
 	id := ""
 	if allInstances {
 		var awsRegionNodeTypeConfig *models.AWSRegionNodeTypeConfig
