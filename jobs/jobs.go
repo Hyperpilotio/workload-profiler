@@ -2,7 +2,6 @@ package jobs
 
 import (
 	"errors"
-	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -46,6 +45,7 @@ type Job interface {
 	SetFailed(error string)
 	GetResults() <-chan *JobResults
 	IsSkipUnreserveOnFailure() bool
+	IsDirectJob() bool
 }
 
 type FailedJobs struct {
@@ -89,12 +89,32 @@ type Worker struct {
 func (worker *Worker) Run() {
 	go func() {
 		for job := range worker.Jobs {
-			if err := worker.RunJob(job); err != nil {
+			var err error
+
+			if job.IsDirectJob() {
+				err = worker.RunDirectJob(job)
+			} else {
+				err = worker.RunJob(job)
+			}
+			if err != nil {
 				job.SetState(JOB_FAILED)
 				worker.FailedJobs.AddJob(job)
 			}
 		}
 	}()
+}
+
+func (Worker *Worker) RunDirectJob(job Job) error {
+	job.SetState(JOB_RESERVING)
+	log := job.GetLog()
+	defer log.LogFile.Close()
+	job.SetState(JOB_RUNNING)
+	if err := job.Run(""); err != nil {
+		job.SetState(JOB_FAILED)
+		return err
+	}
+	job.SetState(JOB_FINISHED)
+	return nil
 }
 
 func (worker *Worker) RunJob(job Job) error {
@@ -229,23 +249,6 @@ func (manager *JobManager) FindJob(id string) (Job, error) {
 	} else {
 		return job, nil
 	}
-}
-
-func (manager *JobManager) FindJobsMatches(regex string) ([]Job, error) {
-	manager.mutex.Lock()
-	defer manager.mutex.Unlock()
-	jobs := make([]Job, 0)
-	for id, job := range manager.Jobs {
-		result, err := regexp.MatchString(regex, id)
-		if err != nil {
-			return nil, err
-		}
-		if result {
-			jobs = append(jobs, job)
-		}
-	}
-	return jobs, nil
-
 }
 
 func (manager *JobManager) GetJobs() []Job {

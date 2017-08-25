@@ -111,7 +111,6 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 	region := "us-east-1"
 	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
 	allInstances := c.DefaultQuery("allInstances", "false") == "true"
-<<<<<<< HEAD
 	instances := []string{}
 	for _, instance := range strings.Split(c.DefaultQuery("instances", ""), ",") {
 		if instance != "" {
@@ -119,12 +118,6 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 		}
 	}
 
-=======
-	instances := make([]string, 0)
-	if ins := c.DefaultQuery("instances", ""); ins != "" {
-		instances = strings.Split(c.DefaultQuery("instances", ""), ",")
-	}
->>>>>>> add simple state check logic for sizing
 	id := ""
 	if allInstances {
 		var awsRegionNodeTypeConfig *models.AWSRegionNodeTypeConfig
@@ -173,9 +166,7 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 			return
 		}
 		id = run.GetId()
-		go func() {
-			run.Run()
-		}()
+		server.JobManager.AddJob(run)
 	} else if len(instances) > 0 {
 		run, err := runners.NewAWSSizingInstancesRun(
 			server.JobManager,
@@ -193,9 +184,7 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 			return
 		}
 		id = run.GetId()
-		go func() {
-			run.Run()
-		}()
+		server.JobManager.AddJob(run)
 	} else {
 		run, err := runners.NewAWSSizingRun(
 			server.JobManager,
@@ -212,9 +201,7 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 			return
 		}
 		id = run.GetId()
-		go func() {
-			run.Run()
-		}()
+		server.JobManager.AddJob(run)
 
 	}
 
@@ -331,7 +318,7 @@ func (server *Server) runCalibration(c *gin.Context) {
 
 func (server *Server) state(c *gin.Context) {
 	runId := c.Param("runId")
-	result, err := server.JobManager.FindJobsMatches(runId)
+	result, err := server.JobManager.FindJob(runId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
@@ -340,37 +327,16 @@ func (server *Server) state(c *gin.Context) {
 		return
 	}
 
-	if len(result) <= 0 {
+	if result == nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": true,
 			"data":  fmt.Sprintf("Job %s not found", runId),
 		})
-	} else if len(result) == 1 {
-		c.JSON(http.StatusAccepted, gin.H{
-			"error": false,
-			"data":  "",
-			"state": result[0].GetState(),
-		})
 	} else {
-		done := true
-		hasError := false
-		for _, job := range result {
-			done = done && (job.GetState() == jobs.JOB_FINISHED || job.GetState() == jobs.JOB_FAILED)
-			hasError = hasError || (job.GetState() == jobs.JOB_FAILED)
-		}
-
-		state := jobs.JOB_RUNNING
-		if done {
-			if hasError {
-				state = jobs.JOB_FAILED
-			} else {
-				state = jobs.JOB_FINISHED
-			}
-		}
 		c.JSON(http.StatusAccepted, gin.H{
 			"error": false,
 			"data":  "",
-			"state": state,
+			"state": result.GetState(),
 		})
 	}
 

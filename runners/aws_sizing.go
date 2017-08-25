@@ -147,6 +147,7 @@ func NewAWSSizingAllInstancesRun(
 				ProfileLog:             log,
 				Created:                time.Now(),
 				SkipUnreserveOnFailure: skipUnreserveOnFailure,
+				DirectJob:              true,
 			},
 
 			AnalyzerClient: analyzerClient,
@@ -162,7 +163,13 @@ func instanceTypeDbName(instanceType string) string {
 	return strings.Replace(instanceType, ".", "-", -1)
 }
 
-func (run *AWSSizingAllInstancesRun) Run() error {
+func (run *AWSSizingRun) SetFailed(error string) {}
+
+func (run *AWSSizingRun) GetResults() <-chan *jobs.JobResults {
+	return nil
+}
+
+func (run *AWSSizingAllInstancesRun) Run(deploymentId string) error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
 
@@ -310,6 +317,7 @@ func NewAWSSizingInstancesRun(
 				ProfileLog:             log,
 				Created:                time.Now(),
 				SkipUnreserveOnFailure: skipUnreserveOnFailure,
+				DirectJob:              true,
 			},
 			AnalyzerClient: analyzerClient,
 			JobManager:     jobManager,
@@ -319,7 +327,7 @@ func NewAWSSizingInstancesRun(
 	}, nil
 }
 
-func (run *AWSSizingInstancesRun) Run() error {
+func (run *AWSSizingInstancesRun) Run(deploymentId string) error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
 
@@ -409,6 +417,7 @@ func NewAWSSizingRun(
 			ProfileLog:             log,
 			Created:                time.Now(),
 			SkipUnreserveOnFailure: skipUnreserveOnFailure,
+			DirectJob:              true,
 		},
 		AnalyzerClient: analyzerClient,
 		JobManager:     jobManager,
@@ -486,7 +495,7 @@ func (run *AWSSizingAllInstancesRun) isInstanceTypeSupported(instanceType string
 	return true
 }
 
-func (run *AWSSizingRun) Run() error {
+func (run *AWSSizingRun) Run(deploymentId string) error {
 	log := run.ProfileLog.Logger
 	appName := run.ApplicationConfig.Name
 
@@ -588,6 +597,7 @@ func NewAWSSizingSingleRun(
 			ProfileLog:             log,
 			Created:                time.Now(),
 			SkipUnreserveOnFailure: SkipUnreserveOnFailure,
+			DirectJob:              false,
 		},
 		InstanceType: instanceType,
 		Calibration:  calibration,
