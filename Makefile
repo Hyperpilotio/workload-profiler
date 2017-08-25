@@ -35,5 +35,8 @@ docker-push: docker-build
 run:
 	./workload-profiler --config ./documents/deployed.config -logtostderr=true -v=2
 
+run-dev:
+	./workload-profiler --config ./documents/deployed_dev.config -logtostderr=true -v=2
+
 dev-test: build
 	run

@@ -10,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hyperpilotio/workload-profiler/jobs"
+	"fmt"
+	"time"
 )
 
 type FileLogs []jobs.JobSummary
@@ -86,6 +88,8 @@ func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
 	fileLogs := FileLogs{}
 
 	filterStatus := strings.ToUpper(c.Param("status"))
+	fmt.Println("filterStatus:", filterStatus)
+
 	switch filterStatus {
 	case jobs.JOB_QUEUED:
 		for _, job := range server.JobManager.GetJobs() {
@@ -114,7 +118,7 @@ func (server *Server) getFileLogs(c *gin.Context) (FileLogs, error) {
 			}
 			fileLog := job.GetSummary()
 			switch fileLog.Status {
-			case jobs.JOB_QUEUED, jobs.JOB_RESERVING, jobs.JOB_RUNNING, jobs.JOB_FINISHED:
+			case jobs.JOB_RESERVING, jobs.JOB_RUNNING:
 				fileLogs = append(fileLogs, job.GetSummary())
 			}
 		}
