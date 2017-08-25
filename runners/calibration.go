@@ -77,16 +77,23 @@ func (run *CalibrationRun) runBenchmarkController(runId string, controller *mode
 	for _, runResult := range results.Results.RunResults {
 		qosValue := runResult.Results[run.ApplicationConfig.SLO.Metric].(float64)
 
-		// TODO: For now we assume just one intensity argument, but we can support multiple
-		// in the future.
-		loadIntensity := runResult.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
+		// TODO: For now we assume there are two cases: just one intensity argument or no intensity argument,
+		// but we can support multiple in the future.
+		var loadIntensity float64
+		if len(controller.Command.IntensityArgs) > 0 {
+			loadIntensity = runResult.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
+		}
 		testResults = append(testResults, models.CalibrationTestResult{
 			QosValue:      qosValue,
 			LoadIntensity: loadIntensity,
 		})
 	}
 
-	finalIntensity := results.Results.FinalResults.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
+	var finalIntensity float64
+	if len(controller.Command.IntensityArgs) > 0 {
+		finalIntensity = results.Results.FinalResults.IntensityArgs[controller.Command.IntensityArgs[0].Name].(float64)
+	}
+
 	// Translate benchmark controller results to expected results format for analyzer
 	finalResult := &models.CalibrationTestResult{
 		LoadIntensity: finalIntensity,
