@@ -8,12 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hyperpilotio/workload-profiler/models"
-
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/workload-profiler/db"
 	"github.com/hyperpilotio/workload-profiler/jobs"
+	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/hyperpilotio/workload-profiler/runners"
 	"github.com/spf13/viper"
 )
@@ -79,6 +78,8 @@ func (server *Server) StartServer() error {
 	{
 		sizingGroup.POST("/aws/:appName", server.runAWSSizing)
 	}
+
+	router.GET("/state/:runId", server.state)
 
 	jobManager, err := jobs.NewJobManager(server.Config)
 	if err != nil {
@@ -165,9 +166,7 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 			return
 		}
 		id = run.GetId()
-		go func() {
-			run.Run()
-		}()
+		server.JobManager.AddJob(run)
 	} else if len(instances) > 0 {
 		run, err := runners.NewAWSSizingInstancesRun(
 			server.JobManager,
@@ -185,9 +184,7 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 			return
 		}
 		id = run.GetId()
-		go func() {
-			run.Run()
-		}()
+		server.JobManager.AddJob(run)
 	} else {
 		run, err := runners.NewAWSSizingRun(
 			server.JobManager,
@@ -204,21 +201,20 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 			return
 		}
 		id = run.GetId()
-		go func() {
-			run.Run()
-		}()
+		server.JobManager.AddJob(run)
 
 	}
 
-	response := struct {
-		Id string `json:"id"`
-	}{
-		Id: id,
-	}
+	// response := struct {
+	// 	Id string `json:"id"`
+	// }{
+	// 	Id: id,
+	// }
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
-		"data":  response,
+		"data":  "",
+		"runId": id,
 	})
 }
 
@@ -283,6 +279,7 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
 		"data":  "",
+		"runId": run.Id,
 	})
 }
 
@@ -315,5 +312,32 @@ func (server *Server) runCalibration(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
 		"data":  "",
+		"runId": run.Id,
 	})
+}
+
+func (server *Server) state(c *gin.Context) {
+	runId := c.Param("runId")
+	result, err := server.JobManager.FindJob(runId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"data":  "Unable find job state: " + err.Error(),
+		})
+		return
+	}
+
+	if result == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": true,
+			"data":  fmt.Sprintf("Job %s not found", runId),
+		})
+	} else {
+		c.JSON(http.StatusAccepted, gin.H{
+			"error": false,
+			"data":  "",
+			"state": result.GetState(),
+		})
+	}
+
 }

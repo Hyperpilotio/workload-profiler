@@ -73,6 +73,7 @@ func NewBenchmarkRun(
 			MetricsDB:                 db.NewMetricsDB(config),
 			ProfileLog:                log,
 			Created:                   time.Now(),
+			DirectJob:                 false,
 		},
 		StartingIntensity:    startingIntensity,
 		Step:                 step,

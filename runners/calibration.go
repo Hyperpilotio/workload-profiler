@@ -49,6 +49,7 @@ func NewCalibrationRun(
 			State:                     "Queued",
 			Created:                   time.Now(),
 			SkipUnreserveOnFailure:    skipUnreserveOnFailure,
+			DirectJob:                 false,
 		},
 	}
 

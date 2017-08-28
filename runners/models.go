@@ -22,6 +22,11 @@ type ProfileRun struct {
 	State                     string
 	Created                   time.Time
 	SkipUnreserveOnFailure    bool
+	DirectJob                 bool
+}
+
+func (run *ProfileRun) IsDirectJob() bool {
+	return run.DirectJob
 }
 
 func (run *ProfileRun) GetId() string {
