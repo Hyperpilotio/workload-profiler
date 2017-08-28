@@ -4,7 +4,7 @@ GO_EXECUTABLE ?= go
 PACKAGES=$(glide novendor)
 ORGANIZATION=hyperpilot
 IMAGE=workload-profiler
-TAG=latest
+TAG=thor
 
 glide-check:
 	@if [ -z $GLIDE ]; then \
@@ -21,12 +21,12 @@ test:
 	${GO_EXECUTABLE} test ${PACKAGES}
 
 build: init
-	CGO_ENABLED=0 go build -a -installsuffix cgo
+	go build .
 
 build-linux: init
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo
 
-docker-build:
+docker-build: build
 	docker build --no-cache . -t ${ORGANIZATION}/${IMAGE}:${TAG}
 
 docker-push: docker-build
