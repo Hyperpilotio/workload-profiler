@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/glog"
 	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
@@ -205,9 +206,10 @@ func NewJobManager(config *viper.Viper) (*JobManager, error) {
 	}
 
 	workerCount := config.GetInt("workerCount")
-	if workerCount == 0 {
+	if workerCount <= 0 {
 		workerCount = 2
 	}
+	glog.Infof("Initialized job queue with %d workers", workerCount)
 
 	failedJobs := NewFailedJobs()
 
