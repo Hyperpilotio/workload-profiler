@@ -98,7 +98,7 @@ func (worker *Worker) Run() {
 				err = worker.RunJob(job)
 			}
 			if err != nil {
-				job.SetState(JOB_FAILED)
+				job.SetFailed(err.Error())
 				worker.FailedJobs.AddJob(job)
 			}
 		}
@@ -106,15 +106,19 @@ func (worker *Worker) Run() {
 }
 
 func (Worker *Worker) RunDirectJob(job Job) error {
-	job.SetState(JOB_RESERVING)
-	log := job.GetLog()
-	defer log.LogFile.Close()
-	job.SetState(JOB_RUNNING)
-	if err := job.Run(""); err != nil {
-		job.SetState(JOB_FAILED)
-		return err
-	}
-	job.SetState(JOB_FINISHED)
+	// Run direct job in non-blocking mode so worker can continue to process
+	// other jobs.
+	go func() {
+		job.SetState(JOB_RESERVING)
+		log := job.GetLog()
+		defer log.LogFile.Close()
+		job.SetState(JOB_RUNNING)
+		if err := job.Run(""); err != nil {
+			job.SetFailed(err.Error())
+		}
+		job.SetState(JOB_FINISHED)
+	}()
+
 	return nil
 }
 
@@ -168,7 +172,7 @@ func (worker *Worker) RunJob(job Job) error {
 			runId,
 			jobErr,
 			strconv.FormatBool(job.IsSkipUnreserveOnFailure()))
-		job.SetState(JOB_FAILED)
+		job.SetFailed(jobErr.Error())
 	} else {
 		job.SetState(JOB_FINISHED)
 	}
