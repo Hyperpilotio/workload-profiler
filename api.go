@@ -72,6 +72,7 @@ func (server *Server) StartServer() error {
 	benchmarkGroup := router.Group("/benchmarks")
 	{
 		benchmarkGroup.POST("/:appName", server.runBenchmarks)
+		benchmarkGroup.POST("/:appName/benchmark/:benchmarkName", server.runBenchmark)
 	}
 
 	sizingGroup := router.Group("/sizing")
@@ -252,6 +253,86 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
 			"data":  "Unable to get the collection of benchmarks: " + err.Error(),
+		})
+		return
+	}
+
+	run, err := runners.NewBenchmarkRun(
+		applicationConfig,
+		benchmarks,
+		request.StartingIntensity,
+		request.Step,
+		request.SloTolerance,
+		server.Config)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"data":  "Unable to create benchmarks run: " + err.Error(),
+		})
+		return
+	}
+
+	log := run.ProfileLog
+	log.Logger.Infof("Queueing benchmark job %s for app %s...", run.Id, appName)
+	server.JobManager.AddJob(run)
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"error": false,
+		"data":  "",
+		"runId": run.Id,
+	})
+}
+
+func (server *Server) runBenchmark(c *gin.Context) {
+	appName := c.Param("appName")
+	benchmarkName := c.Param("benchmarkName")
+
+	var request struct {
+		Intensity int `json:"intensity" binding:"required"`
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to parse benchmark with interference request: " + err.Error(),
+		})
+		return
+	}
+
+	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to get application config for app " + appName + ": " + err.Error(),
+		})
+		return
+	}
+
+	glog.V(1).Infof("Obtained the app config: %+v", applicationConfig)
+
+	// TODO: Cache this
+	benchmarks, err := server.ConfigDB.GetBenchmarks()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"data":  "Unable to get the collection of benchmarks: " + err.Error(),
+		})
+		return
+	}
+
+	var benchmark *models.Benchmark
+	for _, existingBenchmark := range benchmarks {
+		if benchmark.Name == benchmarkName {
+			benchmark = &existingBenchmark
+			break
+		}
+	}
+
+	if benchmark == nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to find benchmark " + benchmarkName,
 		})
 		return
 	}

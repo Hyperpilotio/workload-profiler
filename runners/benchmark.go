@@ -16,14 +16,29 @@ import (
 	"github.com/spf13/viper"
 )
 
-type BenchmarkRun struct {
+type BaseBenchmarkRun struct {
 	ProfileRun
 
-	StartingIntensity    int
-	Step                 int
-	SloTolerance         float64
 	BenchmarkAgentClient *clients.BenchmarkAgentClient
-	Benchmarks           []models.Benchmark
+}
+
+type BenchmarkRun struct {
+	BaseBenchmarkRun
+
+	StartingIntensity int
+	Step              int
+	SloTolerance      float64
+	Benchmarks        []models.Benchmark
+}
+
+// This run creates a cluster with an app and a benchmark intensity, and
+// backups the data from influx.
+type SingleBenchmarkInfluxRun struct {
+	BaseBenchmarkRun
+
+	Intensity            int
+	BenchmarkAgentClient *clients.BenchmarkAgentClient
+	Benchmark            models.Benchmark
 }
 
 func getSlowcookerBenchmarkQos(result *clients.SlowCookerBenchmarkResult, metric string) (int64, error) {
@@ -39,6 +54,49 @@ func getSlowcookerBenchmarkQos(result *clients.SlowCookerBenchmarkResult, metric
 	return 0, errors.New("Unsupported latency metric: " + metric)
 }
 
+func NewSingleBenchmarkInfluxRun(
+	applicationConfig *models.ApplicationConfig,
+	benchmark models.Benchmark,
+	intensity int,
+	config *viper.Viper) (*SingleBenchmarkInfluxRun, error) {
+	id, err := generateId("benchmarkinflux")
+	if err != nil {
+		return nil, errors.New("Unable to generate Id for single benchmark run: " + err.Error())
+	}
+	glog.V(1).Infof("Created new single benchmark run with id: %s", id)
+
+	deployerClient, deployerErr := clients.NewDeployerClient(config)
+	if deployerErr != nil {
+		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
+	}
+
+	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
+	if logErr != nil {
+		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
+	}
+
+	run := &SingleBenchmarkInfluxRun{
+		BaseBenchmarkRun: BaseBenchmarkRun{
+			ProfileRun: ProfileRun{
+				Id:                        id,
+				ApplicationConfig:         applicationConfig,
+				DeployerClient:            deployerClient,
+				BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
+				SlowCookerClient:          &clients.SlowCookerClient{},
+				MetricsDB:                 db.NewMetricsDB(config),
+				ProfileLog:                log,
+				Created:                   time.Now(),
+				DirectJob:                 false,
+			},
+			BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
+		},
+		Intensity: intensity,
+		Benchmark: benchmark,
+	}
+
+	return run, nil
+}
+
 func NewBenchmarkRun(
 	applicationConfig *models.ApplicationConfig,
 	benchmarks []models.Benchmark,
@@ -47,7 +105,7 @@ func NewBenchmarkRun(
 	sloTolerance float64,
 	config *viper.Viper) (*BenchmarkRun, error) {
 
-	id, err := generateId("benchmark")
+	id, err := generateId("benchmarks")
 	if err != nil {
 		return nil, errors.New("Unable to generate Id for benchmark run: " + err.Error())
 	}
@@ -64,22 +122,24 @@ func NewBenchmarkRun(
 	}
 
 	run := &BenchmarkRun{
-		ProfileRun: ProfileRun{
-			Id:                        id,
-			ApplicationConfig:         applicationConfig,
-			DeployerClient:            deployerClient,
-			BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
-			SlowCookerClient:          &clients.SlowCookerClient{},
-			MetricsDB:                 db.NewMetricsDB(config),
-			ProfileLog:                log,
-			Created:                   time.Now(),
-			DirectJob:                 false,
+		BaseBenchmarkRun: BaseBenchmarkRun{
+			ProfileRun: ProfileRun{
+				Id:                        id,
+				ApplicationConfig:         applicationConfig,
+				DeployerClient:            deployerClient,
+				BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
+				SlowCookerClient:          &clients.SlowCookerClient{},
+				MetricsDB:                 db.NewMetricsDB(config),
+				ProfileLog:                log,
+				Created:                   time.Now(),
+				DirectJob:                 false,
+			},
+			BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
 		},
-		StartingIntensity:    startingIntensity,
-		Step:                 step,
-		SloTolerance:         sloTolerance,
-		BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
-		Benchmarks:           benchmarks,
+		StartingIntensity: startingIntensity,
+		Step:              step,
+		SloTolerance:      sloTolerance,
+		Benchmarks:        benchmarks,
 	}
 
 	return run, nil
@@ -189,7 +249,7 @@ func (run *BenchmarkRun) runSlowCookerController(
 	return results, nil
 }
 
-func (run *BenchmarkRun) getBenchmarkAgentUrl(service string, config models.BenchmarkConfig) (string, error) {
+func (run *BaseBenchmarkRun) getBenchmarkAgentUrl(service string, config models.BenchmarkConfig) (string, error) {
 	var colocatedService string
 	switch config.PlacementHost {
 	case "loadtester":
@@ -216,7 +276,7 @@ func (run *BenchmarkRun) getBenchmarkAgentUrl(service string, config models.Benc
 	return serviceUrl, nil
 }
 
-func (run *BenchmarkRun) runBenchmark(id string, service string, benchmark models.Benchmark, intensity int) error {
+func (run *BaseBenchmarkRun) runBenchmark(id string, service string, benchmark models.Benchmark, intensity int) error {
 	for _, config := range benchmark.Configs {
 		run.ProfileLog.Logger.Infof("Starting to run benchmark config: %+v", config)
 
@@ -288,7 +348,7 @@ func (run *BenchmarkRun) runAppWithBenchmark(service string, benchmark models.Be
 			return nil, errors.New("Unable to generate stage id for benchmark " + benchmark.Name + ": " + err.Error())
 		}
 
-		if err = run.runBenchmark(stageId, service, benchmark, currentIntensity); err != nil {
+		if err = run.BaseBenchmarkRun.runBenchmark(stageId, service, benchmark, currentIntensity); err != nil {
 			run.deleteBenchmark(service, benchmark)
 			return nil, errors.New("Unable to run benchmark " + benchmark.Name + ": " + err.Error())
 		}
@@ -316,6 +376,22 @@ func (run *BenchmarkRun) runAppWithBenchmark(service string, benchmark models.Be
 	}
 
 	return results, nil
+}
+
+func (run *SingleBenchmarkInfluxRun) Run(deploymentId string) error {
+	run.DeploymentId = deploymentId
+	//appName := run.ApplicationConfig.Name
+
+	// TODO(tnachen): For now we're assuming only running goddd workload,
+	// replace service in the future
+	if err := run.BaseBenchmarkRun.runBenchmark("single", "goddd", run.Benchmark, run.Intensity); err != nil {
+		return errors.New("Unable to run benchmark " + run.Benchmark.Name + ": " + err.Error())
+	}
+
+	// TODO: Snapshot influx data
+	//run.snapshotInfluxData()
+
+	return nil
 }
 
 func (run *BenchmarkRun) Run(deploymentId string) error {
