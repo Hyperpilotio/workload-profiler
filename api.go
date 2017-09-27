@@ -337,12 +337,10 @@ func (server *Server) runBenchmark(c *gin.Context) {
 		return
 	}
 
-	run, err := runners.NewBenchmarkRun(
+	run, err := runners.NewSingleBenchmarkInfluxRun(
 		applicationConfig,
-		benchmarks,
-		request.StartingIntensity,
-		request.Step,
-		request.SloTolerance,
+		*benchmark,
+		request.Intensity,
 		server.Config)
 
 	if err != nil {

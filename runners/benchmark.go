@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-resty/resty"
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
@@ -145,11 +146,11 @@ func NewBenchmarkRun(
 	return run, nil
 }
 
-func (run *BenchmarkRun) GetResults() <-chan *jobs.JobResults {
+func (run *BaseBenchmarkRun) GetResults() <-chan *jobs.JobResults {
 	return nil
 }
 
-func (run *BenchmarkRun) SetFailed(error string) {}
+func (run *BaseBenchmarkRun) SetFailed(error string) {}
 
 func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchmark) error {
 	for _, config := range benchmark.Configs {
@@ -386,6 +387,16 @@ func (run *SingleBenchmarkInfluxRun) Run(deploymentId string) error {
 	// replace service in the future
 	if err := run.BaseBenchmarkRun.runBenchmark("single", "goddd", run.Benchmark, run.Intensity); err != nil {
 		return errors.New("Unable to run benchmark " + run.Benchmark.Name + ": " + err.Error())
+	}
+
+	loadTesterName := run.ApplicationConfig.LoadTester.Name
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName, run.ProfileLog.Logger)
+	if urlErr != nil {
+		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	}
+
+	if _, err := resty.R().Get(url + "/actions/run_load_controller"); err != nil {
+		return fmt.Errorf("Unable to run load controller: " + err.Error())
 	}
 
 	// TODO: Snapshot influx data

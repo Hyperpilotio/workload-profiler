@@ -40,6 +40,9 @@ type SlowCookerCalibrate struct {
 	RunsPerIntensity   int `bson:"runsPerIntensity" json:"runsPerIntensity"`
 }
 
+type DemoUiController struct {
+}
+
 type SlowCookerController struct {
 	AppLoad   *SlowCookerAppLoad   `bson:"appLoad" json:"appLoad"`
 	Calibrate *SlowCookerCalibrate `bson:"calibrate" json:"calibrate"`
@@ -118,6 +121,7 @@ type LoadTester struct {
 	BenchmarkController  *BenchmarkController  `bson:"benchmarkController" json:"benchmarkController"`
 	LocustController     *LocustController     `bson:"locustController" json:"locustController"`
 	SlowCookerController *SlowCookerController `bson:"slowCookerController" json:"slowCookerController"`
+	DemoUiController     *DemoUiController     `bson:"demoUiController" json:"demoUiController"`
 }
 
 type CalibrationTestResult struct {
