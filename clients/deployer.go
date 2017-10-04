@@ -120,7 +120,11 @@ func (client *DeployerClient) GetColocatedServiceUrl(deployment string, colocate
 
 	mapping, ok := mappings.Data[colocatedService]
 	if !ok {
-		return "", errors.New("Unable to find colocated service in mappings: " + colocatedService)
+		existingServices := []string{}
+		for name, _ := range mappings.Data {
+			existingServices = append(existingServices, name)
+		}
+		return "", fmt.Errorf("Unable to find colocated service in mappings: %s, existing services: %+v", colocatedService, existingServices)
 	}
 
 	nodeId := mapping.NodeId

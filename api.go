@@ -289,7 +289,8 @@ func (server *Server) runBenchmark(c *gin.Context) {
 	benchmarkName := c.Param("benchmarkName")
 
 	var request struct {
-		Intensity int `json:"intensity" binding:"required"`
+		Intensity   int    `json:"intensity" binding:"required"`
+		ServiceName string `json:"serviceName" binding:"required"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -323,7 +324,7 @@ func (server *Server) runBenchmark(c *gin.Context) {
 
 	var benchmark *models.Benchmark
 	for _, existingBenchmark := range benchmarks {
-		if benchmark.Name == benchmarkName {
+		if existingBenchmark.Name == benchmarkName {
 			benchmark = &existingBenchmark
 			break
 		}
@@ -341,6 +342,7 @@ func (server *Server) runBenchmark(c *gin.Context) {
 		applicationConfig,
 		*benchmark,
 		request.Intensity,
+		request.ServiceName,
 		server.Config)
 
 	if err != nil {

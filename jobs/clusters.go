@@ -401,6 +401,8 @@ func (clusters *Clusters) createDeployment(
 		Nodes: jobDeploymentConfig.GetNodes(),
 	}
 
+	userId := clusters.Config.GetString("defaultClusterUserId")
+
 	deployment := &deployer.Deployment{
 		Region:            "us-east-1",
 		Name:              "workload-profiler-" + applicationConfig.Name,
@@ -409,6 +411,10 @@ func (clusters *Clusters) createDeployment(
 		KubernetesDeployment: &deployer.KubernetesDeployment{
 			Kubernetes: []deployer.KubernetesTask{},
 		},
+	}
+
+	if userId != "" {
+		deployment.UserId = userId
 	}
 
 	for _, appTask := range applicationConfig.TaskDefinitions {

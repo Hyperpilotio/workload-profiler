@@ -38,6 +38,7 @@ type SingleBenchmarkInfluxRun struct {
 	BaseBenchmarkRun
 
 	Intensity            int
+	ServiceName          string
 	BenchmarkAgentClient *clients.BenchmarkAgentClient
 	Benchmark            models.Benchmark
 }
@@ -59,6 +60,7 @@ func NewSingleBenchmarkInfluxRun(
 	applicationConfig *models.ApplicationConfig,
 	benchmark models.Benchmark,
 	intensity int,
+	serviceName string,
 	config *viper.Viper) (*SingleBenchmarkInfluxRun, error) {
 	id, err := generateId("benchmarkinflux")
 	if err != nil {
@@ -91,8 +93,9 @@ func NewSingleBenchmarkInfluxRun(
 			},
 			BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
 		},
-		Intensity: intensity,
-		Benchmark: benchmark,
+		Intensity:   intensity,
+		ServiceName: serviceName,
+		Benchmark:   benchmark,
 	}
 
 	return run, nil
@@ -381,11 +384,8 @@ func (run *BenchmarkRun) runAppWithBenchmark(service string, benchmark models.Be
 
 func (run *SingleBenchmarkInfluxRun) Run(deploymentId string) error {
 	run.DeploymentId = deploymentId
-	//appName := run.ApplicationConfig.Name
 
-	// TODO(tnachen): For now we're assuming only running goddd workload,
-	// replace service in the future
-	if err := run.BaseBenchmarkRun.runBenchmark("single", "goddd", run.Benchmark, run.Intensity); err != nil {
+	if err := run.BaseBenchmarkRun.runBenchmark("single", run.ServiceName, run.Benchmark, run.Intensity); err != nil {
 		return errors.New("Unable to run benchmark " + run.Benchmark.Name + ": " + err.Error())
 	}
 
