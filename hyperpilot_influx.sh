@@ -1,23 +1,4 @@
 #!/usr/bin/env bash
-# Usage:
-#   backup:
-#       hyperpilot_influx backup \
-#           --host <influxdb_url> \
-#           --backup-host <influxdb_backup_host:port>
-#           --name <name> \
-#           --aws-id <optional: awsId> \
-#           --aws-secret <optional: secret>
-#   restore:
-#       hyperpilot_influx restore \
-#           --name <backup_name> \
-#           --aws-id <optional: awsId> \
-#           --aws-secret <optional: secret> \
-#           --no-cached
-#   aws flags can ignore if aws credential has set to environment variable:
-#       AWS_ACCESS_KEY_ID
-#       AWS_SECRET_ACCESS_KEY
-#   kubeconfig flag can ignore if KUBECONFIG has set to environment variable
-# set an initial value for the flag
 
 backup_file_path="/tmp/influx/backups"
 bucket="influx_backup"
@@ -27,8 +8,8 @@ if [[ -z "$1" ]]; then
     echo "please see 'help'"
     exit 1
 fi
-BACKUP=`getopt -q -l host:,port:,backup-host:,name:,aws-id::,aws-secret::,influx-username::,influx-password::  -- "$@"`
-RESTORE=`getopt -q -l name:,aws-id::,aws-secret::,no-cache, -- "$@"`
+BACKUP=`getopt -q -l host:,port:,backup-host:,name:,influx-username::,influx-password::  -- "$@"`
+RESTORE=`getopt -q -l name:,no-cache, -- "$@"`
 if [[ "$1" == "backup" ]]; then
     OPERATOR=$1
     eval set -- "$BACKUP"
@@ -52,8 +33,6 @@ elif [[ "$1" == "help" ]]; then
         --port: influxDB server port (only backup operation needed)
         --backup-host: influxDB_backup_host:port (only backup operation needed)
         --name: backup / restore file key name
-        --aws-id(optional): aws access key id, env: AWS_ACCESS_KEY_ID
-        --aws-secret(optional): aws secret access key or set to env AWS_SECRET_ACCESS_KEY
         --influx-username(optional): influxdb user, default is set to 'root' (only backup operation needed)
         --influx-password(optional): influxdb password, default is set to 'default' (only backup operation needed)
         --no-cache(optinal): use local copy of snapshot if this flag is not provided, else it will pull from S3 \n"
@@ -86,21 +65,6 @@ while true ; do
                 "" ) echo "flag $1 contains no value" ; exit 1 ;;
                 *  ) NAME=$2; shift 2 ;;
             esac ;;
-        --aws-id )
-            case "$2" in
-                "" ) echo "flag $1 $2 shows but contains no value" ; exit 1 ;;
-                *  ) AWSID=$2 ; shift 2 ;;
-            esac ;;
-        --aws-secret )
-            case "$2" in
-                "" ) echo "flag $1 show but contains no value" ; exit 1 ;;
-                *  ) AWS_SECRET=$2 ; shift 2 ;;
-            esac ;;
-        --kubeconfig-file )
-            case "$2" in
-                "" ) echo "flag $1 show but contains no value" ; exit 1 ;;
-                * ) KUBE_CONFIG=$2 ; shift 2 ;;
-            esac ;;
         --influx-username )
             case "$2" in
                 "" ) echo "flag $1 show but contains no value" ; exit 1 ;;
@@ -120,21 +84,6 @@ done
 if [[ -z "$PORT" ]]; then
     PORT=8086
 fi
-if [[ -z "$AWSID" && "$OPERATOR" == "backup" ]]; then
-    if [[ -z $AWS_ACCESS_KEY_ID ]]; then
-        echo "aws credential not set properly"
-        exit 1
-    fi
-    AWSID=$AWS_ACCESS_KEY_ID
-fi
-
-if [[ -z "$AWS_SECRET" && "$OPERATOR" == "backup" ]]; then
-    if [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
-        echo "aws credential not set properly"
-        exit 1
-    fi
-    AWS_SECRET=$AWS_SECRET_ACCESS_KEY
-fi
 
 # default username set to 'root'
 if [[ -z "$INFLUX_USERNAME" ]]; then
@@ -150,27 +99,11 @@ fi
 echo "OPERATION: $OPERATOR"
 echo "HOST = $HOST"
 echo "NAME = $NAME"
-echo "AWSID = $AWSID"
-echo "AWS_SECRET = $AWS_SECRET"
 echo "INFLUX_USERNAME = $INFLUX_USERNAME"
 echo "INFLUX_PASSWORD = $INFLUX_PASSWORD"
 
 
 file="$NAME.tar.gz"
-
-# add profile to aws config file
-#cp ~/.aws/config ~/.aws/config.bak
-#cp ~/.aws/credentials ~/.aws/credentials.bak
-#cat <<EOF >> ~/.aws/config
-#[profile share]
-#region = us-east-1
-#EOF
-
-#cat <<EOF >> ~/.aws/credentials
-#[share]
-#aws_access_key_id = $AWSID
-#aws_secret_access_key = $AWS_SECRET
-#EOF
 
 case "$OPERATOR" in
     backup  )
@@ -195,12 +128,12 @@ case "$OPERATOR" in
         # upload to s3
         # create bucket (this will auto check if this bucket exists)
         echo "create s3 bucket"
-        aws s3api create-bucket --bucket $bucket --region us-east-1 --profile=share
+        aws s3api create-bucket --bucket $bucket --region us-east-1
 
         # upload tar file
         echo "upload file"
-        echo "aws cp $file s3://$bucket/$NAME.tar.gz --profile=share"
-        aws s3 cp $file s3://$bucket/$file --profile=share
+        echo "aws cp $file s3://$bucket/$NAME.tar.gz"
+        aws s3 cp $file s3://$bucket/$file
 
         printf "influxDB backup successfully
 backup name: $NAME
@@ -265,10 +198,4 @@ bye!\n
         printf "ok, done.\n please restart your influxd. \nbye!\n"
 esac
 
-# reset aws profile
-#rm -rf ~/.aws/config
-#rm -rf ~/.aws/credentials
-#mv ~/.aws/config.bak ~/.aws/config
-#mv ~/.aws/credentials.bak ~/.aws/credentials
-#rm -rf influx_restore.yaml
 rm -rf $file
