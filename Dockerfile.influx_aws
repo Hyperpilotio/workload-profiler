@@ -16,8 +16,10 @@ RUN pip install awscli
 
 COPY workload-profiler /opt/workload-profiler/workload-profiler
 COPY ./documents/deployed.config /etc/workload-profiler/config.json
-COPY ./aws_config/config ~/.aws/config
-COPY ./aws_config/credentials ~/.aws/credentials
+COPY ./aws_config/config /aws_config/config
+COPY ./aws_config/credentials /aws_config/credentials
+RUN mkdir ~/.aws
+RUN cp -rp /aws_config/* ~/.aws/
 COPY hyperpilot_influx.sh /usr/local/bin/hyperpilot_influx.sh
 RUN chmod +x /usr/local/bin/hyperpilot_influx.sh
 COPY ./ui/ /opt/workload-profiler/src/github.com/hyperpilotio/workload-profiler/ui/

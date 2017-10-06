@@ -10,6 +10,7 @@ func TestBackupDB(t *testing.T) {
 	client := &InfluxClient{
 		influxUrl:        "localhost",
 		influxPort:       "8086",
+		influxBackupUrl:  "localhost",
 		influxBackupPort: "8088",
 	}
 
