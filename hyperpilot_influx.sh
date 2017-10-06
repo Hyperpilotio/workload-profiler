@@ -1,100 +1,125 @@
 #!/usr/bin/env bash
 
 backup_file_path="/tmp/influx/backups"
-bucket="influx_backup"
+bucket="hyperpilot_influx_backup"
 
 # read the options
 if [[ -z "$1" ]]; then
     echo "please see 'help'"
     exit 1
 fi
-BACKUP=`getopt -q -l host:,port:,backup-host:,name:,influx-username::,influx-password::  -- "$@"`
-RESTORE=`getopt -q -l name:,no-cache, -- "$@"`
-if [[ "$1" == "backup" ]]; then
-    OPERATOR=$1
-    eval set -- "$BACKUP"
-elif [[ "$1" == "restore" ]]; then
-    OPERATOR=$1
-    eval set -- "$RESTORE"
-elif [[ "$1" == "house-keeping" ]]; then
-    rm -rf $backup_file_path
-    echo "cache are all cleared."
-    echo "bye!"
-    exit 0
-elif [[ "$1" == "help" ]]; then
-    printf "[hyperpilot_influx tool]
-    Backup whole influxDB to AWS S3 bucket and restore
-    Usage:
-        hyperpilot_influx backup <options>
-        hyperpilot_influx restore <options>
-        hyperpilot_influx house-keeping: clean all local cached snapshot files
-    options:
-        --host: influxDB host url (only backup operation needed)
-        --port: influxDB server port (only backup operation needed)
-        --backup-host: influxDB_backup_host:port (only backup operation needed)
-        --name: backup / restore file key name
-        --influx-username(optional): influxdb user, default is set to 'root' (only backup operation needed)
-        --influx-password(optional): influxdb password, default is set to 'default' (only backup operation needed)
-        --no-cache(optinal): use local copy of snapshot if this flag is not provided, else it will pull from S3 \n"
-    exit 1
-else
-    echo "must be backup / restore"
-    exit 1
-fi
 
 # extract options and their arguments into variables.
-while true ; do
-    case "$1" in
-        --host )
-            case "$2" in
-                "" ) echo "flag $1 contains no value" ; exit 1 ;;
-                *  ) HOST=$2; shift 2 ;;
-            esac ;;
-        --port )
-            case "$2" in
-                "" ) echo "flag $1 contains no value" ; exit 1 ;;
-                *  ) PORT=$2; shift 2 ;;
-            esac ;;
-        --backup-host )
-            case "$2" in
-                "" ) echo "flag $1 contains no value" ; exit 1 ;;
-                *  ) BACKUP_HOST=$2; shift 2 ;;
-            esac ;;
-        --name )
-            case "$2" in
-                "" ) echo "flag $1 contains no value" ; exit 1 ;;
-                *  ) NAME=$2; shift 2 ;;
-            esac ;;
-        --influx-username )
-            case "$2" in
-                "" ) echo "flag $1 show but contains no value" ; exit 1 ;;
-                *  ) INFLUX_USERNAME=$2 ; shift 2 ;;
-            esac ;;
-        --influx-password )
-            case "$2" in
-                "" ) echo "flag $1 show but contains no values" ; exit 1 ;;
-                *  ) INFLUX_PASSWORD=$2 ; shift 2 ;;
-            esac ;;
-        --no-cache ) NO_CACHE=true ; shift 1 ;;
-        -- ) shift ; break ;;
-        *  ) echo "error parameter: $1" ; exit 1 ;;
+while getopts ":h::b::n:u::p::o:?c" args ; do
+    case $args in
+        \?)
+            printf "[hyperpilot_influx tool]
+Backup whole influxDB to AWS S3 bucket and restore
+Usage:
+    hyperpilot_influx backup <options>
+    hyperpilot_influx restore <options>
+    hyperpilot_influx house-keeping: clean all local cached snapshot files
+options:
+    -h: influxDB host url with port (only backup operation needed)
+    -b: influxDB_backup_host:port (only backup operation needed)
+    -n: backup / restore file key name
+    -u(optional): influxdb user, default is set to 'root' (only backup operation needed)
+    -p(optional): influxdb password, default is set to 'default' (only backup operation needed)
+    -a(optional): aws s3 bucket name, default is set to hyperpilot_influx_backup
+    -c(optinal): use local copy of snapshot if this flag is not provided, else it will pull from S3 \n"
+            exit 1
+            ;;
+        a)
+            bucket=${OPTARG}
+            ;;
+        o)
+            case ${OPTARG} in
+                backup)
+                    OPERATION=${OPTARG}
+                    ;;
+                restore)
+                    OPERATION=${OPTARG}
+                    ;;
+                house-keeping)
+                    rm -rf $backup_file_path
+                    echo "cache are all cleared."
+                    echo "bye!"
+                    exit 0
+                    ;;
+                *)
+                    echo "wrong operation: ${OPTARG}"
+                    echo "bye!"
+                    exit 0
+                    ;;
+            esac
+            ;;
+        h)
+            str_host=$(echo ${OPTARG} | awk -F: '{print $1}')
+            if [[ -z $str_host ]]; then
+                HOST=localhost
+            else
+                HOST=$str_host
+            fi
+            str_port=$(echo ${OPTARG} | awk -F: '{print $2}')
+            if [[ -z $str_port ]]; then
+                PORT=8086
+            else
+                PORT=$str_port
+            fi
+            ;;
+        b)
+            BACKUP_HOST=${OPTARG}
+            ;;
+        n)
+            NAME=${OPTARG}
+            ;;
+        u)
+            INFLUX_USERNAME=${OPTARG}
+            ;;
+        p)
+            INFLUX_PASSWORD=${OPTARG}
+            ;;
+        c)
+            NO_CACHE=true
+            ;;
     esac
 done
 
-if [[ -z "$PORT" ]]; then
-    PORT=8086
+if [[ "$OPERATION" == "backup" ]]; then
+    if [[ -z "$HOST" ]]; then
+        HOST="localhost"
+    fi
+
+    if [[ -z "$PORT" ]]; then
+        #statements
+        PORT="8086"
+    fi
+
+    if [[ -z $BACKUP_HOST ]]; then
+        #statements
+        BACKUP_HOST="localhost:8088"
+    fi
+
+    if [[ -z "$INFLUX_USERNAME" ]]; then
+        INFLUX_USERNAME="root"
+    fi
+
+    if [[ -z "$INFLUX_PASSWORD" ]]; then
+        INFLUX_PASSWORD="default"
+    fi
+
+    if [[ -z "$NAME" ]]; then
+        #statements
+        echo "please give a snapshot name"
+        exit 1
+    fi
+
 fi
 
-# default username set to 'root'
-if [[ -z "$INFLUX_USERNAME" ]]; then
-    INFLUX_USERNAME="root"
+if [[ "$OPERATION" == "restore" && -z "$NAME" ]]; then
+    echo "please give a snapshot name"
+    exit 1
 fi
-
-# default password set to 'default'
-if [[ -z "$INFLUX_PASSWORD" ]]; then
-    INFLUX_PASSWORD="default"
-fi
-
 
 echo "OPERATION: $OPERATOR"
 echo "HOST = $HOST"
@@ -102,11 +127,10 @@ echo "NAME = $NAME"
 echo "INFLUX_USERNAME = $INFLUX_USERNAME"
 echo "INFLUX_PASSWORD = $INFLUX_PASSWORD"
 
-
 file="$NAME.tar.gz"
 
-case "$OPERATOR" in
-    backup  )
+case "$OPERATION" in
+    backup)
         mkdir -p $backup_file_path
         # backup metastore
         influxd backup -host $BACKUP_HOST $backup_file_path
@@ -141,7 +165,7 @@ you can run ./hyperpilot_influx.sh restore command to restore whole database
 bye!\n
 "
         ;;
-    restore )
+    restore)
 
         # download file from s3 by specified name
         if [[ "$NO_CACHE" == "true" || ! -f $backup_file_path/$file ]]; then
@@ -182,9 +206,6 @@ bye!\n
                 echo "empty database $db"
             fi
         done
-
-        chown -R influx:influx $META_DIR
-        chown -R influx:influx $DATA_DIR
 
         # kill process
 

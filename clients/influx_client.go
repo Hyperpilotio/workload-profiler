@@ -9,6 +9,7 @@ import (
 type InfluxClient struct {
 	influxUrl        string
 	influxPort       string
+	influxBackupUrl  string
 	influxBackupPort string
 }
 
@@ -18,11 +19,14 @@ func (client *InfluxClient) BackupDB(key string) error {
 
 	cmd := exec.Command(
 		"hyperpilot_influx.sh",
+		"-o",
 		"backup",
-		fmt.Sprintf("--host=%s", client.influxUrl),
-		fmt.Sprintf("--port=%s", client.influxPort),
-		fmt.Sprintf("--backup-host=%s", fmt.Sprintf("%s:%s", client.influxUrl, client.influxBackupPort)),
-		fmt.Sprintf("--name=%s", key),
+		"-h",
+		fmt.Sprintf("%s:%s", client.influxUrl, client.influxPort),
+		"-b",
+		fmt.Sprintf("%s:%s", client.influxBackupUrl, client.influxBackupPort),
+		"-n",
+		key,
 	)
 	var out bytes.Buffer
 	cmd.Stdout = &out
