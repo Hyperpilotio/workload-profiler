@@ -16,9 +16,9 @@ while getopts ":h::b::n:u::p::o:?c" args ; do
             printf "[hyperpilot_influx tool]
 Backup whole influxDB to AWS S3 bucket and restore
 Usage:
-    hyperpilot_influx backup <options>
-    hyperpilot_influx restore <options>
-    hyperpilot_influx house-keeping: clean all local cached snapshot files
+    hyperpilot_influx -o backup <options>
+    hyperpilot_influx -o restore <options>
+    hyperpilot_influx -o house-keeping: clean all local cached snapshot files
 options:
     -h: influxDB host url with port (only backup operation needed)
     -b: influxDB_backup_host:port (only backup operation needed)
@@ -26,7 +26,7 @@ options:
     -u(optional): influxdb user, default is set to 'root' (only backup operation needed)
     -p(optional): influxdb password, default is set to 'default' (only backup operation needed)
     -a(optional): aws s3 bucket name, default is set to hyperpilot_influx_backup
-    -c(optinal): use local copy of snapshot if this flag is not provided, else it will pull from S3 \n"
+    -c(optional): use local copy of snapshot if this flag is not provided, else it will pull from S3 \n"
             exit 1
             ;;
         a)
@@ -121,7 +121,7 @@ if [[ "$OPERATION" == "restore" && -z "$NAME" ]]; then
     exit 1
 fi
 
-echo "OPERATION: $OPERATOR"
+echo "OPERATION: $OPERATION"
 echo "HOST = $HOST"
 echo "NAME = $NAME"
 echo "INFLUX_USERNAME = $INFLUX_USERNAME"

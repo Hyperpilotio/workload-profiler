@@ -28,11 +28,6 @@ func (client *InfluxClient) BackupDB(key string) error {
 		"-n",
 		key,
 	)
-	var out bytes.Buffer
-	cmd.Stdout = &out
 	err := cmd.Run()
-	fmt.Println(out.String())
-
-	// /usr/local/bin/hyperpilot_influx.sh backup
 	return err
 }
