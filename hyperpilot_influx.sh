@@ -19,6 +19,8 @@ Usage:
     hyperpilot_influx -o backup <options>
     hyperpilot_influx -o restore <options>
     hyperpilot_influx -o house-keeping: clean all local cached snapshot files
+Example:
+     ./hyperpilot_influx.sh -o backup -h 35.185.234.32 -b 35.185.234.32:8088 -n tech-demo -p=8086
 options:
     -h: influxDB host url with port (only backup operation needed)
     -b: influxDB_backup_host:port (only backup operation needed)
