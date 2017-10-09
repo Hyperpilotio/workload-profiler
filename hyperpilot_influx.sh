@@ -194,14 +194,7 @@ bye!\n
         echo "data dir: $DATA_DIR"
 
         # kill process
-        pid=$(ps aux | grep influxd | grep -v grep | grep -v sudo | awk '{print $2}')
-        echo $pid
-        if [[ -z "$pid" ]]; then
-            echo "Influxdb not found running, skipping kill"
-        else
-            echo "killing Influxdb process: $pid"
-            sudo kill -9 $pid
-        fi
+        sudo pkill -f influxd
 
         ## start restoring
         # restore meta
