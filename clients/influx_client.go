@@ -27,6 +27,8 @@ func (client *InfluxClient) BackupDB(key string) error {
 		fmt.Sprintf("%s:%s", client.influxBackupUrl, client.influxBackupPort),
 		"-n",
 		key,
+		"-p",
+		"8086",
 	)
 	err := cmd.Run()
 	return err
