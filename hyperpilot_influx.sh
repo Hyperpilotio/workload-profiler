@@ -193,9 +193,19 @@ bye!\n
         echo "meta dir: $META_DIR"
         echo "data dir: $DATA_DIR"
 
+        # kill process
+        pid=$(ps aux | grep influxd | grep -v grep | grep -v sudo | awk '{print $2}')
+        echo $pid
+        if [[ -z "$pid" ]]; then
+            echo "Influxdb not found running, skipping kill"
+        else
+            echo "killing Influxdb process: $pid"
+            sudo kill -9 $pid
+        fi
+
         ## start restoring
         # restore meta
-        influxd restore -metadir $META_DIR $backup_file_path/cache/$NAME
+        sudo influxd restore -metadir $META_DIR $backup_file_path/cache/$NAME
         # restore database
         files=($(ls $backup_file_path/cache/$NAME))
         for db in "${files[@]}"; do
@@ -203,19 +213,11 @@ bye!\n
             # restore database
             if ls $backup_file_path/cache/$NAME/$db/$db* 1> /dev/null 2>&1; then
                 echo "restoring data"
-                influxd restore -database $db -datadir $DATA_DIR $backup_file_path/cache/$NAME/$db
+                sudo influxd restore -database $db -datadir $DATA_DIR $backup_file_path/cache/$NAME/$db
             else
                 echo "empty database $db"
             fi
         done
-
-        # kill process
-
-        process=$(ps aux | grep influxdb)
-        echo $process
-        pid=$(echo $process | grep bin/influxd | awk '{print $2}')
-        echo "killing Influxdb process: $pid"
-        kill -9 $pid
 
         # update influx deployment
         printf "ok, done.\n please restart your influxd. \nbye!\n"
