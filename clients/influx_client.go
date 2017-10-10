@@ -9,14 +9,12 @@ import (
 type InfluxClient struct {
 	influxUrl        string
 	influxPort       string
-	influxBackupUrl  string
 	influxBackupPort string
 }
 
 func (client *InfluxClient) BackupDB(key string) error {
 	// Subprocess to run hyperpilot_influx.sh to backup and
 	// and send backup to s3.
-
 	cmd := exec.Command(
 		"hyperpilot_influx.sh",
 		"-o",
@@ -24,7 +22,7 @@ func (client *InfluxClient) BackupDB(key string) error {
 		"-h",
 		fmt.Sprintf("%s:%s", client.influxUrl, client.influxPort),
 		"-b",
-		fmt.Sprintf("%s:%s", client.influxBackupUrl, client.influxBackupPort),
+		fmt.Sprintf("%s:%s", client.influxUrl, client.influxBackupPort),
 		"-n",
 		key,
 		"-p",
