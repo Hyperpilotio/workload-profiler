@@ -5,12 +5,14 @@ bucket="hyperpilot_influx_backup"
 
 # read the options
 if [[ -z "$1" ]]; then
-    echo "please see 'help'"
+    echo "please see 'help with -?"
     exit 1
 fi
 
 # extract options and their arguments into variables.
-while getopts ":h::b::n:u::p::o:?c" args ; do
+while getopts ":h::b::n:u::p::o:a:?c" args ; do
+    echo $args
+    echo $OPTARG
     case $args in
         \?)
             printf "[hyperpilot_influx tool]
@@ -22,6 +24,7 @@ Usage:
 Example:
      ./hyperpilot_influx.sh -o backup -h 35.185.234.32 -b 35.185.234.32:8088 -n tech-demo -p=8086
 options:
+    -o: operation: backup / restore /house-keeping
     -h: influxDB host url with port (only backup operation needed)
     -b: influxDB_backup_host:port (only backup operation needed)
     -n: backup / restore file key name
