@@ -11,8 +11,6 @@ fi
 
 # extract options and their arguments into variables.
 while getopts ":h::b::n:u::p::o:a:?c" args ; do
-    echo $args
-    echo $OPTARG
     case $args in
         \?)
             printf "[hyperpilot_influx tool]
@@ -139,6 +137,11 @@ case "$OPERATION" in
         mkdir -p $backup_file_path
         # backup metastore
         influxd backup -host $BACKUP_HOST $backup_file_path
+        ret_code=$?
+        if [[ $ret_code != 0 ]]; then
+            echo "influxdb backup up failed"
+            exit $ret_code
+        fi
 
         # search for databases
         dbs=($(influx -host $HOST -port $PORT -username $INFLUX_USERNAME -password $INFLUX_PASSWORD -execute 'show databases' -format json | jq -c '.results[0].series[0].values[] | join([])'))
@@ -150,6 +153,11 @@ case "$OPERATION" in
             echo "backing up $normalized_db_name"
             echo "influxd backup -host $BACKUP_HOST -database $normalized_db_name $backup_file_path/$normalized_db_name"
             influxd backup -host $BACKUP_HOST -database $normalized_db_name $backup_file_path/$normalized_db_name
+            ret_code=$?
+            if [[ $ret_code != 0 ]]; then
+                echo "error occur while backing up $db"
+                exit $ret_code
+            fi
         done
         # tar whole directory
         tar zcvf "$NAME.tar.gz" -C $backup_file_path .
@@ -164,6 +172,13 @@ case "$OPERATION" in
         echo "aws cp $file s3://$bucket/$NAME.tar.gz"
         aws s3 cp $file s3://$bucket/$file
 
+        ret_code=$?
+        if [[ $ret_code != 0 ]]; then
+            #statements
+            echo "error occur while uploading snapshot to S3"
+            exit $ret_code
+        fi
+
         printf "influxDB backup successfully
 backup name: $NAME
 you can run ./hyperpilot_influx.sh restore command to restore whole database
@@ -175,6 +190,12 @@ bye!\n
         # download file from s3 by specified name
         if [[ "$NO_CACHE" == "true" || ! -f $backup_file_path/$file ]]; then
             aws s3 cp s3://$bucket/$NAME.tar.gz $backup_file_path/$file
+            ret_code=$?
+            if [[ $ret_code != 0 ]]; then
+                #statements
+                echo "error occur while coping snapshot from S3"
+                exit $ret_code
+            fi
         fi
         # untar zip file
         mkdir -p $backup_file_path/cache/$NAME
@@ -210,6 +231,12 @@ bye!\n
             if ls $backup_file_path/cache/$NAME/$db/$db* 1> /dev/null 2>&1; then
                 echo "restoring data"
                 sudo influxd restore -database $db -datadir $DATA_DIR $backup_file_path/cache/$NAME/$db
+                ret_code=$?
+                if [[ $ret_code != 0 ]]; then
+                    #statements
+                    echo "error restoring database $db"
+                    exit $ret_code
+                fi
             else
                 echo "empty database $db"
             fi
