@@ -10,7 +10,7 @@ if [[ -z "$1" ]]; then
 fi
 
 # extract options and their arguments into variables.
-while getopts ":h::b::n:u::p::o:a:?c" args ; do
+while getopts ":h::b::n:u::p::o:a:d:k:?c" args ; do
     case $args in
         \?)
             printf "[hyperpilot_influx tool]
@@ -25,10 +25,12 @@ options:
     -o: operation: backup / restore /house-keeping
     -h: influxDB host url with port (only backup operation needed)
     -b: influxDB_backup_host:port (only backup operation needed)
+    -d: specify which database needed to backup, if this option set, -h value won't needed
     -n: backup / restore file key name
     -u(optional): influxdb user, default is set to 'root' (only backup operation needed)
     -p(optional): influxdb password, default is set to 'default' (only backup operation needed)
     -a(optional): aws s3 bucket name, default is set to hyperpilot_influx_backup
+    -k(optional): influxdb service name in kubernetes, it will search endpoints of influxdb by using kubectl so you need to set KUBECONFIG in env to use this flag
     -c(optional): use local copy of snapshot if this flag is not provided, else it will pull from S3 \n"
             exit 1
             ;;
@@ -85,8 +87,42 @@ options:
         c)
             NO_CACHE=true
             ;;
+        d)
+            DATABASE=${OPTARG}
+            ;;
+        k)
+            KUBE_INFLUX=${OPTARG}
+            ;;
     esac
 done
+
+# use only tech-demo
+if [[ ! -z "$KUBE_INFLUX" ]]; then
+    #statements
+    if [[ -z "$KUBECONFIG" ]]; then
+        #statements
+        echo "please set KUBECONFIG env variable to use this function"
+        exit 1
+    fi
+    endpoints=($(kubectl get services -n hyperpilot -l app=influxsrv -o jsonpath='{range .items[?(.spec.type=="LoadBalancer")]}{.status.loadBalancer.ingress[*].hostname}{":"}{.spec.ports[*].targetPort}{" "}{end}'))
+    if [[ $? != 0 ]]; then
+        #statements
+        exit $?
+    fi
+    for url in "${endpoints[@]}"; do
+        echo $url
+        h=$(echo $url | awk -F: '{print $1}')
+        p=$(echo $url | awk -F: '{print $2}')
+        if [[ "$p" == "8086" ]]; then
+            #statements
+            HOST=$h
+        elif [[ "$p" == "8088" ]]; then
+            #statements
+            BACKUP_HOST=$h:8088
+        fi
+    done
+fi
+
 
 if [[ "$OPERATION" == "backup" ]]; then
     if [[ -z "$HOST" ]]; then
@@ -126,14 +162,19 @@ fi
 
 echo "OPERATION: $OPERATION"
 echo "HOST = $HOST"
+echo "PORT = $PORT"
+echo "BACKUP_HOST = $BACKUP_HOST"
 echo "NAME = $NAME"
 echo "INFLUX_USERNAME = $INFLUX_USERNAME"
 echo "INFLUX_PASSWORD = $INFLUX_PASSWORD"
+echo "KUBECONFIG = $KUBECONFIG"
+echo "DATABASE = $DATABASE"
 
 file="$NAME.tar.gz"
 
 case "$OPERATION" in
     backup)
+        backup_file_path=$backup_file_path/$NAME
         mkdir -p $backup_file_path
         # backup metastore
         influxd backup -host $BACKUP_HOST $backup_file_path
@@ -144,7 +185,13 @@ case "$OPERATION" in
         fi
 
         # search for databases
-        dbs=($(influx -host $HOST -port $PORT -username $INFLUX_USERNAME -password $INFLUX_PASSWORD -execute 'show databases' -format json | jq -c '.results[0].series[0].values[] | join([])'))
+        if [[ -z "$DATABASE" ]]; then
+            #statements
+            dbs=($(influx -host $HOST -port $PORT -username $INFLUX_USERNAME -password $INFLUX_PASSWORD -execute 'show databases' -format json | jq -c '.results[0].series[0].values[] | join([])'))
+        else
+            dbs=($DATABASE)
+        fi
+
         # backup databases
 
         for db in "${dbs[@]}"; do
