@@ -1,7 +1,6 @@
 package clients
 
 import (
-	"bytes"
 	"fmt"
 	"os/exec"
 )

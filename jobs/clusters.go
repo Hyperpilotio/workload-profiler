@@ -13,6 +13,7 @@ import (
 	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/db"
 	"github.com/hyperpilotio/workload-profiler/models"
 	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
@@ -51,6 +52,7 @@ type UnreserveResult struct {
 
 type cluster struct {
 	deploymentTemplate string
+	deploymentFile     string
 	deploymentId       string
 	runId              string
 	state              clusterState
@@ -59,7 +61,8 @@ type cluster struct {
 }
 
 type Clusters struct {
-	Store          blobstore.BlobStore
+	ClusterStore   blobstore.BlobStore
+	ConfigDB       *db.ConfigDB
 	Config         *viper.Viper
 	DeployerClient *clients.DeployerClient
 	mutex          sync.Mutex
@@ -87,20 +90,22 @@ func ParseStateString(state string) clusterState {
 
 type storeCluster struct {
 	DeploymentTemplate string
+	DeploymentFile     string
 	DeploymentId       string
 	RunId              string
 	State              string
 	Created            string
 }
 
-func NewClusters(deployerClient *clients.DeployerClient, config *viper.Viper) (*Clusters, error) {
+func NewClusters(deployerClient *clients.DeployerClient, config *viper.Viper, configDb *db.ConfigDB) (*Clusters, error) {
 	clusterStore, err := blobstore.NewBlobStore("WorkloadProfilerClusters", config)
 	if err != nil {
 		return nil, errors.New("Unable to create deployments store: " + err.Error())
 	}
 
 	return &Clusters{
-		Store:          clusterStore,
+		ClusterStore:   clusterStore,
+		ConfigDB:       configDb,
 		Config:         config,
 		DeployerClient: deployerClient,
 		Deployments:    []*cluster{},
@@ -109,7 +114,7 @@ func NewClusters(deployerClient *clients.DeployerClient, config *viper.Viper) (*
 }
 
 func (clusters *Clusters) ReloadClusterState() error {
-	existingClusters, err := clusters.Store.LoadAll(func() interface{} {
+	existingClusters, err := clusters.ClusterStore.LoadAll(func() interface{} {
 		return &storeCluster{}
 	})
 
@@ -129,6 +134,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 		if deploymentReady {
 			reloadCluster := &cluster{
 				deploymentTemplate: storeCluster.DeploymentTemplate,
+				deploymentFile:     storeCluster.DeploymentFile,
 				deploymentId:       storeCluster.DeploymentId,
 				runId:              storeCluster.RunId,
 				state:              ParseStateString(storeCluster.State),
@@ -143,7 +149,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 			storeClusters = append(storeClusters, reloadCluster)
 		} else {
 			glog.V(1).Infof("Found recovered cluster %s to be not available, deleting from store", storeCluster.DeploymentId)
-			if err := clusters.Store.Delete(storeCluster.RunId); err != nil {
+			if err := clusters.ClusterStore.Delete(storeCluster.RunId); err != nil {
 				glog.Errorf("Unable to delete profiler cluster: %s", err.Error())
 			}
 		}
@@ -177,6 +183,7 @@ func (clusters *Clusters) ReloadClusterState() error {
 func (clusters *Clusters) newStoreCluster(selectedCluster *cluster) (*storeCluster, error) {
 	cluster := &storeCluster{
 		DeploymentTemplate: selectedCluster.deploymentTemplate,
+		DeploymentFile:     selectedCluster.deploymentFile,
 		DeploymentId:       selectedCluster.deploymentId,
 		RunId:              selectedCluster.runId,
 		State:              GetStateString(selectedCluster.state),
@@ -226,6 +233,7 @@ func (clusters *Clusters) ReserveDeployment(
 
 		selectedCluster = &cluster{
 			deploymentTemplate: applicationConfig.DeploymentTemplate,
+			deploymentFile:     applicationConfig.DeploymentFile,
 			runId:              runId,
 			state:              DEPLOYING,
 			created:            time.Now(),
@@ -244,8 +252,8 @@ func (clusters *Clusters) ReserveDeployment(
 				return
 			}
 
-			glog.Infof("New cluster deployed successfully with deployment id %s", *deploymentId)
-			selectedCluster.deploymentId = *deploymentId
+			glog.Infof("New cluster deployed successfully with deployment id %s", deploymentId)
+			selectedCluster.deploymentId = deploymentId
 			selectedCluster.state = RESERVED
 
 			if err := clusters.storeCluster(selectedCluster); err != nil {
@@ -253,7 +261,7 @@ func (clusters *Clusters) ReserveDeployment(
 			}
 
 			reserveResult <- ReserveResult{
-				DeploymentId: *deploymentId,
+				DeploymentId: deploymentId,
 			}
 		}()
 	} else {
@@ -292,7 +300,7 @@ func (clusters *Clusters) ReserveDeployment(
 				selectedCluster.runId = runId
 
 				if originRunId != "" {
-					if err := clusters.Store.Delete(originRunId); err != nil {
+					if err := clusters.ClusterStore.Delete(originRunId); err != nil {
 						log.Errorf("Unable to delete profiler cluster: %s", err.Error())
 					}
 				}
@@ -334,7 +342,7 @@ func (clusters *Clusters) unreserveCluster(cluster *cluster, deleteCluster bool,
 			RunId: cluster.runId,
 		}
 
-		if err := clusters.Store.Delete(cluster.runId); err != nil {
+		if err := clusters.ClusterStore.Delete(cluster.runId); err != nil {
 			glog.Errorf("Unable to delete profiler cluster: %s", err.Error())
 		}
 		return unreserveResult
@@ -354,7 +362,7 @@ func (clusters *Clusters) unreserveCluster(cluster *cluster, deleteCluster bool,
 
 		clusters.removeDeployment(cluster.runId)
 
-		if err := clusters.Store.Delete(cluster.runId); err != nil {
+		if err := clusters.ClusterStore.Delete(cluster.runId); err != nil {
 			glog.Errorf("Unable to delete profiler cluster: %s", err.Error())
 		}
 	}()
@@ -384,7 +392,7 @@ func (clusters *Clusters) storeCluster(cluster *cluster) error {
 		return fmt.Errorf("Unable to create store cluster for run %s: %s", cluster.runId, err)
 	}
 
-	if err := clusters.Store.Store(storeCluster.RunId, storeCluster); err != nil {
+	if err := clusters.ClusterStore.Store(storeCluster.RunId, storeCluster); err != nil {
 		return fmt.Errorf("Unable to store %s cluster: %s", cluster.runId, err.Error())
 	}
 
@@ -395,16 +403,34 @@ func (clusters *Clusters) createDeployment(
 	applicationConfig *models.ApplicationConfig,
 	jobDeploymentConfig JobDeploymentConfig,
 	runId string,
-	log *logging.Logger) (*string, error) {
+	log *logging.Logger) (string, error) {
 	// TODO: We assume region is us-east-1 and we assume Kubernetes only.
 	clusterDefinition := &deployer.ClusterDefinition{
 		Nodes: jobDeploymentConfig.GetNodes(),
 	}
 
 	userId := clusters.Config.GetString("defaultClusterUserId")
+	if applicationConfig.DeploymentFile != "" {
+		// Create deployment with deployment file
+		deployment, err := clusters.ConfigDB.GetDeploymentConfig(applicationConfig.DeploymentFile)
+		if err != nil {
+			return "", errors.New("Unable to load deployment from configdb: " + err.Error())
+		}
+
+		if userId != "" {
+			deployment.UserId = userId
+		}
+
+		deploymentId, err := clusters.DeployerClient.CreateDeployment(
+			deployment, applicationConfig.LoadTester.Name, log)
+		if err != nil {
+			return "", errors.New("Unable to create deployment with deployer client: " + err.Error())
+		}
+
+		return deploymentId, nil
+	}
 
 	deployment := &deployer.Deployment{
-		Region:            "us-east-1",
 		Name:              "workload-profiler-" + applicationConfig.Name,
 		NodeMapping:       []deployer.NodeMapping{},
 		ClusterDefinition: *clusterDefinition,
@@ -417,14 +443,15 @@ func (clusters *Clusters) createDeployment(
 		deployment.UserId = userId
 	}
 
+	// Create deployment with template
 	for _, appTask := range applicationConfig.TaskDefinitions {
 		nodeMapping := &deployer.NodeMapping{}
 		if err := clusters.convertBsonType(appTask.NodeMapping, nodeMapping); err != nil {
-			return nil, errors.New("Unable to convert to nodeMapping: " + err.Error())
+			return "", errors.New("Unable to convert to nodeMapping: " + err.Error())
 		}
 		kubernetesTask := &deployer.KubernetesTask{}
 		if err := clusters.convertBsonType(appTask.TaskDefinition, kubernetesTask); err != nil {
-			return nil, errors.New("Unable to convert to nodeMapping: " + err.Error())
+			return "", errors.New("Unable to convert to nodeMapping: " + err.Error())
 		}
 
 		deployment.NodeMapping = append(deployment.NodeMapping, *nodeMapping)
@@ -432,10 +459,10 @@ func (clusters *Clusters) createDeployment(
 			append(deployment.KubernetesDeployment.Kubernetes, *kubernetesTask)
 	}
 
-	deploymentId, createErr := clusters.DeployerClient.CreateDeployment(
+	deploymentId, createErr := clusters.DeployerClient.CreateDeploymentWithTemplate(
 		applicationConfig.DeploymentTemplate, deployment, applicationConfig.LoadTester.Name, log)
 	if createErr != nil {
-		return nil, errors.New("Unable to create deployment: " + createErr.Error())
+		return "", errors.New("Unable to create deployment: " + createErr.Error())
 	}
 
 	return deploymentId, nil

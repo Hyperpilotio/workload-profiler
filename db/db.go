@@ -8,6 +8,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/golang/glog"
+	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/spf13/viper"
 )
@@ -19,6 +20,7 @@ type ConfigDB struct {
 	Database                     string
 	ApplicationsCollection       string
 	BenchmarksCollection         string
+	DeploymentCollection         string
 	NodeTypeCollection           string
 	PreviousGenerationCollection string
 }
@@ -77,6 +79,23 @@ func (configDb *ConfigDB) GetApplicationConfig(name string) (*models.Application
 	}
 
 	return &appConfig, nil
+}
+
+func (configDb *ConfigDB) GetDeploymentConfig(name string) (*deployer.Deployment, error) {
+	session, sessionErr := connectMongo(configDb.Url, configDb.Database, configDb.User, configDb.Password)
+	if sessionErr != nil {
+		return nil, errors.New("Unable to create mongo session: " + sessionErr.Error())
+	}
+	glog.V(1).Infof("Successfully connected to the config DB for deployment %s", name)
+	defer session.Close()
+
+	collection := session.DB(configDb.Database).C(configDb.DeploymentCollection)
+	var deployment deployer.Deployment
+	if err := collection.Find(bson.M{"name": name}).One(&deployment); err != nil {
+		return nil, errors.New("Unable to find deployment config from db: " + err.Error())
+	}
+
+	return &deployment, nil
 }
 
 func (configDb *ConfigDB) GetNodeTypeConfig(region string) (*models.AWSRegionNodeTypeConfig, error) {

@@ -10,6 +10,7 @@ import (
 	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/db"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/spf13/viper"
 )
@@ -194,13 +195,13 @@ type JobManager struct {
 	mutex      sync.Mutex
 }
 
-func NewJobManager(config *viper.Viper) (*JobManager, error) {
+func NewJobManager(config *viper.Viper, configDb *db.ConfigDB) (*JobManager, error) {
 	deployerClient, err := clients.NewDeployerClient(config)
 	if err != nil {
 		return nil, errors.New("Unable to create new deployer client: " + err.Error())
 	}
 
-	clusters, err := NewClusters(deployerClient, config)
+	clusters, err := NewClusters(deployerClient, config, configDb)
 	if err != nil {
 		return nil, errors.New("Unable to create clusters object: " + err.Error())
 	}
