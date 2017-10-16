@@ -458,7 +458,6 @@ func (clusters *Clusters) createDeployment(
 		deployment.KubernetesDeployment.Kubernetes =
 			append(deployment.KubernetesDeployment.Kubernetes, *kubernetesTask)
 	}
-
 	deploymentId, createErr := clusters.DeployerClient.CreateDeploymentWithTemplate(
 		applicationConfig.DeploymentTemplate, deployment, applicationConfig.LoadTester.Name, log)
 	if createErr != nil {
