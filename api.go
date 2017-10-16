@@ -82,7 +82,7 @@ func (server *Server) StartServer() error {
 
 	router.GET("/state/:runId", server.state)
 
-	jobManager, err := jobs.NewJobManager(server.Config)
+	jobManager, err := jobs.NewJobManager(server.Config, server.ConfigDB)
 	if err != nil {
 		return errors.New("Unable to create job manager: " + err.Error())
 	}
