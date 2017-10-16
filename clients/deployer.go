@@ -413,6 +413,7 @@ func (client *DeployerClient) CreateDeploymentWithTemplate(
 	deployment *deployer.Deployment,
 	loadTesterName string,
 	log *logging.Logger) (string, error) {
+
 	if deploymentTemplate == "" {
 		return "", errors.New("Empty deployment template found")
 	}
