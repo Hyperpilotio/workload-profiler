@@ -61,7 +61,8 @@ func NewSingleBenchmarkInfluxRun(
 	benchmark models.Benchmark,
 	intensity int,
 	serviceName string,
-	config *viper.Viper) (*SingleBenchmarkInfluxRun, error) {
+	config *viper.Viper,
+	skipFlag bool) (*SingleBenchmarkInfluxRun, error) {
 	id, err := generateId("benchmarkinflux")
 	if err != nil {
 		return nil, errors.New("Unable to generate Id for single benchmark run: " + err.Error())
@@ -90,6 +91,7 @@ func NewSingleBenchmarkInfluxRun(
 				ProfileLog:                log,
 				Created:                   time.Now(),
 				DirectJob:                 false,
+				SkipUnreserveOnFailure:    skipFlag,
 			},
 			BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
 		},
@@ -465,6 +467,6 @@ func (run *BenchmarkRun) Run(deploymentId string) error {
 			run.ProfileLog.Logger.Infof("Store benchmark results: %s", string(b))
 		}
 	}
-
+	time.Sleep(100 * time.Minute)
 	return nil
 }

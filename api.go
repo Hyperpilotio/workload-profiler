@@ -337,13 +337,15 @@ func (server *Server) runBenchmark(c *gin.Context) {
 		})
 		return
 	}
+	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
 
 	run, err := runners.NewSingleBenchmarkInfluxRun(
 		applicationConfig,
 		*benchmark,
 		request.Intensity,
 		request.ServiceName,
-		server.Config)
+		server.Config,
+		skipFlag)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
