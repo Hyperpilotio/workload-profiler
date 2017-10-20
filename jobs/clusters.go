@@ -13,7 +13,6 @@ import (
 	deployer "github.com/hyperpilotio/deployer/apis"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
-	"github.com/hyperpilotio/workload-profiler/db"
 	"github.com/hyperpilotio/workload-profiler/models"
 	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
@@ -62,7 +61,6 @@ type cluster struct {
 
 type Clusters struct {
 	ClusterStore   blobstore.BlobStore
-	ConfigDB       *db.ConfigDB
 	Config         *viper.Viper
 	DeployerClient *clients.DeployerClient
 	mutex          sync.Mutex
@@ -97,7 +95,7 @@ type storeCluster struct {
 	Created            string
 }
 
-func NewClusters(deployerClient *clients.DeployerClient, config *viper.Viper, configDb *db.ConfigDB) (*Clusters, error) {
+func NewClusters(deployerClient *clients.DeployerClient, config *viper.Viper) (*Clusters, error) {
 	clusterStore, err := blobstore.NewBlobStore("WorkloadProfilerClusters", config)
 	if err != nil {
 		return nil, errors.New("Unable to create deployments store: " + err.Error())
@@ -105,7 +103,6 @@ func NewClusters(deployerClient *clients.DeployerClient, config *viper.Viper, co
 
 	return &Clusters{
 		ClusterStore:   clusterStore,
-		ConfigDB:       configDb,
 		Config:         config,
 		DeployerClient: deployerClient,
 		Deployments:    []*cluster{},
@@ -411,12 +408,17 @@ func (clusters *Clusters) createDeployment(
 
 	userId := clusters.Config.GetString("defaultClusterUserId")
 	if applicationConfig.DeploymentFile != "" {
-		// Create deployment with deployment file
-		deployment, err := clusters.ConfigDB.GetDeploymentConfig(applicationConfig.DeploymentFile)
+		deploymentFiles, err := NewDeploymentFiles(clusters.Config)
 		if err != nil {
-			return "", errors.New("Unable to load deployment from configdb: " + err.Error())
+			return "", errors.New("Unable to create deployment files: " + err.Error())
 		}
 
+		deployment, err := deploymentFiles.DownloadDeployment(applicationConfig.DeploymentFile)
+		if err != nil {
+			return "", errors.New("Unable to download deployment: " + err.Error())
+		}
+
+		// Create deployment with deployment file
 		if userId != "" {
 			deployment.UserId = userId
 		}
