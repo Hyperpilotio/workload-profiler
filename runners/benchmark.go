@@ -403,7 +403,6 @@ func (run *SingleBenchmarkInfluxRun) Run(deploymentId string) error {
 
 	// TODO: Snapshot influx data
 	//run.snapshotInfluxData()
-
 	return nil
 }
 

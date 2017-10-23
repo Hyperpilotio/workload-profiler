@@ -360,24 +360,19 @@ func (client *DeployerClient) DeleteDeployment(deploymentId string, log *logging
 }
 
 func (client *DeployerClient) CreateDeployment(
-	deploymentTemplate string,
 	deployment *deployer.Deployment,
 	loadTesterName string,
-	log *logging.Logger) (*string, error) {
-	if deploymentTemplate == "" {
-		return nil, errors.New("Empty deployment template found")
-	}
-
+	log *logging.Logger) (string, error) {
 	requestUrl := UrlBasePath(client.Url) + path.Join(
-		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments")
+		client.Url.Path, "v1", "deployments")
 
 	response, err := resty.R().SetBody(deployment).Post(requestUrl)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	if response.StatusCode() != 202 {
-		return nil, fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+		return "", fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
 	}
 
 	var createResponse struct {
@@ -387,30 +382,84 @@ func (client *DeployerClient) CreateDeployment(
 	}
 
 	if err := json.Unmarshal(response.Body(), &createResponse); err != nil {
-		return nil, errors.New("Unable to parse failed create deployment response: " + err.Error())
+		return "", errors.New("Unable to parse failed create deployment response: " + err.Error())
 	}
 
 	log.Debugf("Received deployer response: %+v", createResponse)
 	if createResponse.Error {
-		return nil, errors.New("Unable to create deployment: " + createResponse.Data)
+		return "", errors.New("Unable to create deployment: " + createResponse.Data)
 	}
 
 	deploymentId := createResponse.DeploymentId
 	if deploymentId == "" {
-		return nil, errors.New("Unable to get deployment id")
+		return "", errors.New("Unable to get deployment id")
 	}
 
 	log.Infof("Waiting for deployment %s to be available...", deploymentId)
 	if err := client.waitUntilDeploymentStateAvailable(deploymentId, log); err != nil {
-		return nil, errors.New("Unable to waiting for deployment state to be available: " + err.Error())
+		return "", errors.New("Unable to waiting for deployment state to be available: " + err.Error())
 	}
 
 	log.Infof("Waiting for load tester %s service url to be available...", loadTesterName)
 	if err := client.waitUntilServiceUrlAvailable(deploymentId, loadTesterName, log); err != nil {
-		return nil, fmt.Errorf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
+		return "", fmt.Errorf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
 	}
 
-	return &deploymentId, nil
+	return deploymentId, nil
+}
+
+func (client *DeployerClient) CreateDeploymentWithTemplate(
+	deploymentTemplate string,
+	deployment *deployer.Deployment,
+	loadTesterName string,
+	log *logging.Logger) (string, error) {
+	if deploymentTemplate == "" {
+		return "", errors.New("Empty deployment template found")
+	}
+
+	requestUrl := UrlBasePath(client.Url) + path.Join(
+		client.Url.Path, "v1", "templates", deploymentTemplate, "deployments")
+
+	response, err := resty.R().SetBody(deployment).Post(requestUrl)
+	if err != nil {
+		return "", err
+	}
+
+	if response.StatusCode() != 202 {
+		return "", fmt.Errorf("Invalid status code returned %d: %s", response.StatusCode(), response.String())
+	}
+
+	var createResponse struct {
+		Error        bool   `json:"error"`
+		Data         string `json:"data`
+		DeploymentId string `json:"deploymentId`
+	}
+
+	if err := json.Unmarshal(response.Body(), &createResponse); err != nil {
+		return "", errors.New("Unable to parse failed create deployment response: " + err.Error())
+	}
+
+	log.Debugf("Received deployer response: %+v", createResponse)
+	if createResponse.Error {
+		return "", errors.New("Unable to create deployment: " + createResponse.Data)
+	}
+
+	deploymentId := createResponse.DeploymentId
+	if deploymentId == "" {
+		return "", errors.New("Unable to get deployment id")
+	}
+
+	log.Infof("Waiting for deployment %s to be available...", deploymentId)
+	if err := client.waitUntilDeploymentStateAvailable(deploymentId, log); err != nil {
+		return "", errors.New("Unable to waiting for deployment state to be available: " + err.Error())
+	}
+
+	log.Infof("Waiting for load tester %s service url to be available...", loadTesterName)
+	if err := client.waitUntilServiceUrlAvailable(deploymentId, loadTesterName, log); err != nil {
+		return "", fmt.Errorf("Unable to waiting for %s url to be available: %s", loadTesterName, err)
+	}
+
+	return deploymentId, nil
 }
 
 func (client *DeployerClient) waitUntilServiceUrlAvailable(

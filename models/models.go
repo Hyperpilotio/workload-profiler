@@ -93,6 +93,7 @@ type Benchmark struct {
 
 type ApplicationConfig struct {
 	Name               string            `bson:"name" json:"name"`
+	DeploymentFile     string            `bson:"deploymentFile" json:"deploymentFile"`
 	DeploymentTemplate string            `bson:"deploymentTemplate" json:"deploymentTemplate"`
 	TaskDefinitions    []ApplicationTask `bson:"taskDefinitions" json:"taskDefinitions"`
 	ServiceNames       []string          `bson:"serviceNames" json:"serviceNames"`
