@@ -1,0 +1,27 @@
+FROM influxdb:1.3.6
+
+# RUN mkdir /lib64 && ln -s /lib/libc.musl-x86_64.so.1 /lib64/ld-linux-x86-64.so.2
+# RUN apk --update upgrade && \
+#     apk add curl ca-certificates && \
+#     update-ca-certificates && \
+#     rm -rf /var/cache/apk/*
+
+RUN apt-get update && apt-get install -y python python-pip jq && rm -rf /var/lib/apt/lists/*
+
+# update pip
+RUN pip install --upgrade pip
+
+# install awscli
+RUN pip install awscli
+
+COPY workload-profiler /opt/workload-profiler/workload-profiler
+COPY ./documents/deployed.config /etc/workload-profiler/config.json
+COPY ./aws_config/config /aws_config/config
+COPY ./aws_config/credentials /aws_config/credentials
+RUN mkdir ~/.aws
+RUN cp -rp /aws_config/* ~/.aws/
+COPY hyperpilot_influx.sh /usr/local/bin/hyperpilot_influx.sh
+RUN chmod +x /usr/local/bin/hyperpilot_influx.sh
+COPY ./ui/ /opt/workload-profiler/src/github.com/hyperpilotio/workload-profiler/ui/
+
+CMD ["/opt/workload-profiler/workload-profiler", "-v", "1", "-logtostderr"]

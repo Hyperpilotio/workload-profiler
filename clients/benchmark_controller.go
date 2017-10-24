@@ -196,7 +196,7 @@ func (client *BenchmarkControllerClient) RunBenchmark(
 		}
 
 		if response.StatusCode() != 200 {
-			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+			logger.Infof("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 		}
 
 		if err := json.Unmarshal(response.Body(), results); err != nil {
