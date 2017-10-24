@@ -480,7 +480,7 @@ func (client *DeployerClient) waitUntilServiceUrlAvailable(
 		}
 
 		if response.StatusCode() != 200 {
-			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+			log.Infof("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 		}
 
 		log.Infof("%s url is now available", serviceName)
