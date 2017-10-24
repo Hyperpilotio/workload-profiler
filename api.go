@@ -75,6 +75,11 @@ func (server *Server) StartServer() error {
 		benchmarkGroup.POST("/:appName/benchmark/:benchmarkName", server.runBenchmark)
 	}
 
+	clusterMetricsGroup := router.Group("/clusterMetrics")
+	{
+		clusterMetricsGroup.POST("/apps/:appName", server.captureClusterMetrics)
+	}
+
 	sizingGroup := router.Group("/sizing")
 	{
 		sizingGroup.POST("/aws/:appName", server.runAWSSizing)
@@ -361,6 +366,61 @@ func (server *Server) runBenchmark(c *gin.Context) {
 		"error": false,
 		"data":  "",
 		"runId": run.Id,
+	})
+}
+
+func (server *Server) captureClusterMetrics(c *gin.Context) {
+	appName := c.Param("appName")
+
+	var request struct {
+		LoadTesters []LoadTesters `json:"loadTesters"`
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to parse benchmark with interference request: " + err.Error(),
+		})
+		return
+	}
+
+	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  "Unable to get application config for app " + appName + ": " + err.Error(),
+		})
+		return
+	}
+
+	glog.V(1).Infof("Obtained the app config: %+v", applicationConfig)
+
+	runs := []*runners.CaptureMetricsRun{}
+	for _, loadTester := range request.LoadTesters {
+		run, err := runners.NewCaptureMetricsRun(
+			applicationConfig,
+			loadTester,
+			server.Config)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": true,
+				"data":  "Unable to create capture metrics run: " + err.Error(),
+			})
+			return
+		}
+		runs = append(runs, run)
+	}
+
+	for _, run := range runs {
+		log := run.ProfileLog
+		log.Logger.Infof("Queueing capture metrics job %s for app %s...", run.Id, appName)
+		server.JobManager.AddJob(run)
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"error": false,
+		"data":  "",
 	})
 }
 

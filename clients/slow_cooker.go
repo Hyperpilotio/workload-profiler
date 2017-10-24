@@ -162,7 +162,7 @@ func (client *SlowCookerClient) RunBenchmark(
 	baseUrl string,
 	runId string,
 	appIntensity float64,
-	slo *models.SLO,
+	runsPerIntensity int,
 	controller *models.SlowCookerController,
 	logger *logging.Logger) (*SlowCookerBenchmarkResponse, error) {
 	u, err := url.Parse(baseUrl)
@@ -176,7 +176,7 @@ func (client *SlowCookerClient) RunBenchmark(
 
 	request := &SlowCookerBenchmarkRequest{
 		AppLoad:          controller.AppLoad,
-		RunsPerIntensity: controller.Calibrate.RunsPerIntensity,
+		RunsPerIntensity: runsPerIntensity,
 		LoadTime:         controller.LoadTime,
 	}
 
