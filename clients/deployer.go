@@ -269,7 +269,7 @@ func (client *DeployerClient) waitUntilDeploymentStateAvailable(deploymentId str
 		}
 
 		if response.StatusCode() != 200 {
-			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+			log.Infof("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 		}
 
 		if err := json.Unmarshal(response.Body(), &stateResponse); err != nil {
