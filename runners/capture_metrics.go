@@ -1,9 +1,15 @@
 package runners
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
+	"github.com/go-resty/resty"
+	"github.com/golang/glog"
+	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
+	"github.com/hyperpilotio/workload-profiler/jobs"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/spf13/viper"
 )
@@ -32,6 +38,7 @@ func NewCaptureMetricsRun(
 	if deployerErr != nil {
 		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
 	}
+	glog.V(1).Infof("Created new capture metrics run with id: %s", id)
 
 	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
 	if logErr != nil {
@@ -42,7 +49,6 @@ func NewCaptureMetricsRun(
 	if err != nil {
 		return nil, errors.New("Unable to generate Id for capture metrics run: " + err.Error())
 	}
-	glog.V(1).Infof("Created new capture metrics run with id: %s", id)
 
 	return &CaptureMetricsRun{
 		ProfileRun: ProfileRun{
@@ -68,7 +74,12 @@ func (run *CaptureMetricsRun) runSlowCookerController(slowCookerController *mode
 	}
 
 	client := clients.SlowCookerClient{}
-	_, err := client.RunBenchmark(url, run.Id, slowCookerController.AppLoad.Concurrency, slowCookerController, run.ProfileLog.logger)
+	_, err := client.RunBenchmark(url,
+		run.Id,
+		float64(slowCookerController.Calibrate.InitialConcurrency),
+		slowCookerController.Calibrate.RunsPerIntensity,
+		slowCookerController,
+		run.ProfileLog.Logger)
 	if err != nil {
 		return fmt.Errorf("Unable to run load test from slow cooker: " + err.Error())
 	}
@@ -139,4 +150,11 @@ func (run *CaptureMetricsRun) snapshotInfluxData() error {
 	}
 
 	return nil
+}
+
+func (run *CaptureMetricsRun) GetResults() <-chan *jobs.JobResults {
+	return nil
+}
+
+func (run *CaptureMetricsRun) SetFailed(error string) {
 }
