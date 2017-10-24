@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
@@ -72,7 +73,6 @@ func (server *Server) StartServer() error {
 	benchmarkGroup := router.Group("/benchmarks")
 	{
 		benchmarkGroup.POST("/:appName", server.runBenchmarks)
-		benchmarkGroup.POST("/:appName/benchmark/:benchmarkName", server.runBenchmark)
 	}
 
 	clusterMetricsGroup := router.Group("/clusterMetrics")
@@ -211,12 +211,6 @@ func (server *Server) runAWSSizing(c *gin.Context) {
 
 	}
 
-	// response := struct {
-	// 	Id string `json:"id"`
-	// }{
-	// 	Id: id,
-	// }
-
 	c.JSON(http.StatusAccepted, gin.H{
 		"error": false,
 		"data":  "",
@@ -289,13 +283,16 @@ func (server *Server) runBenchmarks(c *gin.Context) {
 	})
 }
 
-func (server *Server) runBenchmark(c *gin.Context) {
+func (server *Server) captureClusterMetrics(c *gin.Context) {
 	appName := c.Param("appName")
-	benchmarkName := c.Param("benchmarkName")
 
 	var request struct {
-		Intensity   int    `json:"intensity" binding:"required"`
-		ServiceName string `json:"serviceName" binding:"required"`
+		LoadTesters []LoadTesters `json:"loadTesters"`
+		Benchmarks  []*struct {
+			Name      string `json:"name"`
+			Intensity int    `json:"intensity"`
+		} `json:"benchmarks"`
+		WaitTime time.Duration `json:"duration" binding:"required"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -317,7 +314,6 @@ func (server *Server) runBenchmark(c *gin.Context) {
 
 	glog.V(1).Infof("Obtained the app config: %+v", applicationConfig)
 
-	// TODO: Cache this
 	benchmarks, err := server.ConfigDB.GetBenchmarks()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -327,89 +323,51 @@ func (server *Server) runBenchmark(c *gin.Context) {
 		return
 	}
 
-	var benchmark *models.Benchmark
-	for _, existingBenchmark := range benchmarks {
-		if existingBenchmark.Name == benchmarkName {
-			benchmark = &existingBenchmark
-			break
-		}
+	if len(request.Benchmarks) == 0 {
+		// Create a null array to assign to metrics run
+		request.Benchmarks = append(request.Benchmarks, nil)
 	}
-
-	if benchmark == nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to find benchmark " + benchmarkName,
-		})
-		return
-	}
-
-	run, err := runners.NewSingleBenchmarkInfluxRun(
-		applicationConfig,
-		*benchmark,
-		request.Intensity,
-		request.ServiceName,
-		server.Config)
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": true,
-			"data":  "Unable to create benchmarks run: " + err.Error(),
-		})
-		return
-	}
-
-	log := run.ProfileLog
-	log.Logger.Infof("Queueing benchmark job %s for app %s...", run.Id, appName)
-	server.JobManager.AddJob(run)
-
-	c.JSON(http.StatusAccepted, gin.H{
-		"error": false,
-		"data":  "",
-		"runId": run.Id,
-	})
-}
-
-func (server *Server) captureClusterMetrics(c *gin.Context) {
-	appName := c.Param("appName")
-
-	var request struct {
-		LoadTesters []LoadTesters `json:"loadTesters"`
-	}
-
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to parse benchmark with interference request: " + err.Error(),
-		})
-		return
-	}
-
-	applicationConfig, err := server.ConfigDB.GetApplicationConfig(appName)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"data":  "Unable to get application config for app " + appName + ": " + err.Error(),
-		})
-		return
-	}
-
-	glog.V(1).Infof("Obtained the app config: %+v", applicationConfig)
 
 	runs := []*runners.CaptureMetricsRun{}
 	for _, loadTester := range request.LoadTesters {
-		run, err := runners.NewCaptureMetricsRun(
-			applicationConfig,
-			loadTester,
-			server.Config)
+		for _, benchmark := range request.Benchmarks {
+			var foundBenchmark *models.Benchmark
+			var benchmarkIntensity int
 
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": true,
-				"data":  "Unable to create capture metrics run: " + err.Error(),
-			})
-			return
+			if benchmark != nil {
+				benchmarkIntensity = benchmark.Intensity
+				for _, existingBenchmark := range benchmarks {
+					if existingBenchmark.Name == benchmark.Name {
+						foundBenchmark = &existingBenchmark
+						break
+					}
+				}
+				if foundBenchmark == nil {
+					c.JSON(http.StatusBadRequest, gin.H{
+						"error": true,
+						"data":  "Unable to find benchmark: " + benchmark.Name,
+					})
+					return
+				}
+			}
+
+			run, err := runners.NewCaptureMetricsRun(
+				applicationConfig,
+				loadTester,
+				foundBenchmark,
+				benchmarkIntensity,
+				request.Duration,
+				server.Config)
+
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": true,
+					"data":  "Unable to create capture metrics run: " + err.Error(),
+				})
+				return
+			}
+			runs = append(runs, run)
 		}
-		runs = append(runs, run)
 	}
 
 	for _, run := range runs {

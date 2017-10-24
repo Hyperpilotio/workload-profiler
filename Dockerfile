@@ -9,6 +9,7 @@ RUN apk --update upgrade && \
 ENV GOPATH /opt/workload-profiler
 
 COPY workload-profiler /opt/workload-profiler/workload-profiler
+COPY hyperpilot_influx.sh /opt/workload-profiler/hyperpilot_influx.sh
 COPY ./documents/deployed.config /etc/workload-profiler/config.json
 COPY ./ui/ /opt/workload-profiler/src/github.com/hyperpilotio/workload-profiler/ui/
 

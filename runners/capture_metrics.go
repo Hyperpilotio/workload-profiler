@@ -1,6 +1,8 @@
 package runners
 
 import (
+	"time"
+
 	"github.com/hyperpilotio/workload-profiler/clients"
 	"github.com/hyperpilotio/workload-profiler/models"
 	"github.com/spf13/viper"
@@ -9,12 +11,21 @@ import (
 type CaptureMetricsRun struct {
 	ProfileRun
 
-	LoadTester models.LoadTester
+	ServiceName          string
+	LoadTester           models.LoadTester
+	Benchmark            *models.Benchmark
+	BenchmarkAgentClient *clients.BenchmarkAgentClient
+	BenchmarkIntensity   int
+	Duration             time.Duration
 }
 
 func NewCaptureMetricsRun(
 	applicationConfig *models.ApplicationConfig,
+	serviceName string,
 	loadTester models.LoadTester,
+	benchmark *models.Benchmark,
+	benchmarkIntensity int,
+	duration time.Duration,
 	config *viper.Viper) *CaptureMetricsRun {
 
 	deployerClient, deployerErr := clients.NewDeployerClient(config)
@@ -27,7 +38,7 @@ func NewCaptureMetricsRun(
 		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
 	}
 
-	id, err := generateId("capturemetrics")
+	id, err := generateId("capturemetrics-" + run.applicationConfig.Name)
 	if err != nil {
 		return nil, errors.New("Unable to generate Id for capture metrics run: " + err.Error())
 	}
@@ -42,7 +53,10 @@ func NewCaptureMetricsRun(
 			Created:           time.Now(),
 			DirectJob:         false,
 		},
-		LoadTester: loadTester,
+		LoadTester:         loadTester,
+		Benchmark:          benchmark,
+		BenchmarkIntensity: benchmarkIntensity,
+		Duration:           duration,
 	}
 }
 
@@ -91,10 +105,38 @@ func (run *CaptureMetricsRun) runApplicationLoadTest() error {
 func (run *CaptureMetricsRun) Run(deploymentId string) error {
 	run.DeploymentId = deploymentId
 
+	if run.Benchmark != nil {
+		// TODO: Run benchmark with benchmark intensity
+	}
+
 	if err := run.runApplicationLoadTest(); err != nil {
 		return fmt.Errorf("Unable to run load controller: " + err.Error())
 	}
 
-	//run.snapshotInfluxData()
+	time.Sleep(run.Duration)
+
+	run.snapshotInfluxData()
+	return nil
+}
+
+func (run *CaptureMetricsRun) getSnapshotId() string {
+	benchmarkName := "None"
+	if run.Benchmark != nil {
+		benchmarkName = run.Benchmark.Name
+	}
+	return run.GetId() + "-" + run.ApplicationConfig.Name + "-" + benchmarkName
+}
+
+func (run *CaptureMetricsRun) snapshotInfluxData() error {
+	url, err := run.DeployerClient.GetServiceUrl(run.DeploymentId, "influxsrv", run.ProfileLog.Logger)
+	if err != nil {
+		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
+	}
+
+	influxClient := clients.NewInfluxClient(url, 8088, 8086)
+	if err = influxClient.BackupDB(run.getSnapshotId()); err != nil {
+		return errors.New("Unable to snapshot influx: " + err.Error())
+	}
+
 	return nil
 }
