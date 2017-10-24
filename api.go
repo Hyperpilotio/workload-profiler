@@ -287,7 +287,7 @@ func (server *Server) captureClusterMetrics(c *gin.Context) {
 	appName := c.Param("appName")
 
 	var request struct {
-		LoadTesters []LoadTesters `json:"loadTesters"`
+		LoadTesters []models.LoadTester `json:"loadTesters"`
 		Benchmarks  []*struct {
 			Name      string `json:"name"`
 			Intensity int    `json:"intensity"`
@@ -353,12 +353,12 @@ func (server *Server) captureClusterMetrics(c *gin.Context) {
 
 			run, err := runners.NewCaptureMetricsRun(
 				applicationConfig,
+				applicationConfig.ServiceNames[0],
 				loadTester,
 				foundBenchmark,
 				benchmarkIntensity,
-				request.Duration,
+				request.WaitTime,
 				server.Config)
-
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
 					"error": true,

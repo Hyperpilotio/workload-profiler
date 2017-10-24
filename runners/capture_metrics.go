@@ -32,7 +32,11 @@ func NewCaptureMetricsRun(
 	benchmark *models.Benchmark,
 	benchmarkIntensity int,
 	duration time.Duration,
-	config *viper.Viper) *CaptureMetricsRun {
+	config *viper.Viper) (*CaptureMetricsRun, error) {
+	id, err := generateId("capturemetrics-" + applicationConfig.Name)
+	if err != nil {
+		return nil, errors.New("Unable to generate Id for capture metrics run: " + err.Error())
+	}
 
 	deployerClient, deployerErr := clients.NewDeployerClient(config)
 	if deployerErr != nil {
@@ -43,11 +47,6 @@ func NewCaptureMetricsRun(
 	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
 	if logErr != nil {
 		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
-	}
-
-	id, err := generateId("capturemetrics-" + run.applicationConfig.Name)
-	if err != nil {
-		return nil, errors.New("Unable to generate Id for capture metrics run: " + err.Error())
 	}
 
 	return &CaptureMetricsRun{
@@ -63,7 +62,7 @@ func NewCaptureMetricsRun(
 		Benchmark:          benchmark,
 		BenchmarkIntensity: benchmarkIntensity,
 		Duration:           duration,
-	}
+	}, nil
 }
 
 func (run *CaptureMetricsRun) runSlowCookerController(slowCookerController *models.SlowCookerController) error {
@@ -139,13 +138,14 @@ func (run *CaptureMetricsRun) getSnapshotId() string {
 }
 
 func (run *CaptureMetricsRun) snapshotInfluxData() error {
-	url, err := run.DeployerClient.GetServiceUrl(run.DeploymentId, "influxsrv", run.ProfileLog.Logger)
-	if err != nil {
+	loadTesterName := run.ApplicationConfig.LoadTester.Name
+	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, "influxsrv", run.ProfileLog.Logger)
+	if urlErr != nil {
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
 	influxClient := clients.NewInfluxClient(url, 8088, 8086)
-	if err = influxClient.BackupDB(run.getSnapshotId()); err != nil {
+	if err := influxClient.BackupDB(run.getSnapshotId()); err != nil {
 		return errors.New("Unable to snapshot influx: " + err.Error())
 	}
 
