@@ -108,33 +108,32 @@ func (client *DeployerClient) getServiceMappings(deployment string) (*ServiceMap
 	return cache.ServiceMapping, nil
 }
 
-// GetColocatedServiceUrl finds the service's url that's running on the same node where
-// colocatedService is running. We assume there is only one such service with the passed in prefix.
+// GetColocatedServiceUrls finds the service's urls that's running on the same nodes where
+// colocatedService is running.
 // We don't specify exact service names because services that has multiple copies will be named differently
 // but sharing the same prefix (e.g: benchmark-agent, benchmark-agent-2, etc.).
-func (client *DeployerClient) GetColocatedServiceUrl(deployment string, colocatedService string, servicePrefix string) (string, error) {
+func (client *DeployerClient) GetColocatedServiceUrls(deployment string, colocatedService string, servicePrefix string) ([]string, error) {
 	mappings, err := client.getServiceMappings(deployment)
 	if err != nil {
-		return "", errors.New("Unable to get service mappings for deployment " + deployment + ": " + err.Error())
+		return nil, errors.New("Unable to get service mappings for deployment " + deployment + ": " + err.Error())
 	}
 
-	mapping, ok := mappings.Data[colocatedService]
-	if !ok {
-		existingServices := []string{}
-		for name, _ := range mappings.Data {
-			existingServices = append(existingServices, name)
-		}
-		return "", fmt.Errorf("Unable to find colocated service in mappings: %s, existing services: %+v", colocatedService, existingServices)
-	}
-
-	nodeId := mapping.NodeId
+	urls := []string{}
 	for serviceName, mapping := range mappings.Data {
-		if strings.HasPrefix(serviceName, servicePrefix) && mapping.NodeId == nodeId {
-			return "http://" + mapping.PublicUrl, nil
+		if strings.HasPrefix(serviceName, colocatedService) {
+			for serviceName, serviceMapping := range mappings.Data {
+				if strings.HasPrefix(serviceName, servicePrefix) && mapping.NodeId == serviceMapping.NodeId {
+					urls = append(urls, "http://"+mapping.PublicUrl)
+				}
+			}
 		}
 	}
 
-	return "", fmt.Errorf("Unable to find service with prefix %s located at node id %d", servicePrefix, nodeId)
+	if len(urls) == 0 {
+		return nil, errors.New("Unable to find any service colocated")
+	}
+
+	return urls, nil
 }
 
 func (client *DeployerClient) GetServiceUrl(deployment string, service string, log *logging.Logger) (string, error) {
@@ -474,13 +473,9 @@ func (client *DeployerClient) waitUntilServiceUrlAvailable(
 	restClient := resty.New()
 	log.Infof("Waiting for service url %s to be available...", url)
 	return funcs.LoopUntil(time.Minute*30, time.Second*10, func() (bool, error) {
-		response, err := restClient.R().Get(url)
+		_, err := restClient.R().Get(url)
 		if err != nil {
 			return false, nil
-		}
-
-		if response.StatusCode() != 200 {
-			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
 		}
 
 		log.Infof("%s url is now available", serviceName)

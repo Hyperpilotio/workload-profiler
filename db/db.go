@@ -46,6 +46,7 @@ func NewConfigDB(config *viper.Viper) *ConfigDB {
 		BenchmarksCollection:         config.GetString("database.benchmarkCollection"),
 		NodeTypeCollection:           config.GetString("database.nodeTypeCollection"),
 		PreviousGenerationCollection: config.GetString("database.previousGenerationCollection"),
+		DeploymentCollection:         config.GetString("database.deploymentCollection"),
 	}
 }
 

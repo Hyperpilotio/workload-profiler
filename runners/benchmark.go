@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-resty/resty"
 	"github.com/golang/glog"
 	"github.com/hyperpilotio/go-utils/log"
 	"github.com/hyperpilotio/workload-profiler/clients"
@@ -32,17 +31,6 @@ type BenchmarkRun struct {
 	Benchmarks        []models.Benchmark
 }
 
-// This run creates a cluster with an app and a benchmark intensity, and
-// backups the data from influx.
-type SingleBenchmarkInfluxRun struct {
-	BaseBenchmarkRun
-
-	Intensity            int
-	ServiceName          string
-	BenchmarkAgentClient *clients.BenchmarkAgentClient
-	Benchmark            models.Benchmark
-}
-
 func getSlowcookerBenchmarkQos(result *clients.SlowCookerBenchmarkResult, metric string) (int64, error) {
 	switch metric {
 	case "50":
@@ -54,51 +42,6 @@ func getSlowcookerBenchmarkQos(result *clients.SlowCookerBenchmarkResult, metric
 	}
 
 	return 0, errors.New("Unsupported latency metric: " + metric)
-}
-
-func NewSingleBenchmarkInfluxRun(
-	applicationConfig *models.ApplicationConfig,
-	benchmark models.Benchmark,
-	intensity int,
-	serviceName string,
-	config *viper.Viper) (*SingleBenchmarkInfluxRun, error) {
-	id, err := generateId("benchmarkinflux")
-	if err != nil {
-		return nil, errors.New("Unable to generate Id for single benchmark run: " + err.Error())
-	}
-	glog.V(1).Infof("Created new single benchmark run with id: %s", id)
-
-	deployerClient, deployerErr := clients.NewDeployerClient(config)
-	if deployerErr != nil {
-		return nil, errors.New("Unable to create new deployer client: " + deployerErr.Error())
-	}
-
-	log, logErr := log.NewLogger(config.GetString("filesPath"), id)
-	if logErr != nil {
-		return nil, errors.New("Error creating deployment logger: " + logErr.Error())
-	}
-
-	run := &SingleBenchmarkInfluxRun{
-		BaseBenchmarkRun: BaseBenchmarkRun{
-			ProfileRun: ProfileRun{
-				Id:                        id,
-				ApplicationConfig:         applicationConfig,
-				DeployerClient:            deployerClient,
-				BenchmarkControllerClient: &clients.BenchmarkControllerClient{},
-				SlowCookerClient:          &clients.SlowCookerClient{},
-				MetricsDB:                 db.NewMetricsDB(config),
-				ProfileLog:                log,
-				Created:                   time.Now(),
-				DirectJob:                 false,
-			},
-			BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
-		},
-		Intensity:   intensity,
-		ServiceName: serviceName,
-		Benchmark:   benchmark,
-	}
-
-	return run, nil
 }
 
 func NewBenchmarkRun(
@@ -158,14 +101,14 @@ func (run *BaseBenchmarkRun) SetFailed(error string) {}
 func (run *BenchmarkRun) deleteBenchmark(service string, benchmark models.Benchmark) error {
 	for _, config := range benchmark.Configs {
 		run.ProfileLog.Logger.Infof("Deleting benchmark config %s", config.Name)
-		agentUrl, err := run.getBenchmarkAgentUrl(service, config)
+		agentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, config.PlacementHost)
 		if err != nil {
 			run.ProfileLog.Logger.Warningf("Unable to get benchmark agent url: " + err.Error())
 			return fmt.Errorf(
 				"Unable to get benchmark agent url: " + err.Error())
 		}
 
-		if err := run.BenchmarkAgentClient.DeleteBenchmark(agentUrl, config.Name, run.ProfileLog.Logger); err != nil {
+		if err := run.BenchmarkAgentClient.DeleteBenchmark(agentUrls[0], config.Name, run.ProfileLog.Logger); err != nil {
 			return fmt.Errorf("Unable to delete last stage's benchmark %s: %s",
 				benchmark.Name, err.Error())
 		}
@@ -253,45 +196,18 @@ func (run *BenchmarkRun) runSlowCookerController(
 	return results, nil
 }
 
-func (run *BaseBenchmarkRun) getBenchmarkAgentUrl(service string, config models.BenchmarkConfig) (string, error) {
-	var colocatedService string
-	switch config.PlacementHost {
-	case "loadtester":
-		colocatedService = run.ApplicationConfig.LoadTester.Name
-	case "service":
-		colocatedService = service
-	default:
-		return "", errors.New("Unknown placement host for benchmark agent: " + config.PlacementHost)
-	}
-
-	run.ProfileLog.Logger.Info("Getting benchmark agent url for colocated service %s from deployer client %+v",
-		colocatedService, *run.DeployerClient)
-	serviceUrl, err := run.DeployerClient.GetColocatedServiceUrl(run.DeploymentId, colocatedService, "benchmark-agent")
-	if err != nil {
-		message := fmt.Sprintf(
-			"Unable to get service %s url located next to %s: %s",
-			"benchmark-agent",
-			colocatedService,
-			err.Error())
-		run.ProfileLog.Logger.Warningf(message)
-		return "", errors.New(message)
-	}
-
-	return serviceUrl, nil
-}
-
 func (run *BaseBenchmarkRun) runBenchmark(id string, service string, benchmark models.Benchmark, intensity int) error {
 	for _, config := range benchmark.Configs {
 		run.ProfileLog.Logger.Infof("Starting to run benchmark config: %+v", config)
 
-		agentUrl, err := run.getBenchmarkAgentUrl(service, config)
+		agentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, config.PlacementHost)
 		if err != nil {
 			return fmt.Errorf(
 				"Unable to get benchmark agent url: " + err.Error())
 		}
 
 		if err := run.BenchmarkAgentClient.CreateBenchmark(
-			agentUrl, &benchmark, &config, intensity, run.ProfileLog.Logger); err != nil {
+			agentUrls[0], &benchmark, &config, intensity, run.ProfileLog.Logger); err != nil {
 			return fmt.Errorf("Unable to run benchmark %s with intensity %d: %s",
 				benchmark.Name, intensity, err.Error())
 		}
@@ -380,28 +296,6 @@ func (run *BenchmarkRun) runAppWithBenchmark(service string, benchmark models.Be
 	}
 
 	return results, nil
-}
-
-func (run *SingleBenchmarkInfluxRun) Run(deploymentId string) error {
-	run.DeploymentId = deploymentId
-
-	if err := run.BaseBenchmarkRun.runBenchmark("single", run.ServiceName, run.Benchmark, run.Intensity); err != nil {
-		return errors.New("Unable to run benchmark " + run.Benchmark.Name + ": " + err.Error())
-	}
-
-	loadTesterName := run.ApplicationConfig.LoadTester.Name
-	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName, run.ProfileLog.Logger)
-	if urlErr != nil {
-		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
-	}
-
-	if _, err := resty.R().Get(url + "/actions/run_load_controller"); err != nil {
-		return fmt.Errorf("Unable to run load controller: " + err.Error())
-	}
-
-	// TODO: Snapshot influx data
-	//run.snapshotInfluxData()
-	return nil
 }
 
 func (run *BenchmarkRun) Run(deploymentId string) error {

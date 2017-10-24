@@ -58,10 +58,11 @@ func NewCaptureMetricsRun(
 			Created:           time.Now(),
 			DirectJob:         false,
 		},
-		LoadTester:         loadTester,
-		Benchmark:          benchmark,
-		BenchmarkIntensity: benchmarkIntensity,
-		Duration:           duration,
+		LoadTester:           loadTester,
+		Benchmark:            benchmark,
+		BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
+		BenchmarkIntensity:   benchmarkIntensity,
+		Duration:             duration,
 	}, nil
 }
 
@@ -112,11 +113,39 @@ func (run *CaptureMetricsRun) runApplicationLoadTest() error {
 	return errors.New("No supported load controller found")
 }
 
+func (run *CaptureMetricsRun) runBenchmark(id string, service string, benchmark models.Benchmark, intensity int) error {
+	for _, config := range benchmark.Configs {
+		run.ProfileLog.Logger.Infof("Starting to run benchmark config: %+v", config)
+
+		agentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, config.PlacementHost)
+		if err != nil {
+			return fmt.Errorf(
+				"Unable to get benchmark agent url: " + err.Error())
+		}
+
+		if len(agentUrls) == 0 {
+			return errors.New("No benchmark agents found in cluster")
+		}
+
+		for _, agentUrl := range agentUrls {
+			if err := run.BenchmarkAgentClient.CreateBenchmark(
+				agentUrl, &benchmark, &config, intensity, run.ProfileLog.Logger); err != nil {
+				return fmt.Errorf("Unable to run benchmark %s with intensity %d: %s",
+					benchmark.Name, intensity, err.Error())
+			}
+		}
+	}
+
+	return nil
+}
+
 func (run *CaptureMetricsRun) Run(deploymentId string) error {
 	run.DeploymentId = deploymentId
 
 	if run.Benchmark != nil {
-		// TODO: Run benchmark with benchmark intensity
+		if err := run.runBenchmark("single", run.ServiceName, *run.Benchmark, run.BenchmarkIntensity); err != nil {
+			return errors.New("Unable to run benchmark " + run.Benchmark.Name + ": " + err.Error())
+		}
 	}
 
 	if err := run.runApplicationLoadTest(); err != nil {
@@ -157,4 +186,5 @@ func (run *CaptureMetricsRun) GetResults() <-chan *jobs.JobResults {
 }
 
 func (run *CaptureMetricsRun) SetFailed(error string) {
+	// No-op
 }
