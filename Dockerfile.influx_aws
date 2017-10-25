@@ -22,6 +22,7 @@ RUN mkdir ~/.aws
 RUN cp -rp /aws_config/* ~/.aws/
 COPY hyperpilot_influx.sh /usr/local/bin/hyperpilot_influx.sh
 RUN chmod +x /usr/local/bin/hyperpilot_influx.sh
+ENV GOPATH /opt/workload-profiler
 COPY ./ui/ /opt/workload-profiler/src/github.com/hyperpilotio/workload-profiler/ui/
 
 CMD ["/opt/workload-profiler/workload-profiler", "-v", "1", "-logtostderr"]
