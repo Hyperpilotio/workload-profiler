@@ -1,5 +1,5 @@
 hash: 78038458ec7be0bd13258f318f5204df725a2f49d2c1e79adcd45203396dc06a
-updated: 2017-10-25T11:49:05.453981358+08:00
+updated: 2017-10-25T15:22:15.718716537+08:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -35,9 +35,12 @@ imports:
   - private/protocol/xml/xmlutil
   - private/signer/v2
   - private/waiter
+  - service/autoscaling
+  - service/cloudformation
   - service/cloudwatchlogs
   - service/ec2
   - service/ecs
+  - service/elb
   - service/iam
   - service/s3
   - service/s3/s3iface
@@ -109,7 +112,7 @@ imports:
   subpackages:
   - benchmark-agent/apis
 - name: github.com/hyperpilotio/deployer
-  version: 700bbeeb437b63f649cad1d7d038551521d4b876
+  version: c2bfb4653779dd61550e6b2b232e01b612a67bce
   subpackages:
   - apis
 - name: github.com/hyperpilotio/go-utils
@@ -269,6 +272,8 @@ imports:
   subpackages:
   - pkg/api
   - pkg/api/v1
+  - pkg/apis/apps
+  - pkg/apis/apps/v1beta1
   - pkg/apis/extensions
   - pkg/apis/extensions/v1beta1
   - pkg/util
