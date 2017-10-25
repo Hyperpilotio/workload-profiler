@@ -1,6 +1,11 @@
 hash: 78038458ec7be0bd13258f318f5204df725a2f49d2c1e79adcd45203396dc06a
-updated: 2017-10-20T15:03:02.744258859-07:00
+updated: 2017-10-25T11:49:05.453981358+08:00
 imports:
+- name: cloud.google.com/go
+  version: 3b1ae45394a234c385be014e9a488f2bb6eef821
+  subpackages:
+  - compute/metadata
+  - internal
 - name: github.com/aws/aws-sdk-go
   version: 00fb2125993965df739fa3398b03bef3eb2e198f
   subpackages:
@@ -98,7 +103,7 @@ imports:
   - json/scanner
   - json/token
 - name: github.com/hyperpilotio/blobstore
-  version: 1d8686626448c5d44b63ca2afcc05b2e05db3acb
+  version: ac77e131ccacc8c0a7db06c59f0aff923cc6345e
 - name: github.com/hyperpilotio/container-benchmarks
   version: 48941bd34193dba242f27d4eb6ac0efd657a9d10
   subpackages:
@@ -160,10 +165,18 @@ imports:
   version: f315505cf3349909cdf013ea56690da34e96a451
   subpackages:
   - context
+  - context/ctxhttp
   - http2
   - http2/hpack
   - idna
   - publicsuffix
+- name: golang.org/x/oauth2
+  version: 3c3a985cb79f52a3190fbc056984415ca6763d01
+  subpackages:
+  - google
+  - internal
+  - jws
+  - jwt
 - name: golang.org/x/sys
   version: 8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9
   subpackages:
@@ -181,6 +194,25 @@ imports:
   - unicode/bidi
   - unicode/norm
   - width
+- name: google.golang.org/api
+  version: 513727a0f0db0404fd7639c243a29e466bed6ca4
+  subpackages:
+  - datastore/v1
+  - gensupport
+  - googleapi
+  - googleapi/internal/uritemplates
+- name: google.golang.org/appengine
+  version: 4f7eeb5305a4ba1966344836ba4af9996b7b4e05
+  subpackages:
+  - internal
+  - internal/app_identity
+  - internal/base
+  - internal/datastore
+  - internal/log
+  - internal/modules
+  - internal/remote_api
+  - internal/urlfetch
+  - urlfetch
 - name: gopkg.in/go-playground/validator.v8
   version: c193cecd124b5cc722d7ee5538e945bdb3348435
 - name: gopkg.in/inf.v0
