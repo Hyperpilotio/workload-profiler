@@ -22,9 +22,10 @@ type DeploymentFiles interface {
 }
 
 type S3DeploymentFiles struct {
-	awsId     string
-	awsSecret string
-	region    string
+	bucketName string
+	awsId      string
+	awsSecret  string
+	region     string
 }
 
 func NewDeploymentFiles(config *viper.Viper) (DeploymentFiles, error) {
@@ -32,9 +33,10 @@ func NewDeploymentFiles(config *viper.Viper) (DeploymentFiles, error) {
 	if deployments.IsSet("s3") {
 		s3Config := deployments.GetStringMapString("s3")
 		return &S3DeploymentFiles{
-			awsId:     s3Config["awsId"],
-			awsSecret: s3Config["awsSecret"],
-			region:    s3Config["region"],
+			bucketName: s3Config["bucketname"],
+			awsId:      s3Config["awsid"],
+			awsSecret:  s3Config["awssecret"],
+			region:     s3Config["region"],
 		}, nil
 	}
 
@@ -67,7 +69,7 @@ func (files *S3DeploymentFiles) DownloadDeployment(fileUrl string) (*deployer.De
 
 	_, err = downloader.Download(tmpFile,
 		&s3.GetObjectInput{
-			Bucket: aws.String(url.Host),
+			Bucket: aws.String(files.bucketName),
 			Key:    aws.String(url.Path),
 		})
 	if err != nil {
