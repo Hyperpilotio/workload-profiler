@@ -292,13 +292,22 @@ func (server *Server) captureClusterMetrics(c *gin.Context) {
 			Name      string `json:"name"`
 			Intensity int    `json:"intensity"`
 		} `json:"benchmarks"`
-		WaitTime time.Duration `json:"duration" binding:"required"`
+		WaitTime string `json:"duration" binding:"required"`
 	}
 
 	if err := c.BindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
 			"data":  "Unable to parse benchmark with interference request: " + err.Error(),
+		})
+		return
+	}
+
+	waitTime, err := time.ParseDuration(request.WaitTime)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"data":  fmt.Errorf("Unable to parse request waitTime %s: %s", request.WaitTime, err.Error()),
 		})
 		return
 	}
@@ -357,7 +366,7 @@ func (server *Server) captureClusterMetrics(c *gin.Context) {
 				loadTester,
 				foundBenchmark,
 				benchmarkIntensity,
-				request.WaitTime,
+				waitTime,
 				server.Config)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
