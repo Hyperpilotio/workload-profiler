@@ -16,6 +16,24 @@ A service that orchestrates various pieces to run workload profiling
 	./run.sh
 	```
 
+## Capture Cluster Metric Use on GCP
+
+1. create a GCP in-cluster cluster first.
+    Plase copy gcpServiceAccount.json into [hyperpilot-demo/workloads/in-cluster](https://github.com/Hyperpilotio/hyperpilot-demo/tree/master/workloads/in-cluster/deploy-gcp.json)
+
+2. import data to mongo configdb:
+    * Get mongo-serve public url
+    ($DEPLOYER_URL:7777/v1/deployments/$DEPLOYMENT_ID/services)
+    * Change collect_applications.py MONGO_URL param
+	```{shell}
+	python collect_applications.py
+	```
+3. run clusterMetrics api by:
+    Change clusterMetrics.sh request json
+	```{shell}
+	./clusterMetrics.sh <deploymentId>
+	```    
+
 ## Job Workflow
 
 Workload profiler
