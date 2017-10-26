@@ -26,12 +26,24 @@ type BenchmarkController struct {
 	ParserUrl      *string           `bson:"parserUrl,omitempty" json:"parserUrl,omitempty"`
 }
 
+// TODO: Import all slow cooker structs instead
+type SlowCookerRunningStep struct {
+	Qps         int    `json:"qps"`
+	Concurrency int    `json:concurrency`
+	Duration    string `json:"string"`
+}
+
+type SlowCookerRunningPlan struct {
+	RunningSteps []*SlowCookerRunningStep `json:"runningSteps"`
+}
+
 type SlowCookerAppLoad struct {
-	Qps           int    `bson:"qps" json:"qps"`
-	Concurrency   int    `bson:"concurrency" json:"concurrency"`
-	Url           string `bson:"url" json:"url"`
-	Method        string `bson:"method" json:"method"`
-	TotalRequests int    `bson:"totalRequests" json:"totalRequests"`
+	Qps           int                   `bson:"qps" json:"qps"`
+	Concurrency   int                   `bson:"concurrency" json:"concurrency"`
+	Url           string                `bson:"url" json:"url"`
+	Method        string                `bson:"method" json:"method"`
+	TotalRequests int                   `bson:"totalRequests" json:"totalRequests"`
+	Plan          SlowCookerRunningPlan `json:"plan"`
 }
 
 type SlowCookerCalibrate struct {
