@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 )
@@ -22,6 +23,7 @@ func NewInfluxClient(url string, port int, backupPort int) *InfluxClient {
 func (client *InfluxClient) BackupDB(key string) error {
 	// Subprocess to run hyperpilot_influx.sh to backup and
 	// and send backup to s3.
+	var stderrBuf bytes.Buffer
 	cmd := exec.Command(
 		"/opt/workload-profiler/hyperpilot_influx.sh",
 		"-o",
@@ -35,6 +37,11 @@ func (client *InfluxClient) BackupDB(key string) error {
 		"-p",
 		"8086",
 	)
+	cmd.Stderr = &stderrBuf
 	err := cmd.Run()
-	return err
+	if err != nil {
+		return fmt.Errorf("Unable to run backup command, err: %s, stderr: %s", err.Error(), stderrBuf.String())
+	}
+
+	return nil
 }

@@ -74,10 +74,11 @@ func (run *CaptureMetricsRun) runSlowCookerController(slowCookerController *mode
 	}
 
 	client := clients.SlowCookerClient{}
-	_, err := client.RunBenchmark(url,
+	_, err := client.RunBenchmark(
+		url,
 		run.Id,
-		float64(slowCookerController.Calibrate.InitialConcurrency),
-		slowCookerController.Calibrate.RunsPerIntensity,
+		float64(slowCookerController.AppLoad.Concurrency),
+		1,
 		slowCookerController,
 		run.ProfileLog.Logger)
 	if err != nil {
@@ -163,7 +164,7 @@ func (run *CaptureMetricsRun) getSnapshotId() string {
 	if run.Benchmark != nil {
 		benchmarkName = run.Benchmark.Name
 	}
-	return run.GetId() + "-" + run.ApplicationConfig.Name + "-" + benchmarkName
+	return run.GetId() + "-" + run.LoadTester.Scenario + "-" + benchmarkName
 }
 
 func (run *CaptureMetricsRun) snapshotInfluxData() error {
