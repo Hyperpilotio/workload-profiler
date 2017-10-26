@@ -9,7 +9,6 @@ fi
 DEPLOYER_URL="localhost"
 WORKLOAD_PROFILER_URL=$(curl -s $DEPLOYER_URL:7777/v1/deployments/$1/services | jq '.data' | jq 'with_entries(select(.key=="workload-profiler"))' | jq '.[].publicUrl')
 WORKLOAD_PROFILER_URL=${WORKLOAD_PROFILER_URL//\"/}
-WORKLOAD_PROFILER_URL="localhost:7779"
 
 APP_NAME="resource-worker-service"
 curl -XPOST -H "Content-Type:application/json" \
