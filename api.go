@@ -298,7 +298,7 @@ func (server *Server) captureClusterMetrics(c *gin.Context) {
 	if err := c.BindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"data":  "Unable to parse benchmark with interference request: " + err.Error(),
+			"data":  "Unable to parse capture cluster metrics request: " + err.Error(),
 		})
 		return
 	}
