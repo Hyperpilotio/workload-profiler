@@ -24,9 +24,9 @@ A service that orchestrates various pieces to run workload profiling
 2. import data to mongo configdb:
     * Get mongo-serve public url
     ($DEPLOYER_URL:7777/v1/deployments/$DEPLOYMENT_ID/services)
-    * Change collect_applications.py MONGO_URL param
 	```{shell}
-	python collect_applications.py
+	python collect_applications.py MONGO_URL
+	python collect_benchmarks.py MONGO_URL
 	```
 3. run clusterMetrics api by:
     Change clusterMetrics.sh request json
