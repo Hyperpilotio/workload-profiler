@@ -131,7 +131,7 @@ type LoadTesterCommand struct {
 
 type LoadTester struct {
 	Name                 string                `bson:"name" json:"name"`
-	Scenario             string                `bson:"name" json:"name"`
+	Scenario             string                `bson:"scenario" json:"scenario"`
 	BenchmarkController  *BenchmarkController  `bson:"benchmarkController" json:"benchmarkController"`
 	LocustController     *LocustController     `bson:"locustController" json:"locustController"`
 	SlowCookerController *SlowCookerController `bson:"slowCookerController" json:"slowCookerController"`
