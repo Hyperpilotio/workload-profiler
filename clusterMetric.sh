@@ -40,7 +40,7 @@ $WORKLOAD_PROFILER_URL/clusterMetrics/apps/$APP_NAME \
             "name": "cpu",
             "intensity": 10
         }
-    ]
+    ],
     "duration": "30s"
 }
 EOF
