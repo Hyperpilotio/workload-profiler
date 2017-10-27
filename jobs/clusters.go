@@ -423,6 +423,8 @@ func (clusters *Clusters) createDeployment(
 			deployment.UserId = userId
 		}
 
+		deployment.Name = "workload-profiler-" + runId
+
 		deploymentId, err := clusters.DeployerClient.CreateDeployment(
 			deployment, applicationConfig.LoadTester.Name, log)
 		if err != nil {
@@ -433,7 +435,7 @@ func (clusters *Clusters) createDeployment(
 	}
 
 	deployment := &deployer.Deployment{
-		Name:              "workload-profiler-" + applicationConfig.Name,
+		Name:              "workload-profiler-" + runId,
 		NodeMapping:       []deployer.NodeMapping{},
 		ClusterDefinition: *clusterDefinition,
 		KubernetesDeployment: &deployer.KubernetesDeployment{
