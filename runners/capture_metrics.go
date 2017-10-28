@@ -33,7 +33,7 @@ func NewCaptureMetricsRun(
 	benchmarkIntensity int,
 	duration time.Duration,
 	config *viper.Viper) (*CaptureMetricsRun, error) {
-	id, err := generateId("capturemetrics-" + applicationConfig.Name)
+	id, err := generateId("cm")
 	if err != nil {
 		return nil, errors.New("Unable to generate Id for capture metrics run: " + err.Error())
 	}
