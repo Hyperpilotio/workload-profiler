@@ -32,6 +32,7 @@ func NewCaptureMetricsRun(
 	benchmark *models.Benchmark,
 	benchmarkIntensity int,
 	duration time.Duration,
+	skipUnreserveOnFailure bool,
 	config *viper.Viper) (*CaptureMetricsRun, error) {
 	id, err := generateId("cm")
 	if err != nil {
@@ -51,12 +52,13 @@ func NewCaptureMetricsRun(
 
 	return &CaptureMetricsRun{
 		ProfileRun: ProfileRun{
-			Id:                id,
-			ApplicationConfig: applicationConfig,
-			DeployerClient:    deployerClient,
-			ProfileLog:        log,
-			Created:           time.Now(),
-			DirectJob:         false,
+			Id:                     id,
+			ApplicationConfig:      applicationConfig,
+			DeployerClient:         deployerClient,
+			ProfileLog:             log,
+			Created:                time.Now(),
+			DirectJob:              false,
+			SkipUnreserveOnFailure: skipUnreserveOnFailure,
 		},
 		LoadTester:           loadTester,
 		Benchmark:            benchmark,

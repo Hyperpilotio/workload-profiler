@@ -360,6 +360,7 @@ func (server *Server) captureClusterMetrics(c *gin.Context) {
 				}
 			}
 
+			skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
 			run, err := runners.NewCaptureMetricsRun(
 				applicationConfig,
 				applicationConfig.ServiceNames[0],
@@ -367,6 +368,7 @@ func (server *Server) captureClusterMetrics(c *gin.Context) {
 				foundBenchmark,
 				benchmarkIntensity,
 				waitTime,
+				skipFlag,
 				server.Config)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{

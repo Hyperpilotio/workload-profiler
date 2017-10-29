@@ -28,9 +28,9 @@ type BenchmarkController struct {
 
 // TODO: Import all slow cooker structs instead
 type SlowCookerRunningStep struct {
-	Qps         int    `json:"qps"`
-	Concurrency int    `json:concurrency`
-	Duration    string `json:"string"`
+	Qps         int    `json:"qps" binding:"required"`
+	Concurrency int    `json:"concurrency" binding:"required"`
+	Duration    string `json:"duration" binding:"required"`
 }
 
 type SlowCookerRunningPlan struct {
