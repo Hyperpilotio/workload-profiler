@@ -43,6 +43,7 @@ type SlowCookerAppLoad struct {
 	Url           string                `bson:"url" json:"url"`
 	Method        string                `bson:"method" json:"method"`
 	TotalRequests int                   `bson:"totalRequests" json:"totalRequests"`
+	Data          string                `bson:"data" json:"data"`
 	Plan          SlowCookerRunningPlan `json:"plan"`
 }
 

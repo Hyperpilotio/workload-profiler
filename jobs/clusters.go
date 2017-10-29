@@ -346,7 +346,6 @@ func (clusters *Clusters) unreserveCluster(cluster *cluster, deleteCluster bool,
 	}
 
 	go func() {
-		// TODO: Cache deployments and only reset deployment
 		if err := clusters.DeployerClient.DeleteDeployment(cluster.deploymentId, log); err != nil {
 			unreserveResult <- UnreserveResult{
 				Err: err.Error(),
