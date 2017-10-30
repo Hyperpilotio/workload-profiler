@@ -15,7 +15,7 @@ type InfluxClient struct {
 
 func NewInfluxClient(scriptPath string, url string, port int, backupPort int) *InfluxClient {
 	if scriptPath == "" {
-		scriptPath = "/opt/workload-profiler/hyperpilot_influx.sh"
+		scriptPath = "/usr/local/bin/hyperpilot_influx.sh"
 	}
 
 	return &InfluxClient{
