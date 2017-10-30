@@ -96,7 +96,6 @@ options:
     esac
 done
 
-# use only tech-demo
 if [[ ! -z "$KUBE_INFLUX" ]]; then
     #statements
     if [[ -z "$KUBECONFIG" ]]; then
@@ -194,6 +193,7 @@ case "$OPERATION" in
 
         # backup databases
 
+        echo "Backing up databases $dbs"
         for db in "${dbs[@]}"; do
             normalized_db_name="${db#\"}"
             normalized_db_name="${normalized_db_name%\"}"

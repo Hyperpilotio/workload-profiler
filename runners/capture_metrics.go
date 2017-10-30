@@ -17,6 +17,7 @@ import (
 type CaptureMetricsRun struct {
 	ProfileRun
 
+	Config               *viper.Viper
 	ServiceName          string
 	LoadTester           models.LoadTester
 	Benchmark            *models.Benchmark
@@ -65,6 +66,7 @@ func NewCaptureMetricsRun(
 		BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
 		BenchmarkIntensity:   benchmarkIntensity,
 		Duration:             duration,
+		Config:               config,
 	}, nil
 }
 
@@ -156,9 +158,13 @@ func (run *CaptureMetricsRun) Run(deploymentId string) error {
 		return fmt.Errorf("Unable to run load controller: " + err.Error())
 	}
 
+	run.ProfileLog.Logger.Infof("Waiting for %s to capture metrics run", run.Duration)
 	time.Sleep(run.Duration)
+	run.ProfileLog.Logger.Infof("Waiting completed, snapshotting influx..")
+	if err := run.snapshotInfluxData(); err != nil {
+		return errors.New("Unable to snapshot influx: " + err.Error())
+	}
 
-	run.snapshotInfluxData()
 	return nil
 }
 
@@ -177,12 +183,9 @@ func (run *CaptureMetricsRun) snapshotInfluxData() error {
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())
 	}
 
-	influxClient := clients.NewInfluxClient(url, 8088, 8086)
-	if err := influxClient.BackupDB(run.getSnapshotId()); err != nil {
-		return errors.New("Unable to snapshot influx: " + err.Error())
-	}
-
-	return nil
+	influxScriptPath := run.Config.GetString("influxScriptPath")
+	influxClient := clients.NewInfluxClient(influxScriptPath, url, 8088, 8086)
+	return influxClient.BackupDB(run.getSnapshotId())
 }
 
 func (run *CaptureMetricsRun) GetResults() <-chan *jobs.JobResults {
