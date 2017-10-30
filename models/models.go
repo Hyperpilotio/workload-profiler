@@ -44,7 +44,8 @@ type SlowCookerAppLoad struct {
 	Method        string                `bson:"method" json:"method"`
 	TotalRequests int                   `bson:"totalRequests" json:"totalRequests"`
 	Data          string                `bson:"data" json:"data"`
-	Plan          SlowCookerRunningPlan `json:"plan"`
+	Noreuse       bool                  `bson:"noreuse" json:"noreuse"`
+	Plan          SlowCookerRunningPlan `bson:"plan" json:"plan"`
 }
 
 type SlowCookerCalibrate struct {
