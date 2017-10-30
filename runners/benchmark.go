@@ -172,7 +172,7 @@ func (run *BenchmarkRun) runSlowCookerController(
 	}
 
 	response, err := run.SlowCookerClient.RunBenchmark(
-		url, stageId, appIntensity, controller.Calibrate.InitialConcurrency, controller, run.ProfileLog.Logger)
+		url, stageId, appIntensity, controller.Calibrate.InitialConcurrency, controller, run.ProfileLog.Logger, true)
 	if err != nil {
 		return nil, errors.New("Unable to run benchmark with slow cooker: " + err.Error())
 	}

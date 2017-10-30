@@ -164,7 +164,8 @@ func (client *SlowCookerClient) RunBenchmark(
 	appIntensity float64,
 	runsPerIntensity int,
 	controller *models.SlowCookerController,
-	logger *logging.Logger) (*SlowCookerBenchmarkResponse, error) {
+	logger *logging.Logger,
+	waitResults bool) (*SlowCookerBenchmarkResponse, error) {
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, errors.New("Unable to parse url: " + err.Error())
@@ -193,37 +194,39 @@ func (client *SlowCookerClient) RunBenchmark(
 
 	results := &SlowCookerBenchmarkResponse{}
 
-	err = funcs.LoopUntil(time.Minute*90, time.Second*30, func() (bool, error) {
-		response, err := resty.R().Get(u.String())
+	if waitResults {
+		err = funcs.LoopUntil(time.Minute*90, time.Second*30, func() (bool, error) {
+			response, err := resty.R().Get(u.String())
+			if err != nil {
+				return false, errors.New("Unable to get benchmark status from slow cooker: " + err.Error())
+			}
+
+			if response.StatusCode() != 200 {
+				return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
+			}
+
+			if err := json.Unmarshal(response.Body(), results); err != nil {
+				return false, errors.New("Unable to parse response body: " + err.Error())
+			}
+
+			if results.Error != "" {
+				logger.Infof("Slow cooker benchmark failed with error: " + results.Error)
+				return false, errors.New("Slow cooker benchmark failed with error: " + results.Error)
+			}
+
+			if results.State != "running" {
+				logger.Infof("Calibration finished with status: %s, response: %v", results.State, response)
+				return true, nil
+			}
+
+			logger.Infof("Continue to wait for slow cooker benchmark results, last poll response: %v", response)
+
+			return false, nil
+		})
+
 		if err != nil {
-			return false, errors.New("Unable to get benchmark status from slow cooker: " + err.Error())
+			return nil, errors.New("Unable to get benchmark results from slow cooker: " + err.Error())
 		}
-
-		if response.StatusCode() != 200 {
-			return false, errors.New("Unexpected response code: " + strconv.Itoa(response.StatusCode()))
-		}
-
-		if err := json.Unmarshal(response.Body(), results); err != nil {
-			return false, errors.New("Unable to parse response body: " + err.Error())
-		}
-
-		if results.Error != "" {
-			logger.Infof("Slow cooker benchmark failed with error: " + results.Error)
-			return false, errors.New("Slow cooker benchmark failed with error: " + results.Error)
-		}
-
-		if results.State != "running" {
-			logger.Infof("Calibration finished with status: %s, response: %v", results.State, response)
-			return true, nil
-		}
-
-		logger.Infof("Continue to wait for slow cooker benchmark results, last poll response: %v", response)
-
-		return false, nil
-	})
-
-	if err != nil {
-		return nil, errors.New("Unable to get benchmark results from slow cooker: " + err.Error())
 	}
 
 	return results, nil

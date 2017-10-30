@@ -82,7 +82,8 @@ func (run *CaptureMetricsRun) runSlowCookerController(slowCookerController *mode
 		float64(slowCookerController.AppLoad.Concurrency),
 		1,
 		slowCookerController,
-		run.ProfileLog.Logger)
+		run.ProfileLog.Logger,
+		false)
 	if err != nil {
 		return fmt.Errorf("Unable to run load test from slow cooker: " + err.Error())
 	}
