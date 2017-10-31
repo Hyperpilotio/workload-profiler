@@ -184,7 +184,10 @@ func (run *CaptureMetricsRun) snapshotInfluxData() error {
 	}
 
 	influxScriptPath := run.Config.GetString("influxScriptPath")
-	influxClient := clients.NewInfluxClient(influxScriptPath, url, 8088, 8086)
+	influxClient, err := clients.NewInfluxClient(influxScriptPath, url, 8088, 8086)
+	if err != nil {
+		return errors.New("Unable to create influx client: " + err.Error())
+	}
 	return influxClient.BackupDB(run.getSnapshotId())
 }
 
