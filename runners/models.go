@@ -81,7 +81,7 @@ func (run *ProfileRun) GetColocatedAgentUrls(agent string, service string, place
 
 	run.ProfileLog.Logger.Info("Getting %s url for colocated service %s from deployer client %+v",
 		agent, colocatedService, *run.DeployerClient)
-	agentUrls, err := run.DeployerClient.GetColocatedServiceUrls(run.DeploymentId, colocatedService, agent)
+	agentUrls, err := run.DeployerClient.GetColocatedServiceUrls(run.DeploymentId, colocatedService, agent, run.ProfileLog.Logger)
 	if err != nil {
 		message := fmt.Sprintf(
 			"Unable to get service %s url located next to %s: %s",

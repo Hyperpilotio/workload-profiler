@@ -122,7 +122,7 @@ func (run *CaptureMetricsRun) runApplicationLoadTest() error {
 
 func (run *CaptureMetricsRun) runBenchmark(id string, service string, benchmark models.Benchmark, intensity int) error {
 	for _, config := range benchmark.Configs {
-		run.ProfileLog.Logger.Infof("Starting to run benchmark config: %+v", config)
+		run.ProfileLog.Logger.Infof("Starting to run benchmark config: %+v, service: %s", config, service)
 
 		agentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, config.PlacementHost)
 		if err != nil {

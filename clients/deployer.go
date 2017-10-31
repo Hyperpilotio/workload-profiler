@@ -112,18 +112,26 @@ func (client *DeployerClient) getServiceMappings(deployment string) (*ServiceMap
 // colocatedService is running.
 // We don't specify exact service names because services that has multiple copies will be named differently
 // but sharing the same prefix (e.g: benchmark-agent, benchmark-agent-2, etc.).
-func (client *DeployerClient) GetColocatedServiceUrls(deployment string, colocatedService string, servicePrefix string) ([]string, error) {
+func (client *DeployerClient) GetColocatedServiceUrls(
+	deployment string,
+	colocatedServicePrefix string,
+	targetServicePrefix string,
+	log *logging.Logger) ([]string, error) {
 	mappings, err := client.getServiceMappings(deployment)
 	if err != nil {
 		return nil, errors.New("Unable to get service mappings for deployment " + deployment + ": " + err.Error())
 	}
 
+	log.Infof("Service mappings in colocated service urls: %+v", mappings)
+
 	urls := []string{}
-	for serviceName, mapping := range mappings.Data {
-		if strings.HasPrefix(serviceName, colocatedService) {
-			for serviceName, serviceMapping := range mappings.Data {
-				if strings.HasPrefix(serviceName, servicePrefix) && mapping.NodeId == serviceMapping.NodeId {
-					urls = append(urls, "http://"+mapping.PublicUrl)
+	for colocatedServiceName, colocatedMapping := range mappings.Data {
+		if strings.HasPrefix(colocatedServiceName, colocatedServicePrefix) {
+			for targetServiceName, targetMapping := range mappings.Data {
+				if strings.HasPrefix(targetServiceName, targetServicePrefix) &&
+					targetMapping.NodeId == colocatedMapping.NodeId &&
+					targetMapping.PublicUrl != "" {
+					urls = append(urls, "http://"+targetMapping.PublicUrl)
 				}
 			}
 		}
