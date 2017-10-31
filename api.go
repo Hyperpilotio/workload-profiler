@@ -337,12 +337,12 @@ func (server *Server) captureClusterMetrics(c *gin.Context) {
 		request.Benchmarks = append(request.Benchmarks, nil)
 	}
 
+	skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
 	runs := []*runners.CaptureMetricsRun{}
 	for _, loadTester := range request.LoadTesters {
 		for _, benchmark := range request.Benchmarks {
 			var foundBenchmark *models.Benchmark
 			var benchmarkIntensity int
-
 			if benchmark != nil {
 				benchmarkIntensity = benchmark.Intensity
 				for _, existingBenchmark := range benchmarks {
@@ -360,24 +360,25 @@ func (server *Server) captureClusterMetrics(c *gin.Context) {
 				}
 			}
 
-			skipFlag := c.DefaultQuery("skipUnreserveOnFailure", "false") == "true"
-			run, err := runners.NewCaptureMetricsRun(
-				applicationConfig,
-				applicationConfig.ServiceNames[0],
-				loadTester,
-				foundBenchmark,
-				benchmarkIntensity,
-				waitTime,
-				skipFlag,
-				server.Config)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": true,
-					"data":  "Unable to create capture metrics run: " + err.Error(),
-				})
-				return
+			for _, service := range applicationConfig.ServiceNames {
+				run, err := runners.NewCaptureMetricsRun(
+					applicationConfig,
+					service,
+					loadTester,
+					foundBenchmark,
+					benchmarkIntensity,
+					waitTime,
+					skipFlag,
+					server.Config)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error": true,
+						"data":  "Unable to create capture metrics run: " + err.Error(),
+					})
+					return
+				}
+				runs = append(runs, run)
 			}
-			runs = append(runs, run)
 		}
 	}
 
