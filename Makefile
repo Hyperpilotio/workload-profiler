@@ -20,22 +20,22 @@ init: glide-check
 test:
 	${GO_EXECUTABLE} test ${PACKAGES}
 
-build: 
+build:
 	CGO_ENABLED=0 go build -a -installsuffix cgo
 
 build-linux: init
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo
 
-docker-build: 
-	docker build --no-cache . -t ${ORGANIZATION}/${IMAGE}:${TAG}
+docker-build:
+	docker build . -t ${ORGANIZATION}/${IMAGE}:${TAG}
 
-docker-build-influx_aws: 
-	docker build --no-cache . -t ${ORGANIZATION}/${IMAGE}:${CLUSTER_TYPE}_influx --file Dockerfile.influx_aws	
+docker-build-influx_aws:
+	docker build . -t ${ORGANIZATION}/${IMAGE}:${CLUSTER_TYPE}_influx --file Dockerfile.influx_aws
 
-docker-push: 
+docker-push:
 	docker push ${ORGANIZATION}/${IMAGE}:${TAG}
 
-docker-push-influx_aws: 
+docker-push-influx_aws:
 	docker push ${ORGANIZATION}/${IMAGE}:${CLUSTER_TYPE}_influx
 
 run:

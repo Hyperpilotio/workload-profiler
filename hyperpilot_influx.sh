@@ -96,33 +96,6 @@ options:
     esac
 done
 
-if [[ ! -z "$KUBE_INFLUX" ]]; then
-    #statements
-    if [[ -z "$KUBECONFIG" ]]; then
-        #statements
-        echo "please set KUBECONFIG env variable to use this function"
-        exit 1
-    fi
-    endpoints=($(kubectl get services -n hyperpilot -l app=influxsrv -o jsonpath='{range .items[?(.spec.type=="LoadBalancer")]}{.status.loadBalancer.ingress[*].hostname}{":"}{.spec.ports[*].targetPort}{" "}{end}'))
-    if [[ $? != 0 ]]; then
-        #statements
-        exit $?
-    fi
-    for url in "${endpoints[@]}"; do
-        echo $url
-        h=$(echo $url | awk -F: '{print $1}')
-        p=$(echo $url | awk -F: '{print $2}')
-        if [[ "$p" == "8086" ]]; then
-            #statements
-            HOST=$h
-        elif [[ "$p" == "8088" ]]; then
-            #statements
-            BACKUP_HOST=$h:8088
-        fi
-    done
-fi
-
-
 if [[ "$OPERATION" == "backup" ]]; then
     if [[ -z "$HOST" ]]; then
         HOST="localhost"
@@ -179,7 +152,7 @@ case "$OPERATION" in
         influxd backup -host $BACKUP_HOST $backup_file_path
         ret_code=$?
         if [[ $ret_code != 0 ]]; then
-            echo "influxdb backup up failed"
+            echo "influxdb backup metastore failed"
             exit $ret_code
         fi
 

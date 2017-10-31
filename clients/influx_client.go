@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	logging "github.com/op/go-logging"
 )
 
 type InfluxClient struct {
@@ -36,7 +38,7 @@ func NewInfluxClient(scriptPath string, url string, port int, backupPort int) (*
 	}, nil
 }
 
-func (client *InfluxClient) BackupDB(key string) error {
+func (client *InfluxClient) BackupDB(key string, logger *logging.Logger) error {
 	// Subprocess to run hyperpilot_influx.sh to backup and
 	// and send backup to s3.
 	var stderrBuf bytes.Buffer
@@ -57,6 +59,7 @@ func (client *InfluxClient) BackupDB(key string) error {
 	cmd.Stderr = &stderrBuf
 	cmd.Stdout = &stdoutBuf
 	err := cmd.Run()
+	logger.Infof("Influx script stdout: %s", stdoutBuf.String())
 	if err != nil {
 		return fmt.Errorf("Unable to run backup command, err: %s, stderr: %s", err.Error(), stderrBuf.String())
 	}
