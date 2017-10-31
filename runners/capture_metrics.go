@@ -62,6 +62,7 @@ func NewCaptureMetricsRun(
 			SkipUnreserveOnFailure: skipUnreserveOnFailure,
 		},
 		LoadTester:           loadTester,
+		ServiceName:          serviceName,
 		Benchmark:            benchmark,
 		BenchmarkAgentClient: clients.NewBenchmarkAgentClient(),
 		BenchmarkIntensity:   benchmarkIntensity,
