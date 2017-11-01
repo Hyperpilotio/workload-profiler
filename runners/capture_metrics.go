@@ -3,6 +3,7 @@ package runners
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/go-resty/resty"
@@ -121,25 +122,48 @@ func (run *CaptureMetricsRun) runApplicationLoadTest() error {
 }
 
 func (run *CaptureMetricsRun) runBenchmark(id string, service string, benchmark models.Benchmark, intensity int) error {
-	for _, config := range benchmark.Configs {
-		run.ProfileLog.Logger.Infof("Starting to run benchmark config: %+v, service: %s", config, service)
+	// NOTE: We currently have two kinds of benchmarks, one that only has one config which means it's independent, and
+	// another one that has two configs that it requires two benchmark agents to cooperate.
+	// We assume here that single config benchmarks can be launched on all benchmark agents, and multiple config benchmarks
+	// are randomly placed on separate hosts.
+	agentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, "service")
+	if err != nil {
+		return fmt.Errorf("Unable to get benchmark agent url: " + err.Error())
+	} else if len(agentUrls) == 0 {
+		return errors.New("No benchmark agents found in cluster")
+	}
 
-		agentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, config.PlacementHost)
-		if err != nil {
-			return fmt.Errorf(
-				"Unable to get benchmark agent url: " + err.Error())
-		}
-
-		if len(agentUrls) == 0 {
-			return errors.New("No benchmark agents found in cluster")
-		}
-
+	run.ProfileLog.Logger.Infof("Starting to run benchmark config: %+v, service: %s", benchmark.Configs, service)
+	benchmarkConfigCount := len(benchmark.Configs)
+	// Single config benchmarks are ran on every benchmark agent.
+	if benchmarkConfigCount == 1 {
+		config := benchmark.Configs[0]
 		for _, agentUrl := range agentUrls {
 			if err := run.BenchmarkAgentClient.CreateBenchmark(
 				agentUrl, &benchmark, &config, intensity, run.ProfileLog.Logger); err != nil {
 				return fmt.Errorf("Unable to run benchmark %s with intensity %d: %s",
 					benchmark.Name, intensity, err.Error())
 			}
+		}
+		return nil
+	}
+
+	agentCount := len(agentUrls)
+	if agentCount < benchmarkConfigCount {
+		return fmt.Errorf("Benchmark agent count (%d) is less than benchmark config count (%d)", agentCount, benchmarkConfigCount)
+	}
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	// Multiple config benchmarks are placed on random separate benchmark agents.
+	for _, config := range benchmark.Configs {
+		i := r.Intn(len(agentUrls))
+		agentUrl := agentUrls[i]
+		// Remove agent from list.
+		agentUrls[i] = agentUrls[len(agentUrls)-1]
+		agentUrls = agentUrls[:len(agentUrls)-1]
+		if err := run.BenchmarkAgentClient.CreateBenchmark(
+			agentUrl, &benchmark, &config, intensity, run.ProfileLog.Logger); err != nil {
+			return fmt.Errorf("Unable to run benchmark %s with intensity %d: %s", benchmark.Name, intensity, err.Error())
 		}
 	}
 
