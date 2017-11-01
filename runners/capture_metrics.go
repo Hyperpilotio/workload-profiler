@@ -198,7 +198,7 @@ func (run *CaptureMetricsRun) getSnapshotId() string {
 	if run.Benchmark != nil {
 		benchmarkName = run.Benchmark.Name
 	}
-	return run.GetId() + "-" + run.LoadTester.Scenario + "-" + benchmarkName
+	return run.GetId() + "-" + run.LoadTester.Scenario + "-" + benchmarkName + "-" + run.ServiceName
 }
 
 func (run *CaptureMetricsRun) snapshotInfluxData() error {
