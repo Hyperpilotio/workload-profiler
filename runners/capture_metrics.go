@@ -73,6 +73,7 @@ func NewCaptureMetricsRun(
 }
 
 func (run *CaptureMetricsRun) runSlowCookerController(slowCookerController *models.SlowCookerController) error {
+	run.ProfileLog.Logger.Infof("Running slow cooker controller")
 	loadTesterName := run.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName, run.ProfileLog.Logger)
 	if urlErr != nil {
@@ -96,7 +97,8 @@ func (run *CaptureMetricsRun) runSlowCookerController(slowCookerController *mode
 }
 
 func (run *CaptureMetricsRun) runDemoUiController(DemoUiController *models.DemoUiController) error {
-	loadTesterName := run.ApplicationConfig.LoadTester.Name
+	run.ProfileLog.Logger.Infof("Running demo ui controller")
+	loadTesterName := run.LoadTester.Name
 	url, urlErr := run.DeployerClient.GetServiceUrl(run.DeploymentId, loadTesterName, run.ProfileLog.Logger)
 	if urlErr != nil {
 		return fmt.Errorf("Unable to retrieve service url [%s]: %s", loadTesterName, urlErr.Error())

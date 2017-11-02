@@ -373,6 +373,7 @@ func (client *DeployerClient) CreateDeployment(
 	requestUrl := UrlBasePath(client.Url) + path.Join(
 		client.Url.Path, "v1", "deployments")
 
+	log.Infof("Sending deployment to deployer: %+v", deployment)
 	response, err := resty.R().SetBody(deployment).Post(requestUrl)
 	if err != nil {
 		return "", err
