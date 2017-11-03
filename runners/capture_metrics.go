@@ -128,17 +128,18 @@ func (run *CaptureMetricsRun) runBenchmark(id string, service string, benchmark 
 	// another one that has two configs that it requires two benchmark agents to cooperate.
 	// We assume here that single config benchmarks can be launched on all benchmark agents, and multiple config benchmarks
 	// are randomly placed on separate hosts.
-	agentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, "service")
-	if err != nil {
-		return fmt.Errorf("Unable to get benchmark agent url: " + err.Error())
-	} else if len(agentUrls) == 0 {
-		return errors.New("No benchmark agents found in cluster")
-	}
 
 	run.ProfileLog.Logger.Infof("Starting to run benchmark config: %+v, service: %s", benchmark.Configs, service)
 	benchmarkConfigCount := len(benchmark.Configs)
-	// Single config benchmarks are ran on every benchmark agent.
 	if benchmarkConfigCount == 1 {
+		agentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, "service")
+		if err != nil {
+			return fmt.Errorf("Unable to get benchmark agent url: " + err.Error())
+		} else if len(agentUrls) == 0 {
+			return errors.New("No benchmark agents found in cluster colocated to service " + service)
+		}
+
+		// Single config benchmarks are ran on every benchmark agent.
 		config := benchmark.Configs[0]
 		for _, agentUrl := range agentUrls {
 			if err := run.BenchmarkAgentClient.CreateBenchmark(
@@ -148,6 +149,11 @@ func (run *CaptureMetricsRun) runBenchmark(id string, service string, benchmark 
 			}
 		}
 		return nil
+	}
+
+	agentUrls, err := run.ProfileRun.DeployerClient.GetServiceUrls(run.DeploymentId, "benchmark-agent", run.ProfileLog.Logger)
+	if err != nil {
+		return errors.New("Unable to get service urls: " + err.Error())
 	}
 
 	agentCount := len(agentUrls)
