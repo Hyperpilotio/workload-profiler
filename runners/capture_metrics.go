@@ -131,17 +131,17 @@ func (run *CaptureMetricsRun) runBenchmark(id string, service string, benchmark 
 
 	run.ProfileLog.Logger.Infof("Starting to run benchmark config: %+v, service: %s", benchmark.Configs, service)
 	benchmarkConfigCount := len(benchmark.Configs)
+	colocatedAgentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, "service")
 	if benchmarkConfigCount == 1 {
-		agentUrls, err := run.ProfileRun.GetColocatedAgentUrls("benchmark-agent", service, "service")
 		if err != nil {
 			return fmt.Errorf("Unable to get benchmark agent url: " + err.Error())
-		} else if len(agentUrls) == 0 {
+		} else if len(colocatedAgentUrls) == 0 {
 			return errors.New("No benchmark agents found in cluster colocated to service " + service)
 		}
 
 		// Single config benchmarks are ran on every benchmark agent.
 		config := benchmark.Configs[0]
-		for _, agentUrl := range agentUrls {
+		for _, agentUrl := range colocatedAgentUrls {
 			if err := run.BenchmarkAgentClient.CreateBenchmark(
 				agentUrl, &benchmark, &config, intensity, run.ProfileLog.Logger); err != nil {
 				return fmt.Errorf("Unable to run benchmark %s with intensity %d: %s",
@@ -161,11 +161,26 @@ func (run *CaptureMetricsRun) runBenchmark(id string, service string, benchmark 
 		return fmt.Errorf("Benchmark agent count (%d) is less than benchmark config count (%d)", agentCount, benchmarkConfigCount)
 	}
 
+	config := benchmark.Configs[0]
+	colocatedAgentUrl := colocatedAgentUrls[0]
+	if err := run.BenchmarkAgentClient.CreateBenchmark(
+		colocatedAgentUrl, &benchmark, &config, intensity, run.ProfileLog.Logger); err != nil {
+		return fmt.Errorf("Unable to run benchmark %s with intensity %d: %s", benchmark.Name, intensity, err.Error())
+	}
+
+	for i, agentUrl := range agentUrls {
+		if agentUrl == colocatedAgentUrl {
+			agentUrls[i] = agentUrls[len(agentUrls)-1]
+			agentUrls = agentUrls[:len(agentUrls)-1]
+			break
+		}
+	}
+
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// Multiple config benchmarks are placed on random separate benchmark agents.
-	for _, config := range benchmark.Configs {
-		i := r.Intn(len(agentUrls))
-		agentUrl := agentUrls[i]
+	for i, config := range benchmark.Configs[1:] {
+		nextAgent := r.Intn(len(agentUrls))
+		agentUrl := agentUrls[nextAgent]
 		// Remove agent from list.
 		agentUrls[i] = agentUrls[len(agentUrls)-1]
 		agentUrls = agentUrls[:len(agentUrls)-1]

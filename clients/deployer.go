@@ -144,20 +144,20 @@ func (client *DeployerClient) GetColocatedServiceUrls(
 	return urls, nil
 }
 
-func (client *DeployerClient) GetServiceUrls(deployment string, servicePrefix, log *logging.Logger) ([]string, error) {
+func (client *DeployerClient) GetServiceUrls(deployment string, servicePrefix string, log *logging.Logger) ([]string, error) {
 	mappings, err := client.getServiceMappings(deployment)
 	if err != nil {
 		return nil, errors.New("Unable to get service mappings for deployment " + deployment + ": " + err.Error())
 	}
 
-	urls = []string{}
+	urls := []string{}
 	for serviceName, mapping := range mappings.Data {
-		if strings.HasPrefix(serviceName, servicePrefix) && targetMapping.PublicUrl != "" {
+		if strings.HasPrefix(serviceName, servicePrefix) && mapping.PublicUrl != "" {
 			urls = append(urls, "http://"+mapping.PublicUrl)
 		}
 	}
 
-	return urls
+	return urls, nil
 }
 
 func (client *DeployerClient) GetServiceUrl(deployment string, service string, log *logging.Logger) (string, error) {
