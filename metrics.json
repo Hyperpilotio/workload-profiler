@@ -1,0 +1,160 @@
+{
+    "loadTesters": [
+        {
+            "scenario": "cpu",
+            "slowCookerController" : {
+                "calibrate" : {
+                    "step": 5,
+                    "initialConcurrency": 40,
+                    "runsPerIntensity": 3
+                },
+                "appLoad": {
+                    "noreuse": true,
+                    "url": "http://resource-worker.default:7998/run",
+                    "plan": {
+                       "runningSteps": [
+                       {
+                          "qps": 30,
+                          "concurrency": 30,
+                          "duration": "300s"
+                       },
+                       {
+                          "qps": 30,
+                          "concurrency": 300,
+                          "duration": "300s"
+                       }
+                    ]
+                    },
+                    "data": "@https://hyperpilot-resource-requests.s3.amazonaws.com/cpu-request.json",
+                    "method": "POST",
+                    "totalRequests": 100000
+                },
+                "loadTime": "30s"
+            },
+            "name": "slow-cooker"
+        },
+        {
+            "scenario": "mem",
+            "slowCookerController" : {
+                "appLoad": {
+                    "noreuse": true,
+                    "url": "http://resource-worker.default:7998/run",
+                    "plan": {
+                       "runningSteps": [
+                       {
+                          "qps": 1,
+                          "concurrency": 3,
+                          "duration": "300s"
+                       },
+                       {
+                          "qps": 1,
+                          "concurrency": 30,
+                          "duration": "300s"
+                       }
+                    ]
+                    },
+                    "data": "@https://hyperpilot-resource-requests.s3.amazonaws.com/mem-request.json",
+                    "method": "POST",
+                    "totalRequests": 100000
+                },
+                "loadTime": "30s"
+            },
+            "name": "slow-cooker"
+        },
+        {
+            "scenario": "network",
+            "slowCookerController" : {
+                "appLoad": {
+                    "noreuse": true,
+                    "url": "http://resource-worker.default:7998/run",
+                    "plan": {
+                       "runningSteps": [
+                       {
+                          "qps": 30,
+                          "concurrency": 3,
+                          "duration": "300s"
+                       },
+                       {
+                          "qps": 30,
+                          "concurrency": 6,
+                          "duration": "300s"
+                       }
+                    ]
+                    },
+                    "data": "@https://hyperpilot-resource-requests.s3.amazonaws.com/network-request.json",
+                    "method": "POST",
+                    "totalRequests": 100000
+                },
+                "loadTime": "30s"
+            },
+            "name": "slow-cooker"
+        },
+        {
+            "scenario": "blkio-read",
+            "slowCookerController" : {
+                "appLoad": {
+                    "noreuse": true,
+                    "url": "http://resource-worker.default:7998/run",
+                    "plan": {
+                       "runningSteps": [
+                       {
+                          "qps": 1,
+                          "concurrency": 1,
+                          "duration": "300s"
+                       },
+                       {
+                          "qps": 1,
+                          "concurrency": 50,
+                          "duration": "300s"
+                       }
+                    ]
+                    },
+                    "data": "@https://hyperpilot-resource-requests.s3.amazonaws.com/blkio-read-request.json",
+                    "method": "POST",
+                    "totalRequests": 100000
+                },
+                "loadTime": "30s"
+            },
+            "name": "slow-cooker"
+        },
+        {
+            "scenario": "blkio-write",
+            "slowCookerController" : {
+                "appLoad": {
+                    "noreuse": true,
+                    "url": "http://resource-worker.default:7998/run",
+                    "plan": {
+                       "runningSteps": [
+                       {
+                          "qps": 1,
+                          "concurrency": 1,
+                          "duration": "300s"
+                       },
+                       {
+                          "qps": 1,
+                          "concurrency": 100,
+                          "duration": "300s"
+                       }
+                    ]
+                    },
+                    "data": "@https://hyperpilot-resource-requests.s3.amazonaws.com/blkio-write-request.json",
+                    "method": "POST",
+                    "totalRequests": 100000
+                },
+                "loadTime": "30s"
+            },
+            "name": "slow-cooker"
+        }
+    ],
+    "benchmarks" : [
+        {
+            "name": "cpu",
+            "intensity": 90
+        },
+        {
+            "name": "memBw",
+            "intensity": 80
+        }
+    ],
+    "duration": "12m"
+}

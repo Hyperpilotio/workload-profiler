@@ -1,0 +1,40 @@
+{
+    "loadTesters": [
+        {
+            "scenario": "cpu",
+            "slowCookerController" : {
+                "calibrate" : {
+                    "step": 5,
+                    "initialConcurrency": 40,
+                    "runsPerIntensity": 3
+                },
+                "appLoad": {
+                    "noreuse": true,
+                    "url": "http://resource-worker.default:7998/run",
+                    "plan": {
+                       "runningSteps": [
+                       {
+                          "qps": 30,
+                          "concurrency": 30,
+                          "duration": "60s"
+                       },
+                       {
+                          "qps": 30,
+                          "concurrency": 300,
+                          "duration": "60s"
+                       }
+                    ]
+                    },
+                    "data": "@https://hyperpilot-resource-requests.s3.amazonaws.com/cpu-request.json",
+                    "method": "POST",
+                    "totalRequests": 100000
+                },
+                "loadTime": "60m"
+            },
+            "name": "slow-cooker"
+        }
+    ],
+    "benchmarks" : [
+    ],
+    "duration": "4m"
+}
